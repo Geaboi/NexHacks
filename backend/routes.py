@@ -1,5 +1,7 @@
+import os
 import requests
 from fastapi import APIRouter, HTTPException, UploadFile, File, Query
+from fastapi.responses import FileResponse
 
 from config import BASE_URL, HEADERS
 from schemas import (
@@ -9,6 +11,7 @@ from schemas import (
     EmbeddingTrainRequest,
     InferenceRequest,
 )
+from RTMpose.rtmpose3d_handler import RTMPose3DHandler
 
 
 # ============================================================================
@@ -274,3 +277,73 @@ def run_embedding_inference(model_id: str, request: InferenceRequest):
         raise HTTPException(status_code=e.response.status_code, detail=e.response.text)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+
+# ============================================================================
+# Pose Processing Router
+# ============================================================================
+
+pose_router = APIRouter(prefix="/api/pose", tags=["Pose Processing"])
+
+# Lazy-loaded handler to avoid loading models at import time
+_pose_handler = None
+
+
+def get_pose_handler():
+    global _pose_handler
+    if _pose_handler is None:
+        _pose_handler = RTMPose3DHandler(device='cuda')
+    return _pose_handler
+
+
+@pose_router.post("/process")
+async def process_video_to_keypoints(
+    video: UploadFile = File(...),
+    dataset_name: str = Query(..., description="Name for the dataset in Woodwide"),
+    upload_to_woodwide: bool = Query(True, description="Upload keypoints to Woodwide"),
+    overwrite: bool = Query(False, description="Overwrite existing dataset"),
+):
+    """Process video through RTMpose and optionally upload keypoints to Woodwide.
+
+    Returns the keypoint CSV and Woodwide upload result.
+    """
+    try:
+        video_bytes = await video.read()
+        handler = get_pose_handler()
+
+        # Process video to get 3D keypoints and CSV
+        all_poses, overlay_video_path, csv_path = handler.process_video(video_bytes)
+
+        result = {
+            "num_frames": all_poses.shape[0],
+            "num_keypoints": all_poses.shape[1],
+            "csv_path": csv_path,
+            "overlay_video_path": overlay_video_path,
+        }
+
+        # Upload to Woodwide if requested
+        if upload_to_woodwide:
+            url = f"{BASE_URL}/api/datasets"
+            with open(csv_path, "rb") as f:
+                files = {"file": (f"{dataset_name}.csv", f, "text/csv")}
+                data = {"name": dataset_name, "overwrite": str(overwrite).lower()}
+                response = requests.post(url, headers=HEADERS, files=files, data=data)
+                response.raise_for_status()
+                result["woodwide_response"] = response.json()
+
+        return result
+
+    except requests.exceptions.HTTPError as e:
+        raise HTTPException(status_code=e.response.status_code, detail=e.response.text)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@pose_router.get("/download-csv/{csv_filename}")
+def download_keypoints_csv(csv_filename: str):
+    """Download a previously generated keypoints CSV file."""
+    import tempfile
+    csv_path = os.path.join(tempfile.gettempdir(), csv_filename)
+    if not os.path.exists(csv_path):
+        raise HTTPException(status_code=404, detail="CSV file not found")
+    return FileResponse(csv_path, media_type="text/csv", filename=csv_filename)

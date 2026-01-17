@@ -9,7 +9,18 @@ from rtmlib import Wholebody3d, draw_skeleton
 import tempfile
 import cv2
 import numpy as np
+import pandas as pd
 from tqdm import tqdm
+
+# COCO-style keypoint names for body + feet (23 keypoints)
+KEYPOINT_NAMES = [
+    "nose", "left_eye", "right_eye", "left_ear", "right_ear",
+    "left_shoulder", "right_shoulder", "left_elbow", "right_elbow",
+    "left_wrist", "right_wrist", "left_hip", "right_hip",
+    "left_knee", "right_knee", "left_ankle", "right_ankle",
+    "left_big_toe", "left_small_toe", "left_heel",
+    "right_big_toe", "right_small_toe", "right_heel"
+]
 
 
 class VideoHandler():
@@ -38,6 +49,7 @@ class RTMPose3DHandler:
         self.model = Wholebody3d(mode='balanced', backend='onnxruntime', device=device)
         self.device = device
         self.output_file_2D = tempfile.NamedTemporaryFile(delete=False, suffix='.mp4')
+        self.output_file_csv = tempfile.NamedTemporaryFile(delete=False, suffix='.csv')
         self.CONF_THRESHOLD = 0.3
     
     def process_video(self, video_bytes):
@@ -84,7 +96,10 @@ class RTMPose3DHandler:
         # NOW NORMALIZE AND STUFF
         norm_poses = self.normalize_by_torso_height(all_poses)
 
-        return norm_poses, self.output_file_2D.name
+        # Save keypoints to CSV
+        csv_path = self.keypoints_to_csv(norm_poses, self.output_file_csv.name)
+
+        return norm_poses, self.output_file_2D.name, csv_path
 
     def normalize_by_torso_height(self, all_poses):
         norm_poses = []
@@ -99,3 +114,51 @@ class RTMPose3DHandler:
             else:
                 norm_poses.append(np.zeros_like(pose))
         return np.array(norm_poses)
+
+    @staticmethod
+    def keypoints_to_dataframe(all_poses: np.ndarray) -> pd.DataFrame:
+        """Convert keypoint array to pandas DataFrame for Woodwide upload.
+
+        Args:
+            all_poses: numpy array of shape (num_frames, 23, 3)
+
+        Returns:
+            DataFrame with columns: frame, kp_name_x, kp_name_y, kp_name_z for each keypoint
+        """
+        num_frames = all_poses.shape[0]
+
+        # Build column names
+        columns = ["frame"]
+        for kp_name in KEYPOINT_NAMES:
+            columns.extend([f"{kp_name}_x", f"{kp_name}_y", f"{kp_name}_z"])
+
+        # Flatten data
+        rows = []
+        for frame_idx in range(num_frames):
+            row = [frame_idx]
+            for kp_idx in range(23):
+                row.extend(all_poses[frame_idx, kp_idx, :].tolist())
+            rows.append(row)
+
+        return pd.DataFrame(rows, columns=columns)
+
+    @staticmethod
+    def keypoints_to_csv(all_poses: np.ndarray, output_path: str = '/output.csv') -> str:
+        """Convert keypoint array to CSV file.
+
+        Args:
+            all_poses: numpy array of shape (num_frames, 23, 3)
+            output_path: optional path for output file, creates temp file if None
+
+        Returns:
+            Path to the CSV file
+        """
+        df = RTMPose3DHandler.keypoints_to_dataframe(all_poses)
+
+        if output_path is None:
+            temp_file = tempfile.NamedTemporaryFile(delete=False, suffix='.csv')
+            output_path = temp_file.name
+            temp_file.close()
+
+        df.to_csv(output_path, index=False)
+        return output_path
