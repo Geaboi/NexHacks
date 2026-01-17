@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "allow": [
+      "WebFetch(domain:docs.overshoot.ai)",
+      "WebSearch",
+      "WebFetch(domain:overshoot.ai)"
+    ]
+  }
+}
