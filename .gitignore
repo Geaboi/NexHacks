@@ -3,3 +3,5 @@
 .claude/
 rtm/
 venv/
+
+*.DS_Store
