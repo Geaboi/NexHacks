@@ -6,7 +6,7 @@ import '../models/frame_angle.dart';
 /// SQLite database service for persistent storage of angle analysis data
 class DatabaseService {
   static const String _databaseName = 'smartpt_angles.db';
-  static const int _databaseVersion = 1;
+  static const int _databaseVersion = 2;
 
   static Database? _database;
 
@@ -47,6 +47,7 @@ class DatabaseService {
         fps INTEGER,
         total_frames INTEGER,
         num_angles INTEGER,
+        anomalous_frame_ids TEXT,
         created_at TEXT NOT NULL
       )
     ''');
@@ -86,7 +87,12 @@ class DatabaseService {
   /// Handle database upgrades (for future schema changes)
   Future<void> _onUpgrade(Database db, int oldVersion, int newVersion) async {
     print('[DatabaseService] ⬆️ Upgrading database from v$oldVersion to v$newVersion');
-    // Add migration logic here when schema changes
+    
+    // Migration from v1 to v2: Add anomalous_frame_ids column
+    if (oldVersion < 2) {
+      await db.execute('ALTER TABLE sessions ADD COLUMN anomalous_frame_ids TEXT');
+      print('[DatabaseService] ✅ Added anomalous_frame_ids column to sessions table');
+    }
   }
 
   // ============================================================================

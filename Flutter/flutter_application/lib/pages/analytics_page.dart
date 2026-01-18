@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:fl_chart/fl_chart.dart';
 import '../providers/navigation_provider.dart';
 import '../providers/frame_analysis_provider.dart';
 import '../providers/sensor_provider.dart';
@@ -29,6 +30,8 @@ class _AnalyticsPageState extends ConsumerState<AnalyticsPage> {
   AnalyticsResponse? _response;
   String? _errorMessage;
   List<AngleStats>? _sessionStats;
+  List<FrameAngle>? _sessionAngles;
+  List<int> _anomalousFrameIds = [];
   int? _savedSessionId;
 
   @override
@@ -36,7 +39,7 @@ class _AnalyticsPageState extends ConsumerState<AnalyticsPage> {
     super.initState();
     // Submit analysis when page loads
     _submitAnalysis();
-    
+
     // Show a brief snackbar if analysis wasn't available
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final frameAnalysis = ref.read(frameAnalysisProvider);
@@ -91,7 +94,6 @@ class _AnalyticsPageState extends ConsumerState<AnalyticsPage> {
       print('[AnalyticsPage] 📊 Inference points: ${inferencePointsJson.length}');
       print('[AnalyticsPage] ⏱️ Video duration: ${widget.videoDurationMs}ms, FPS: ${widget.fps}');
 
-      
       final response = await _analyticsService.submitAnalysis(
         videoPath: widget.videoPath,
         inferencePoints: inferencePointsJson,
@@ -114,7 +116,7 @@ class _AnalyticsPageState extends ConsumerState<AnalyticsPage> {
 
       if (response.success) {
         print('[AnalyticsPage] ✅ Analysis submitted successfully');
-        
+
         // Save to local database
         await _saveToDatabase(response, videoStartTimeUtc);
       } else {
@@ -149,28 +151,35 @@ class _AnalyticsPageState extends ConsumerState<AnalyticsPage> {
       // Convert to List<List<dynamic>> for the provider
       final anglesList = angles.map((e) => e as List<dynamic>).toList();
 
-      // Save session using the provider
-      final sessionId = await ref.read(sessionHistoryProvider.notifier).saveSession(
-        timestampUtc: videoStartTimeUtc,
-        angles: anglesList,
-        originalVideoPath: widget.videoPath,
-        processedVideoPath: response.processedVideoPath,
-        durationMs: widget.videoDurationMs,
-        fps: widget.fps,
-      );
+      // Save session using the provider (including anomalous frame IDs)
+      final sessionId = await ref
+          .read(sessionHistoryProvider.notifier)
+          .saveSession(
+            timestampUtc: videoStartTimeUtc,
+            angles: anglesList,
+            originalVideoPath: widget.videoPath,
+            processedVideoPath: response.processedVideoPath,
+            durationMs: widget.videoDurationMs,
+            fps: widget.fps,
+            anomalousFrameIds: response.anomalousIds,
+          );
 
       if (sessionId != null) {
         // Load the stats for display
         await ref.read(sessionHistoryProvider.notifier).selectSession(sessionId);
         final historyState = ref.read(sessionHistoryProvider);
-        
+
         setState(() {
           _savedSessionId = sessionId;
           _sessionStats = historyState.selectedSessionStats;
+          _sessionAngles = historyState.selectedSessionAngles;
+          _anomalousFrameIds = response.anomalousIds;
           _isSavingToDb = false;
         });
-        
-        print('[AnalyticsPage] 💾 Session saved with ID: $sessionId');
+
+        print(
+          '[AnalyticsPage] 💾 Session saved with ID: $sessionId, ${_sessionAngles?.length ?? 0} frames, ${_anomalousFrameIds.length} anomalous',
+        );
       } else {
         setState(() {
           _isSavingToDb = false;
@@ -187,10 +196,10 @@ class _AnalyticsPageState extends ConsumerState<AnalyticsPage> {
   /// Get the max angle value for display
   String _getAngleValue(String angleType) {
     if (_sessionStats == null) return '--°';
-    
+
     final stat = _sessionStats!.where((s) => s.angleName == angleType).firstOrNull;
     if (stat == null) return '--°';
-    
+
     return '${stat.max?.toStringAsFixed(1) ?? '--'}°';
   }
 
@@ -204,6 +213,61 @@ class _AnalyticsPageState extends ConsumerState<AnalyticsPage> {
     return 'Min: ${stat.min?.toStringAsFixed(1) ?? '--'}° • Avg: ${stat.avg?.toStringAsFixed(1) ?? '--'}°';
   }
 
+  /// Get chart data points for a specific angle type, filtering out anomalous frames
+  List<FlSpot> _getChartData(String angleColumn) {
+    if (_sessionAngles == null || _sessionAngles!.isEmpty) {
+      return [];
+    }
+
+    final spots = <FlSpot>[];
+    for (final angle in _sessionAngles!) {
+      // Skip anomalous frames
+      if (_anomalousFrameIds.contains(angle.frameIndex)) {
+        continue;
+      }
+
+      double? value;
+      switch (angleColumn) {
+        case 'left_knee_flexion':
+          value = angle.leftKneeFlexion;
+          break;
+        case 'right_knee_flexion':
+          value = angle.rightKneeFlexion;
+          break;
+        case 'left_hip_flexion':
+          value = angle.leftHipFlexion;
+          break;
+        case 'right_hip_flexion':
+          value = angle.rightHipFlexion;
+          break;
+        case 'left_ankle_flexion':
+          value = angle.leftAnkleFlexion;
+          break;
+        case 'right_ankle_flexion':
+          value = angle.rightAnkleFlexion;
+          break;
+      }
+
+      if (value != null) {
+        spots.add(FlSpot(angle.frameIndex.toDouble(), value));
+      }
+    }
+
+    return spots;
+  }
+
+  /// Get Y-axis bounds for a specific angle type
+  (double min, double max) _getAngleBounds(String angleType) {
+    if (_sessionStats == null) return (0, 180);
+
+    final stat = _sessionStats!.where((s) => s.angleName == angleType).firstOrNull;
+    if (stat == null || stat.min == null || stat.max == null) return (0, 180);
+
+    // Add some padding to the bounds
+    final padding = (stat.max! - stat.min!) * 0.1;
+    return ((stat.min! - padding).clamp(0, 180), (stat.max! + padding).clamp(0, 180));
+  }
+
   /// Build tips list from overshoot inference results
   List<Widget> _buildTipsFromOvershoot(FrameAnalysisState frameAnalysis) {
     final inferencePoints = frameAnalysis.sortedPoints;
@@ -211,11 +275,7 @@ class _AnalyticsPageState extends ConsumerState<AnalyticsPage> {
     // If no inference results, show placeholder
     if (inferencePoints.isEmpty) {
       return [
-        _FeedbackItem(
-          icon: Icons.info_outline,
-          text: 'No real-time analysis data available',
-          color: Colors.grey,
-        ),
+        _FeedbackItem(icon: Icons.info_outline, text: 'No real-time analysis data available', color: Colors.grey),
         const SizedBox(height: 8),
         _FeedbackItem(
           icon: Icons.lightbulb_outline,
@@ -251,13 +311,7 @@ class _AnalyticsPageState extends ConsumerState<AnalyticsPage> {
 
     final widgets = <Widget>[];
     for (int i = 0; i < displayTips.length; i++) {
-      widgets.add(
-        _FeedbackItem(
-          icon: Icons.lightbulb_outline,
-          text: displayTips[i],
-          color: Colors.amber,
-        ),
-      );
+      widgets.add(_FeedbackItem(icon: Icons.lightbulb_outline, text: displayTips[i], color: Colors.amber));
       if (i < displayTips.length - 1) {
         widgets.add(const SizedBox(height: 8));
       }
@@ -267,11 +321,7 @@ class _AnalyticsPageState extends ConsumerState<AnalyticsPage> {
     if (uniqueTips.length > 1) {
       widgets.insert(
         0,
-        _FeedbackItem(
-          icon: Icons.auto_awesome,
-          text: '${uniqueTips.length} tips from AI analysis',
-          color: Colors.teal,
-        ),
+        _FeedbackItem(icon: Icons.auto_awesome, text: '${uniqueTips.length} tips from AI analysis', color: Colors.teal),
       );
       widgets.insert(1, const SizedBox(height: 8));
     }
@@ -323,26 +373,15 @@ class _AnalyticsPageState extends ConsumerState<AnalyticsPage> {
                   ),
                   borderRadius: BorderRadius.circular(20),
                   boxShadow: [
-                    BoxShadow(
-                      color: AppColors.primary.withOpacity(0.3),
-                      blurRadius: 20,
-                      offset: const Offset(0, 8),
-                    ),
+                    BoxShadow(color: AppColors.primary.withOpacity(0.3), blurRadius: 20, offset: const Offset(0, 8)),
                   ],
                 ),
                 child: Column(
                   children: [
                     Container(
                       padding: const EdgeInsets.all(12),
-                      decoration: BoxDecoration(
-                        color: Colors.white.withOpacity(0.2),
-                        shape: BoxShape.circle,
-                      ),
-                      child: const Icon(
-                        Icons.check_circle_outline,
-                        color: Colors.white,
-                        size: 48,
-                      ),
+                      decoration: BoxDecoration(color: Colors.white.withOpacity(0.2), shape: BoxShape.circle),
+                      child: const Icon(Icons.check_circle_outline, color: Colors.white, size: 48),
                     ),
                     const SizedBox(height: 16),
                     const Text(
@@ -431,76 +470,70 @@ class _AnalyticsPageState extends ConsumerState<AnalyticsPage> {
                 ],
               ),
               const SizedBox(height: 16),
-              Row(
-                children: [
-                  Expanded(
-                    child: _MetricCard(
-                      icon: Icons.accessibility_new,
-                      title: 'Left Knee',
-                      value: _getAngleValue('left_knee_flexion'),
-                      subtitle: _getAngleRange('left_knee_flexion'),
-                      color: AppColors.kneeColor,
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: _MetricCard(
-                      icon: Icons.accessibility_new,
-                      title: 'Right Knee',
-                      value: _getAngleValue('right_knee_flexion'),
-                      subtitle: _getAngleRange('right_knee_flexion'),
-                      color: AppColors.kneeColor,
-                    ),
-                  ),
-                ],
+              // Left Knee Chart
+              _AngleChartCard(
+                icon: Icons.accessibility_new,
+                title: 'Left Knee Flexion',
+                value: _getAngleValue('left_knee_flexion'),
+                subtitle: _getAngleRange('left_knee_flexion'),
+                color: AppColors.kneeColor,
+                chartData: _getChartData('left_knee_flexion'),
+                yBounds: _getAngleBounds('left_knee_flexion'),
               ),
               const SizedBox(height: 12),
-              Row(
-                children: [
-                  Expanded(
-                    child: _MetricCard(
-                      icon: Icons.airline_seat_legroom_normal,
-                      title: 'Left Hip',
-                      value: _getAngleValue('left_hip_flexion'),
-                      subtitle: _getAngleRange('left_hip_flexion'),
-                      color: AppColors.hipColor,
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: _MetricCard(
-                      icon: Icons.airline_seat_legroom_normal,
-                      title: 'Right Hip',
-                      value: _getAngleValue('right_hip_flexion'),
-                      subtitle: _getAngleRange('right_hip_flexion'),
-                      color: AppColors.hipColor,
-                    ),
-                  ),
-                ],
+              // Right Knee Chart
+              _AngleChartCard(
+                icon: Icons.accessibility_new,
+                title: 'Right Knee Flexion',
+                value: _getAngleValue('right_knee_flexion'),
+                subtitle: _getAngleRange('right_knee_flexion'),
+                color: AppColors.kneeColor,
+                chartData: _getChartData('right_knee_flexion'),
+                yBounds: _getAngleBounds('right_knee_flexion'),
               ),
               const SizedBox(height: 12),
-              Row(
-                children: [
-                  Expanded(
-                    child: _MetricCard(
-                      icon: Icons.directions_walk,
-                      title: 'Left Ankle',
-                      value: _getAngleValue('left_ankle_flexion'),
-                      subtitle: _getAngleRange('left_ankle_flexion'),
-                      color: AppColors.ankleColor,
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: _MetricCard(
-                      icon: Icons.directions_walk,
-                      title: 'Right Ankle',
-                      value: _getAngleValue('right_ankle_flexion'),
-                      subtitle: _getAngleRange('right_ankle_flexion'),
-                      color: AppColors.ankleColor,
-                    ),
-                  ),
-                ],
+              // Left Hip Chart
+              _AngleChartCard(
+                icon: Icons.airline_seat_legroom_normal,
+                title: 'Left Hip Flexion',
+                value: _getAngleValue('left_hip_flexion'),
+                subtitle: _getAngleRange('left_hip_flexion'),
+                color: AppColors.hipColor,
+                chartData: _getChartData('left_hip_flexion'),
+                yBounds: _getAngleBounds('left_hip_flexion'),
+              ),
+              const SizedBox(height: 12),
+              // Right Hip Chart
+              _AngleChartCard(
+                icon: Icons.airline_seat_legroom_normal,
+                title: 'Right Hip Flexion',
+                value: _getAngleValue('right_hip_flexion'),
+                subtitle: _getAngleRange('right_hip_flexion'),
+                color: AppColors.hipColor,
+                chartData: _getChartData('right_hip_flexion'),
+                yBounds: _getAngleBounds('right_hip_flexion'),
+              ),
+              const SizedBox(height: 12),
+              // Left Ankle Chart
+              _AngleChartCard(
+                icon: Icons.directions_walk,
+                title: 'Left Ankle Flexion',
+                value: _getAngleValue('left_ankle_flexion'),
+                subtitle: _getAngleRange('left_ankle_flexion'),
+                color: AppColors.ankleColor,
+                chartData: _getChartData('left_ankle_flexion'),
+                yBounds: _getAngleBounds('left_ankle_flexion'),
+              ),
+              const SizedBox(height: 12),
+              // Right Ankle Chart
+              _AngleChartCard(
+                icon: Icons.directions_walk,
+                title: 'Right Ankle Flexion',
+                value: _getAngleValue('right_ankle_flexion'),
+                subtitle: _getAngleRange('right_ankle_flexion'),
+                color: AppColors.ankleColor,
+                chartData: _getChartData('right_ankle_flexion'),
+                yBounds: _getAngleBounds('right_ankle_flexion'),
               ),
               const SizedBox(height: 28),
 
@@ -587,7 +620,7 @@ class _AnalyticsPageState extends ConsumerState<AnalyticsPage> {
 
   Widget _buildSubmissionStatus(bool hasSensorData) {
     final theme = Theme.of(context);
-    
+
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(20),
@@ -607,29 +640,26 @@ class _AnalyticsPageState extends ConsumerState<AnalyticsPage> {
                   color: _isSubmitting
                       ? AppColors.info.withOpacity(0.1)
                       : _errorMessage != null
-                          ? AppColors.error.withOpacity(0.1)
-                          : AppColors.success.withOpacity(0.1),
+                      ? AppColors.error.withOpacity(0.1)
+                      : AppColors.success.withOpacity(0.1),
                   borderRadius: BorderRadius.circular(10),
                 ),
                 child: Icon(
                   _isSubmitting
                       ? Icons.cloud_upload_outlined
                       : _errorMessage != null
-                          ? Icons.error_outline
-                          : Icons.cloud_done_outlined,
+                      ? Icons.error_outline
+                      : Icons.cloud_done_outlined,
                   color: _isSubmitting
                       ? AppColors.info
                       : _errorMessage != null
-                          ? AppColors.error
-                          : AppColors.success,
+                      ? AppColors.error
+                      : AppColors.success,
                   size: 24,
                 ),
               ),
               const SizedBox(width: 12),
-              Text(
-                'Backend Analysis',
-                style: theme.textTheme.titleLarge,
-              ),
+              Text('Backend Analysis', style: theme.textTheme.titleLarge),
             ],
           ),
           const SizedBox(height: 16),
@@ -647,12 +677,7 @@ class _AnalyticsPageState extends ConsumerState<AnalyticsPage> {
                   ),
                 ),
                 const SizedBox(width: 12),
-                Expanded(
-                  child: Text(
-                    'Uploading video and data for analysis...',
-                    style: theme.textTheme.bodyMedium,
-                  ),
-                ),
+                Expanded(child: Text('Uploading video and data for analysis...', style: theme.textTheme.bodyMedium)),
               ],
             ),
           ] else if (_errorMessage != null) ...[
@@ -668,25 +693,16 @@ class _AnalyticsPageState extends ConsumerState<AnalyticsPage> {
                 children: [
                   Text(
                     'Analysis failed',
-                    style: theme.textTheme.titleMedium?.copyWith(
-                      color: AppColors.error,
-                      fontWeight: FontWeight.w600,
-                    ),
+                    style: theme.textTheme.titleMedium?.copyWith(color: AppColors.error, fontWeight: FontWeight.w600),
                   ),
                   const SizedBox(height: 4),
-                  Text(
-                    _errorMessage!,
-                    style: theme.textTheme.bodySmall?.copyWith(color: AppColors.error),
-                  ),
+                  Text(_errorMessage!, style: theme.textTheme.bodySmall?.copyWith(color: AppColors.error)),
                   const SizedBox(height: 10),
                   TextButton.icon(
                     onPressed: _submitAnalysis,
                     icon: const Icon(Icons.refresh, size: 16),
                     label: const Text('Retry'),
-                    style: TextButton.styleFrom(
-                      foregroundColor: AppColors.error,
-                      padding: EdgeInsets.zero,
-                    ),
+                    style: TextButton.styleFrom(foregroundColor: AppColors.error, padding: EdgeInsets.zero),
                   ),
                 ],
               ),
@@ -760,11 +776,7 @@ class _DataChip extends StatelessWidget {
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(
-            icon,
-            size: 14,
-            color: isAvailable ? AppColors.primary : AppColors.textLight,
-          ),
+          Icon(icon, size: 14, color: isAvailable ? AppColors.primary : AppColors.textLight),
           const SizedBox(width: 6),
           Text(
             label,
@@ -798,7 +810,7 @@ class _MetricCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    
+
     return Container(
       padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
@@ -812,19 +824,13 @@ class _MetricCard extends StatelessWidget {
         children: [
           Container(
             padding: const EdgeInsets.all(8),
-            decoration: BoxDecoration(
-              color: color.withOpacity(0.1),
-              borderRadius: BorderRadius.circular(10),
-            ),
+            decoration: BoxDecoration(color: color.withOpacity(0.1), borderRadius: BorderRadius.circular(10)),
             child: Icon(icon, color: color, size: 24),
           ),
           const SizedBox(height: 14),
           Text(
             value,
-            style: theme.textTheme.headlineMedium?.copyWith(
-              fontWeight: FontWeight.bold,
-              color: AppColors.textPrimary,
-            ),
+            style: theme.textTheme.headlineMedium?.copyWith(fontWeight: FontWeight.bold, color: AppColors.textPrimary),
           ),
           const SizedBox(height: 4),
           Text(title, style: theme.textTheme.bodyMedium),
@@ -832,6 +838,160 @@ class _MetricCard extends StatelessWidget {
             const SizedBox(height: 4),
             Text(subtitle!, style: theme.textTheme.bodySmall),
           ],
+        ],
+      ),
+    );
+  }
+}
+
+/// Chart card widget that displays angle data over frames
+class _AngleChartCard extends StatelessWidget {
+  final IconData icon;
+  final String title;
+  final String value;
+  final String? subtitle;
+  final Color color;
+  final List<FlSpot> chartData;
+  final (double min, double max) yBounds;
+
+  const _AngleChartCard({
+    required this.icon,
+    required this.title,
+    required this.value,
+    this.subtitle,
+    required this.color,
+    required this.chartData,
+    required this.yBounds,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final hasData = chartData.isNotEmpty;
+
+    return Container(
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        color: AppColors.cardBackground,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [BoxShadow(color: color.withOpacity(0.1), blurRadius: 16, offset: const Offset(0, 4))],
+        border: Border.all(color: color.withOpacity(0.15)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Header row with icon and stats
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(color: color.withOpacity(0.1), borderRadius: BorderRadius.circular(10)),
+                child: Icon(icon, color: color, size: 24),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(title, style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w600)),
+                    if (subtitle != null && subtitle!.isNotEmpty)
+                      Text(subtitle!, style: theme.textTheme.bodySmall?.copyWith(color: AppColors.textSecondary)),
+                  ],
+                ),
+              ),
+              Text(
+                value,
+                style: theme.textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.bold, color: color),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          // Chart
+          SizedBox(
+            height: 120,
+            child: hasData
+                ? LineChart(
+                    LineChartData(
+                      gridData: FlGridData(
+                        show: true,
+                        drawVerticalLine: false,
+                        horizontalInterval: (yBounds.$2 - yBounds.$1) / 4,
+                        getDrawingHorizontalLine: (value) =>
+                            FlLine(color: AppColors.textLight.withOpacity(0.2), strokeWidth: 1),
+                      ),
+                      titlesData: FlTitlesData(
+                        leftTitles: AxisTitles(
+                          sideTitles: SideTitles(
+                            showTitles: true,
+                            reservedSize: 40,
+                            interval: (yBounds.$2 - yBounds.$1) / 4,
+                            getTitlesWidget: (value, meta) {
+                              return Text(
+                                '${value.toInt()}°',
+                                style: TextStyle(color: AppColors.textLight, fontSize: 10),
+                              );
+                            },
+                          ),
+                        ),
+                        bottomTitles: AxisTitles(
+                          sideTitles: SideTitles(
+                            showTitles: true,
+                            reservedSize: 22,
+                            interval: chartData.length > 10 ? (chartData.last.x / 5).roundToDouble() : null,
+                            getTitlesWidget: (value, meta) {
+                              return Text(
+                                '${value.toInt()}',
+                                style: TextStyle(color: AppColors.textLight, fontSize: 10),
+                              );
+                            },
+                          ),
+                        ),
+                        topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+                        rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+                      ),
+                      borderData: FlBorderData(show: false),
+                      minY: yBounds.$1,
+                      maxY: yBounds.$2,
+                      lineBarsData: [
+                        LineChartBarData(
+                          spots: chartData,
+                          isCurved: true,
+                          curveSmoothness: 0.3,
+                          color: color,
+                          barWidth: 2,
+                          isStrokeCapRound: true,
+                          dotData: const FlDotData(show: false),
+                          belowBarData: BarAreaData(show: true, color: color.withOpacity(0.1)),
+                        ),
+                      ],
+                      lineTouchData: LineTouchData(
+                        touchTooltipData: LineTouchTooltipData(
+                          getTooltipItems: (touchedSpots) {
+                            return touchedSpots.map((spot) {
+                              return LineTooltipItem(
+                                'Frame ${spot.x.toInt()}\n${spot.y.toStringAsFixed(1)}°',
+                                TextStyle(color: color, fontWeight: FontWeight.w600, fontSize: 12),
+                              );
+                            }).toList();
+                          },
+                        ),
+                      ),
+                    ),
+                  )
+                : Center(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(Icons.show_chart, color: AppColors.textLight, size: 32),
+                        const SizedBox(height: 8),
+                        Text(
+                          'No data available',
+                          style: theme.textTheme.bodySmall?.copyWith(color: AppColors.textLight),
+                        ),
+                      ],
+                    ),
+                  ),
+          ),
         ],
       ),
     );
@@ -848,7 +1008,7 @@ class _FeedbackItem extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    
+
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
@@ -860,9 +1020,7 @@ class _FeedbackItem extends StatelessWidget {
         children: [
           Icon(icon, color: color, size: 22),
           const SizedBox(width: 14),
-          Expanded(
-            child: Text(text, style: theme.textTheme.bodyMedium),
-          ),
+          Expanded(child: Text(text, style: theme.textTheme.bodyMedium)),
         ],
       ),
     );
