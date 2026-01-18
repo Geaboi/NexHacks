@@ -325,7 +325,10 @@ async def process_video_to_angles(
     model_id: str = Query(..., description="Anomaly detection model ID for inference"),
     upload_to_woodwide: bool = Query(True, description="Upload angles to Woodwide"),
     overwrite: bool = Query(False, description="Overwrite existing dataset"),
-    sensor_data: str = Form(None, description="Sensor data associated with the video")
+    sensor_data: str = Form([], description="Sensor data associated with the video"),
+    overshoot_data: str = Form([], description="Overshoot data associated with the video"),
+    video_start_time: int = Form(None, description="Start time of the video in UTC")
+
 ):
     """Process video through RTMpose and run anomaly detection via Woodwide.
 
@@ -346,7 +349,7 @@ async def process_video_to_angles(
         result = {
             "num_frames": len(angles),
             "num_angles": 6,
-            "csv_path": csv_path,
+            "angles": angles,  # Include the actual angles data
             "overlay_video_path": overlay_video_path,
         }
 
@@ -390,6 +393,16 @@ def download_keypoints_csv(csv_filename: str):
     if not os.path.exists(csv_path):
         raise HTTPException(status_code=404, detail="CSV file not found")
     return FileResponse(csv_path, media_type="text/csv", filename=csv_filename)
+
+
+@pose_router.get("/download-video/{video_filename}")
+def download_overlay_video(video_filename: str):
+    """Download a previously generated overlay video file."""
+    import tempfile
+    video_path = os.path.join(tempfile.gettempdir(), video_filename)
+    if not os.path.exists(video_path):
+        raise HTTPException(status_code=404, detail="Video file not found")
+    return FileResponse(video_path, media_type="video/mp4", filename=video_filename)
 
 
 overshoot_router = APIRouter(prefix="/api/overshoot", tags=["Overshoot"])
