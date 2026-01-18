@@ -95,8 +95,6 @@ class RTMPose3DHandler:
         print(f"Using device: {device}")
         self.model = Wholebody3d(mode='balanced', backend='onnxruntime', device=device)
         self.device = device
-        self.output_file_2D = tempfile.NamedTemporaryFile(delete=False, suffix='.mp4')
-        self.output_file_csv = tempfile.NamedTemporaryFile(delete=False, suffix='.csv')
         self.CONF_THRESHOLD = 0.3
     
     def process_video(self, video_bytes, sensor_data=None):
@@ -123,6 +121,10 @@ class RTMPose3DHandler:
         Returns:
             tuple: (angles_list, output_2d_video_path, csv_path)
         """
+        # Create fresh temp files for each video processing
+        output_file_2D = tempfile.NamedTemporaryFile(delete=False, suffix='.mp4')
+        output_file_csv = tempfile.NamedTemporaryFile(delete=False, suffix='.csv')
+
         video_handler = VideoHandler(video_bytes)
 
         total = int(video_handler.cap.get(cv2.CAP_PROP_FRAME_COUNT))
@@ -130,7 +132,7 @@ class RTMPose3DHandler:
         w = int(video_handler.cap.get(cv2.CAP_PROP_FRAME_WIDTH))
         h = int(video_handler.cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
 
-        out2d = cv2.VideoWriter(self.output_file_2D.name, cv2.VideoWriter_fourcc(*'mp4v'), fps, (w, h))
+        out2d = cv2.VideoWriter(output_file_2D.name, cv2.VideoWriter_fourcc(*'mp4v'), fps, (w, h))
 
         all_poses = []
         all_scores = []
@@ -247,9 +249,9 @@ class RTMPose3DHandler:
                         angles[i][JOINT_INDEX] = angle_sum / count
                 
         # Save angles to CSV
-        csv_path = self.angles_to_csv(angles, self.output_file_csv.name)
+        csv_path = self.angles_to_csv(angles, output_file_csv.name)
 
-        return angles, self.output_file_2D.name, csv_path
+        return angles, output_file_2D.name, csv_path
 
     def normalize_by_torso_height(self, all_poses):
         norm_poses = []
