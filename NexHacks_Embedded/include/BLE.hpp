@@ -21,6 +21,5 @@ class MyCharCallbacks : public NimBLECharacteristicCallbacks {
 
 NimBLEAdvertising* initBLE();
 void ble_task(void *pvParameters);
-void deInitialize();
 
 #endif
