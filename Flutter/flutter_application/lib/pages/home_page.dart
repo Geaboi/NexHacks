@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../providers/navigation_provider.dart';
+import '../main.dart';
 import 'instructions_page.dart';
 
 class HomePage extends ConsumerWidget {
@@ -9,36 +10,32 @@ class HomePage extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final navNotifier = ref.read(navigationProvider.notifier);
+    final theme = Theme.of(context);
 
     return Scaffold(
-      backgroundColor: const Color(0xFFF5F5F5),
+      backgroundColor: AppColors.background,
       appBar: AppBar(
         title: const Text('Physical Therapy Tracker'),
-        backgroundColor: Colors.teal,
-        foregroundColor: Colors.white,
       ),
       body: SafeArea(
         child: Padding(
-          padding: const EdgeInsets.all(16.0),
+          padding: const EdgeInsets.all(20.0),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               // Header Section
-              const SizedBox(height: 20),
-              const Text(
+              const SizedBox(height: 16),
+              Text(
                 'Welcome Back!',
-                style: TextStyle(
-                  fontSize: 28,
-                  fontWeight: FontWeight.bold,
-                  color: Colors.teal,
+                style: theme.textTheme.headlineMedium?.copyWith(
+                  color: AppColors.primary,
                 ),
               ),
               const SizedBox(height: 8),
-              const Text(
+              Text(
                 'Select your injury or project to continue:',
-                style: TextStyle(
-                  fontSize: 16,
-                  color: Colors.grey,
+                style: theme.textTheme.bodyLarge?.copyWith(
+                  color: AppColors.textSecondary,
                 ),
               ),
               const SizedBox(height: 24),
@@ -46,10 +43,10 @@ class HomePage extends ConsumerWidget {
               // Project Cards
               Expanded(
                 child: sampleProjects.isEmpty
-                    ? const Center(
+                    ? Center(
                         child: Text(
                           'No projects available',
-                          style: TextStyle(color: Colors.grey),
+                          style: theme.textTheme.bodyMedium,
                         ),
                       )
                     : ListView.builder(
@@ -76,17 +73,23 @@ class HomePage extends ConsumerWidget {
               Center(
                 child: TextButton.icon(
                   onPressed: () {
-                    // Placeholder - no functionality yet
                     ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(
-                        content: Text('Add project - coming soon!'),
+                      SnackBar(
+                        content: const Text('Add project - coming soon!'),
+                        backgroundColor: AppColors.primary,
+                        behavior: SnackBarBehavior.floating,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(8),
+                        ),
                       ),
                     );
                   },
-                  icon: const Icon(Icons.add_circle_outline, color: Colors.teal),
-                  label: const Text(
+                  icon: const Icon(Icons.add_circle_outline, color: AppColors.primary),
+                  label: Text(
                     'Add New Project',
-                    style: TextStyle(color: Colors.teal),
+                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                      color: AppColors.primary,
+                    ),
                   ),
                 ),
               ),
@@ -110,68 +113,89 @@ class _ProjectCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Card(
-      margin: const EdgeInsets.only(bottom: 12),
-      elevation: 2,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(12),
+    final theme = Theme.of(context);
+    
+    return Container(
+      margin: const EdgeInsets.only(bottom: 16),
+      decoration: BoxDecoration(
+        color: AppColors.cardBackground,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: AppColors.primary.withOpacity(0.08),
+            blurRadius: 16,
+            offset: const Offset(0, 4),
+          ),
+        ],
       ),
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(12),
-        splashColor: Colors.teal.withOpacity(0.2),
-        highlightColor: Colors.teal.withOpacity(0.1),
-        child: Padding(
-          padding: const EdgeInsets.all(20.0),
-          child: Row(
-            children: [
-              // Placeholder Icon/Image
-              Container(
-                width: 70,
-                height: 70,
-                decoration: BoxDecoration(
-                  color: Colors.teal.withOpacity(0.1),
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: const Icon(
-                  Icons.fitness_center,
-                  color: Colors.teal,
-                  size: 36,
-                ),
-              ),
-              const SizedBox(width: 20),
-
-              // Project Info
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      project.name,
-                      style: const TextStyle(
-                        fontSize: 20,
-                        fontWeight: FontWeight.w600,
-                      ),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(16),
+          splashColor: AppColors.primary.withOpacity(0.1),
+          highlightColor: AppColors.primary.withOpacity(0.05),
+          child: Padding(
+            padding: const EdgeInsets.all(20.0),
+            child: Row(
+              children: [
+                // Icon Container
+                Container(
+                  width: 64,
+                  height: 64,
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      colors: [
+                        AppColors.primary.withOpacity(0.1),
+                        AppColors.accent.withOpacity(0.1),
+                      ],
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
                     ),
-                    const SizedBox(height: 6),
-                    Text(
-                      project.description,
-                      style: TextStyle(
-                        fontSize: 15,
-                        color: Colors.grey[600],
-                      ),
-                    ),
-                  ],
+                    borderRadius: BorderRadius.circular(14),
+                  ),
+                  child: const Icon(
+                    Icons.fitness_center,
+                    color: AppColors.primary,
+                    size: 32,
+                  ),
                 ),
-              ),
+                const SizedBox(width: 20),
 
-              // Arrow
-              const Icon(
-                Icons.chevron_right,
-                color: Colors.grey,
-                size: 30,
-              ),
-            ],
+                // Project Info
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        project.name,
+                        style: theme.textTheme.titleLarge,
+                      ),
+                      const SizedBox(height: 6),
+                      Text(
+                        project.description,
+                        style: theme.textTheme.bodyMedium,
+                      ),
+                    ],
+                  ),
+                ),
+
+                // Arrow
+                Container(
+                  width: 36,
+                  height: 36,
+                  decoration: BoxDecoration(
+                    color: AppColors.primary.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: const Icon(
+                    Icons.arrow_forward_ios,
+                    color: AppColors.primary,
+                    size: 16,
+                  ),
+                ),
+              ],
+            ),
           ),
         ),
       ),

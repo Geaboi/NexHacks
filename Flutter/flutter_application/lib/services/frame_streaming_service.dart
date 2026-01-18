@@ -123,9 +123,18 @@ class FrameStreamingService {
       );
       
       _wsSubscription = _wsChannel!.stream.listen(
-        _handleMessage,
-        onError: _handleError,
-        onDone: _handleDone,
+        (message) {
+          print('[FrameStreaming] 🔔 Stream.listen triggered');
+          _handleMessage(message);
+        },
+        onError: (error, stackTrace) {
+          print('[FrameStreaming] 🔔 Stream.listen onError: $error');
+          _handleError(error);
+        },
+        onDone: () {
+          print('[FrameStreaming] 🔔 Stream.listen onDone - connection closed');
+          _handleDone();
+        },
       );
       
       _isConnected = true;
@@ -418,71 +427,138 @@ class FrameStreamingService {
   }
 
   /// Handle incoming WebSocket messages
+  /// 
+  /// Backend Message Format (from routes.py _listen_overshoot_ws):
+  /// 
+  /// 1. Ready message - sent after config received and stream created:
+  ///    {"type": "ready", "stream_id": "<string>"}
+  /// 
+  /// 2. Inference result - forwarded from Overshoot with latest frame timestamp:
+  ///    {"type": "inference", "result": "<string>", "timestamp": <int|null>}
+  ///    Note: timestamp is the latest frame timestamp sent by client
+  /// 
+  /// 3. Error message:
+  ///    {"type": "error", "message": "<string>"}
+  /// 
   void _handleMessage(dynamic message) {
+    // Always log raw message for debugging
+    print('[FrameStreaming] 📥 RAW MESSAGE RECEIVED:');
+    print('[FrameStreaming]   Type: ${message.runtimeType}');
+    if (message is String) {
+      final preview = message.length > 300 ? '${message.substring(0, 300)}...' : message;
+      print('[FrameStreaming]   Content: $preview');
+    } else {
+      print('[FrameStreaming]   Content: $message');
+    }
+    
     try {
+      Map<String, dynamic>? data;
+      
       if (message is String) {
-        final data = jsonDecode(message);
-        
-        if (data is Map<String, dynamic>) {
-          final type = data['type'] as String?;
-          
-          switch (type) {
-            case 'ready':
-              _isReady = true;
-              _streamId = data['stream_id'] as String?;
-              print('[FrameStreaming] ✅ WebSocket READY - stream_id: $_streamId');
-              debugPrint('[FrameStreaming] ✅ WebSocket READY - stream_id: $_streamId');
-              break;
-              
-            case 'inference':
-              final result = data['result'] as String?;
-              final timestamp = data['timestamp'] as int?;
-              if (result != null) {
-                // Debug: Print inference result received
-                debugPrint('[FrameStreaming] ========== INFERENCE RESULT ==========');
-                debugPrint('[FrameStreaming] Timestamp: $timestamp');
-                debugPrint('[FrameStreaming] Result: $result');
-                debugPrint('[FrameStreaming] Pending frames before: ${_pendingFrameTimestamps.length}');
-                
-                // Remove from pending if timestamp provided
-                if (timestamp != null) {
-                  _pendingFrameTimestamps.remove(timestamp);
-                } else if (_pendingFrameTimestamps.isNotEmpty) {
-                  // Remove oldest pending timestamp if no timestamp in response
-                  final oldest = _pendingFrameTimestamps.reduce((a, b) => a < b ? a : b);
-                  _pendingFrameTimestamps.remove(oldest);
-                }
-                
-                debugPrint('[FrameStreaming] Pending frames after: ${_pendingFrameTimestamps.length}');
-                debugPrint('[FrameStreaming] ======================================');
-                
-                _resultsController.add(InferenceResult(
-                  timestampUtc: timestamp ?? DateTime.now().toUtc().millisecondsSinceEpoch,
-                  result: result,
-                ));
-                
-                // Check if all results received after stopping
-                if (!_isStreaming && _pendingFrameTimestamps.isEmpty) {
-                  _allResultsReceivedController.add(null);
-                }
-              }
-              break;
-              
-            case 'error':
-              final error = data['message'] as String?;
-              if (error != null) {
-                debugPrint('[FrameStreaming] ERROR received: $error');
-                _resultsController.add(InferenceResult(
-                  timestampUtc: DateTime.now().toUtc().millisecondsSinceEpoch,
-                  result: 'Error: $error',
-                ));
-              }
-              break;
-          }
-        }
+        data = jsonDecode(message) as Map<String, dynamic>?;
+      } else if (message is Map<String, dynamic>) {
+        // Some WebSocket implementations auto-parse JSON
+        data = message;
+      } else {
+        print('[FrameStreaming] ⚠️ Unexpected message type: ${message.runtimeType}');
+        return;
       }
-    } catch (e) {
-      // Message parsing failed
+      
+      if (data == null) {
+        print('[FrameStreaming] ⚠️ Parsed data is null');
+        return;
+      }
+      
+      print('[FrameStreaming] 📋 Parsed JSON keys: ${data.keys.toList()}');
+      
+      final type = data['type'] as String?;
+      print('[FrameStreaming] 📌 Message type: $type');
+      
+      switch (type) {
+        case 'ready':
+          _isReady = true;
+          _streamId = data['stream_id'] as String?;
+          print('[FrameStreaming] ✅ WebSocket READY - stream_id: $_streamId');
+          break;
+          
+        case 'inference':
+          _handleInferenceResult(data);
+          break;
+          
+        case 'error':
+          final error = data['message'] as String? ?? 'Unknown error';
+          print('[FrameStreaming] ❌ ERROR from server: $error');
+          _resultsController.add(InferenceResult(
+            timestampUtc: DateTime.now().toUtc().millisecondsSinceEpoch,
+            result: 'Error: $error',
+          ));
+          break;
+          
+        default:
+          print('[FrameStreaming] ⚠️ Unknown message type: $type');
+          // Try to handle as inference if it has a result field
+          if (data.containsKey('result')) {
+            print('[FrameStreaming] 🔄 Has result field, treating as inference');
+            _handleInferenceResult(data);
+          }
+      }
+    } catch (e, stackTrace) {
+      print('[FrameStreaming] ❌ Message parsing FAILED:');
+      print('[FrameStreaming]   Error: $e');
+      print('[FrameStreaming]   Stack: $stackTrace');
+    }
+  }
+  
+  /// Handle an inference result message from the backend
+  /// Expected format: {"type": "inference", "result": "<string>", "timestamp": <int|null>}
+  void _handleInferenceResult(Map<String, dynamic> data) {
+    final result = data['result'] as String?;
+    
+    // Timestamp can be int or null from backend
+    int? timestamp;
+    final tsValue = data['timestamp'];
+    if (tsValue is int) {
+      timestamp = tsValue;
+    } else if (tsValue is double) {
+      timestamp = tsValue.toInt();
+    }
+    
+    print('[FrameStreaming] ========== INFERENCE RESULT ==========');
+    print('[FrameStreaming] Timestamp: $timestamp');
+    print('[FrameStreaming] Result: ${result != null ? (result.length > 200 ? '${result.substring(0, 200)}...' : result) : 'NULL'}');
+    print('[FrameStreaming] Pending frames before: ${_pendingFrameTimestamps.length}');
+    print('[FrameStreaming] Has listeners: ${_resultsController.hasListener}');
+    
+    if (result == null) {
+      print('[FrameStreaming] ⚠️ Result is NULL - skipping');
+      return;
+    }
+    
+    // Remove from pending if timestamp provided
+    if (timestamp != null) {
+      final removed = _pendingFrameTimestamps.remove(timestamp);
+      print('[FrameStreaming] Removed timestamp $timestamp: $removed');
+    } else if (_pendingFrameTimestamps.isNotEmpty) {
+      // Remove oldest pending timestamp if no timestamp in response
+      final oldest = _pendingFrameTimestamps.reduce((a, b) => a < b ? a : b);
+      _pendingFrameTimestamps.remove(oldest);
+      print('[FrameStreaming] Removed oldest timestamp: $oldest');
+    }
+    
+    print('[FrameStreaming] Pending frames after: ${_pendingFrameTimestamps.length}');
+    print('[FrameStreaming] ======================================');
+    
+    // Broadcast the result to listeners
+    _resultsController.add(InferenceResult(
+      timestampUtc: timestamp ?? DateTime.now().toUtc().millisecondsSinceEpoch,
+      result: result,
+    ));
+    print('[FrameStreaming] ✅ Result broadcasted to listeners');
+    
+    // Check if all results received after stopping
+    if (!_isStreaming && _pendingFrameTimestamps.isEmpty) {
+      print('[FrameStreaming] 🎉 All pending results received!');
+      _allResultsReceivedController.add(null);
     }
   }
 

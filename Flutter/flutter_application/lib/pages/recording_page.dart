@@ -9,6 +9,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image/image.dart' as img;
 import 'package:path_provider/path_provider.dart';
 import 'package:permission_handler/permission_handler.dart';
+import '../main.dart';
 import '../providers/navigation_provider.dart';
 import '../providers/frame_analysis_provider.dart';
 import '../providers/sensor_provider.dart';
@@ -312,7 +313,7 @@ class _RecordingPageState extends ConsumerState<RecordingPage> {
             Expanded(child: Text(message)),
           ],
         ),
-        backgroundColor: Colors.orange[800],
+        backgroundColor: AppColors.warning,
         duration: const Duration(seconds: 4),
         behavior: SnackBarBehavior.floating,
       ),
@@ -594,7 +595,7 @@ class _RecordingPageState extends ConsumerState<RecordingPage> {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(message),
-        backgroundColor: Colors.orange[800],
+        backgroundColor: AppColors.warning,
         duration: const Duration(seconds: 4),
         behavior: SnackBarBehavior.floating,
       ),
@@ -617,13 +618,15 @@ class _RecordingPageState extends ConsumerState<RecordingPage> {
   Widget build(BuildContext context) {
     final navState = ref.watch(navigationProvider);
     final projectName = navState.selectedProject?.name ?? 'Exercise';
+    final theme = Theme.of(context);
 
     return Scaffold(
-      backgroundColor: Colors.black,
+      backgroundColor: AppColors.primaryDark,
       appBar: AppBar(
         title: Text('Recording: $projectName'),
-        backgroundColor: Colors.black,
+        backgroundColor: AppColors.primaryDark,
         foregroundColor: Colors.white,
+        elevation: 0,
         actions: [
           if (_isRecording)
             TextButton(
@@ -637,14 +640,14 @@ class _RecordingPageState extends ConsumerState<RecordingPage> {
                       height: 8,
                       margin: const EdgeInsets.only(right: 6),
                       decoration: const BoxDecoration(
-                        color: Colors.green,
+                        color: AppColors.success,
                         shape: BoxShape.circle,
                       ),
                     ),
                   const Text(
                     'Done',
                     style: TextStyle(
-                      color: Colors.teal,
+                      color: AppColors.accent,
                       fontWeight: FontWeight.bold,
                     ),
                   ),
@@ -662,27 +665,25 @@ class _RecordingPageState extends ConsumerState<RecordingPage> {
             // Waiting for Results Overlay
             if (_isWaitingForResults)
               Container(
-                color: Colors.black.withOpacity(0.8),
+                color: AppColors.primaryDark.withOpacity(0.9),
                 child: Center(
                   child: Column(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      const CircularProgressIndicator(color: Colors.teal),
+                      const CircularProgressIndicator(color: AppColors.accent),
                       const SizedBox(height: 24),
-                      const Text(
+                      Text(
                         'Processing frames...',
-                        style: TextStyle(
+                        style: theme.textTheme.titleMedium?.copyWith(
                           color: Colors.white,
-                          fontSize: 18,
                           fontWeight: FontWeight.w500,
                         ),
                       ),
                       const SizedBox(height: 8),
                       Text(
                         '${_frameStreamingService.pendingFrameCount} frames remaining',
-                        style: TextStyle(
-                          color: Colors.grey[400],
-                          fontSize: 14,
+                        style: theme.textTheme.bodyMedium?.copyWith(
+                          color: Colors.white70,
                         ),
                       ),
                     ],
@@ -794,7 +795,7 @@ class _RecordingPageState extends ConsumerState<RecordingPage> {
                         vertical: 4,
                       ),
                       decoration: BoxDecoration(
-                        color: Colors.orange.withOpacity(0.8),
+                        color: AppColors.warning.withOpacity(0.9),
                         borderRadius: BorderRadius.circular(12),
                       ),
                       child: const Text(
@@ -872,9 +873,9 @@ class _RecordingPageState extends ConsumerState<RecordingPage> {
   Widget _buildCameraPreview() {
     if (!_isCameraInitialized) {
       return Container(
-        color: Colors.black,
+        color: AppColors.primaryDark,
         child: const Center(
-          child: CircularProgressIndicator(color: Colors.teal),
+          child: CircularProgressIndicator(color: AppColors.accent),
         ),
       );
     }
@@ -889,20 +890,20 @@ class _RecordingPageState extends ConsumerState<RecordingPage> {
     return Container(
       width: double.infinity,
       height: double.infinity,
-      color: Colors.grey[900],
+      color: AppColors.primary,
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
           Icon(
             Icons.videocam_off_outlined,
             size: 80,
-            color: Colors.grey[600],
+            color: AppColors.primaryLight.withOpacity(0.6),
           ),
           const SizedBox(height: 16),
           Text(
             'Camera Unavailable',
             style: TextStyle(
-              color: Colors.grey[500],
+              color: AppColors.primaryLight.withOpacity(0.8),
               fontSize: 18,
             ),
           ),
@@ -910,7 +911,7 @@ class _RecordingPageState extends ConsumerState<RecordingPage> {
           Text(
             'Demo video will be used',
             style: TextStyle(
-              color: Colors.grey[600],
+              color: AppColors.primaryLight.withOpacity(0.6),
               fontSize: 14,
             ),
           ),

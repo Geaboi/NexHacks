@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../providers/navigation_provider.dart';
 import '../providers/sensor_provider.dart';
+import '../main.dart';
 import 'recording_page.dart';
 
 class InstructionsPage extends ConsumerWidget {
@@ -11,35 +12,31 @@ class InstructionsPage extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final navState = ref.watch(navigationProvider);
     final projectName = navState.selectedProject?.name ?? 'Exercise';
+    final theme = Theme.of(context);
 
     return Scaffold(
-      backgroundColor: const Color(0xFFF5F5F5),
+      backgroundColor: AppColors.background,
       appBar: AppBar(
         title: Text(projectName),
-        backgroundColor: Colors.teal,
-        foregroundColor: Colors.white,
       ),
       body: SafeArea(
         child: SingleChildScrollView(
-          padding: const EdgeInsets.all(16.0),
+          padding: const EdgeInsets.all(20.0),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               // Title
-              const Text(
+              Text(
                 'Recording Instructions',
-                style: TextStyle(
-                  fontSize: 24,
-                  fontWeight: FontWeight.bold,
-                  color: Colors.teal,
+                style: theme.textTheme.headlineMedium?.copyWith(
+                  color: AppColors.primary,
                 ),
               ),
               const SizedBox(height: 8),
               Text(
                 'Follow these steps to record your ${projectName.toLowerCase()} exercise',
-                style: TextStyle(
-                  fontSize: 16,
-                  color: Colors.grey[600],
+                style: theme.textTheme.bodyLarge?.copyWith(
+                  color: AppColors.textSecondary,
                 ),
               ),
               const SizedBox(height: 24),
@@ -82,33 +79,29 @@ class InstructionsPage extends ConsumerWidget {
               Container(
                 padding: const EdgeInsets.all(16),
                 decoration: BoxDecoration(
-                  color: Colors.amber.withOpacity(0.1),
+                  color: AppColors.warning.withOpacity(0.1),
                   borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: Colors.amber.withOpacity(0.3)),
+                  border: Border.all(color: AppColors.warning.withOpacity(0.3)),
                 ),
                 child: Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Icon(Icons.lightbulb_outline, color: Colors.amber),
+                    const Icon(Icons.lightbulb_outline, color: AppColors.warning),
                     const SizedBox(width: 12),
                     Expanded(
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          const Text(
+                          Text(
                             'Pro Tip',
-                            style: TextStyle(
+                            style: theme.textTheme.titleMedium?.copyWith(
                               fontWeight: FontWeight.bold,
-                              fontSize: 16,
                             ),
                           ),
                           const SizedBox(height: 4),
                           Text(
                             'Record multiple repetitions for more accurate analysis of your form and progress.',
-                            style: TextStyle(
-                              color: Colors.grey[700],
-                              fontSize: 14,
-                            ),
+                            style: theme.textTheme.bodyMedium,
                           ),
                         ],
                       ),
@@ -130,19 +123,8 @@ class InstructionsPage extends ConsumerWidget {
                       ),
                     );
                   },
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.teal,
-                    foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(vertical: 16),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                  ),
                   icon: const Icon(Icons.videocam),
-                  label: const Text(
-                    'Start Recording',
-                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
-                  ),
+                  label: const Text('Start Recording'),
                 ),
               ),
               const SizedBox(height: 16),
@@ -169,16 +151,18 @@ class _InstructionStep extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    
     return Container(
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(12),
+        color: AppColors.cardBackground,
+        borderRadius: BorderRadius.circular(16),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.05),
-            blurRadius: 10,
-            offset: const Offset(0, 2),
+            color: AppColors.primary.withOpacity(0.06),
+            blurRadius: 16,
+            offset: const Offset(0, 4),
           ),
         ],
       ),
@@ -192,7 +176,7 @@ class _InstructionStep extends StatelessWidget {
                 width: 32,
                 height: 32,
                 decoration: const BoxDecoration(
-                  color: Colors.teal,
+                  color: AppColors.primary,
                   shape: BoxShape.circle,
                 ),
                 child: Center(
@@ -208,10 +192,7 @@ class _InstructionStep extends StatelessWidget {
               const SizedBox(width: 12),
               Text(
                 title,
-                style: const TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.w600,
-                ),
+                style: theme.textTheme.titleLarge,
               ),
             ],
           ),
@@ -220,9 +201,7 @@ class _InstructionStep extends StatelessWidget {
           // Description
           Text(
             description,
-            style: TextStyle(
-              fontSize: 14,
-              color: Colors.grey[600],
+            style: theme.textTheme.bodyMedium?.copyWith(
               height: 1.5,
             ),
           ),
@@ -234,18 +213,18 @@ class _InstructionStep extends StatelessWidget {
               height: 120,
               width: double.infinity,
               decoration: BoxDecoration(
-                color: Colors.grey[200],
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: Colors.grey[300]!),
+                color: AppColors.background,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: AppColors.textLight.withOpacity(0.3)),
               ),
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  Icon(Icons.image_outlined, size: 40, color: Colors.grey[400]),
+                  Icon(Icons.image_outlined, size: 40, color: AppColors.textLight),
                   const SizedBox(height: 8),
                   Text(
                     'Image Placeholder',
-                    style: TextStyle(color: Colors.grey[500]),
+                    style: theme.textTheme.bodySmall,
                   ),
                 ],
               ),
@@ -266,17 +245,18 @@ class _SensorConnectionStep extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final sensorState = ref.watch(sensorProvider);
+    final theme = Theme.of(context);
 
     return Container(
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(12),
+        color: AppColors.cardBackground,
+        borderRadius: BorderRadius.circular(16),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.05),
-            blurRadius: 10,
-            offset: const Offset(0, 2),
+            color: AppColors.primary.withOpacity(0.06),
+            blurRadius: 16,
+            offset: const Offset(0, 4),
           ),
         ],
       ),
@@ -290,7 +270,7 @@ class _SensorConnectionStep extends ConsumerWidget {
                 width: 32,
                 height: 32,
                 decoration: BoxDecoration(
-                  color: sensorState.isConnected ? Colors.green : Colors.teal,
+                  color: sensorState.isConnected ? AppColors.success : AppColors.primary,
                   shape: BoxShape.circle,
                 ),
                 child: Center(
@@ -306,13 +286,10 @@ class _SensorConnectionStep extends ConsumerWidget {
                 ),
               ),
               const SizedBox(width: 12),
-              const Expanded(
+              Expanded(
                 child: Text(
                   'Connect IMU Sensors',
-                  style: TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.w600,
-                  ),
+                  style: theme.textTheme.titleLarge,
                 ),
               ),
               // Status indicator
@@ -326,9 +303,7 @@ class _SensorConnectionStep extends ConsumerWidget {
             sensorState.isConnected
                 ? 'Your SmartPT sensors are connected and ready to capture motion data.'
                 : 'Connect your SmartPT sensors via Bluetooth for enhanced motion tracking (optional).',
-            style: TextStyle(
-              fontSize: 14,
-              color: Colors.grey[600],
+            style: theme.textTheme.bodyMedium?.copyWith(
               height: 1.5,
             ),
           ),
@@ -340,13 +315,13 @@ class _SensorConnectionStep extends ConsumerWidget {
             Container(
               padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
-                color: Colors.green.shade50,
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: Colors.green.shade200),
+                color: AppColors.success.withOpacity(0.1),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: AppColors.success.withOpacity(0.3)),
               ),
               child: Row(
                 children: [
-                  Icon(Icons.bluetooth_connected, color: Colors.green.shade700),
+                  const Icon(Icons.bluetooth_connected, color: AppColors.success),
                   const SizedBox(width: 12),
                   Expanded(
                     child: Column(
@@ -354,16 +329,15 @@ class _SensorConnectionStep extends ConsumerWidget {
                       children: [
                         Text(
                           'SmartPT Device',
-                          style: TextStyle(
+                          style: theme.textTheme.titleMedium?.copyWith(
+                            color: AppColors.success,
                             fontWeight: FontWeight.w600,
-                            color: Colors.green.shade800,
                           ),
                         ),
                         Text(
                           sensorState.statusMessage,
-                          style: TextStyle(
-                            fontSize: 12,
-                            color: Colors.green.shade600,
+                          style: theme.textTheme.bodySmall?.copyWith(
+                            color: AppColors.success,
                           ),
                         ),
                       ],
@@ -373,6 +347,9 @@ class _SensorConnectionStep extends ConsumerWidget {
                     onPressed: () {
                       ref.read(sensorProvider.notifier).disconnect();
                     },
+                    style: TextButton.styleFrom(
+                      foregroundColor: AppColors.textSecondary,
+                    ),
                     child: const Text('Disconnect'),
                   ),
                 ],
@@ -388,27 +365,18 @@ class _SensorConnectionStep extends ConsumerWidget {
                     : () {
                         ref.read(sensorProvider.notifier).scanAndConnect();
                       },
-                style: OutlinedButton.styleFrom(
-                  foregroundColor: Colors.teal,
-                  side: const BorderSide(color: Colors.teal),
-                  padding: const EdgeInsets.symmetric(vertical: 14),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                ),
                 icon: sensorState.isScanning
                     ? const SizedBox(
                         width: 18,
                         height: 18,
                         child: CircularProgressIndicator(
                           strokeWidth: 2,
-                          valueColor: AlwaysStoppedAnimation<Color>(Colors.teal),
+                          valueColor: AlwaysStoppedAnimation<Color>(AppColors.primary),
                         ),
                       )
                     : const Icon(Icons.bluetooth_searching),
                 label: Text(
                   sensorState.isScanning ? 'Scanning...' : 'Connect Sensors',
-                  style: const TextStyle(fontSize: 16),
                 ),
               ),
             ),
@@ -416,12 +384,11 @@ class _SensorConnectionStep extends ConsumerWidget {
               const SizedBox(height: 8),
               Text(
                 sensorState.statusMessage,
-                style: TextStyle(
-                  fontSize: 12,
+                style: theme.textTheme.bodySmall?.copyWith(
                   color: sensorState.statusMessage.contains('error') ||
                           sensorState.statusMessage.contains('not found')
-                      ? Colors.red.shade600
-                      : Colors.grey[600],
+                      ? AppColors.error
+                      : AppColors.textSecondary,
                 ),
               ),
             ],
@@ -429,14 +396,12 @@ class _SensorConnectionStep extends ConsumerWidget {
             // Skip option
             Row(
               children: [
-                Icon(Icons.info_outline, size: 14, color: Colors.grey[500]),
+                Icon(Icons.info_outline, size: 14, color: AppColors.textLight),
                 const SizedBox(width: 6),
                 Expanded(
                   child: Text(
                     'Sensors are optional. You can still record without them.',
-                    style: TextStyle(
-                      fontSize: 12,
-                      color: Colors.grey[500],
+                    style: theme.textTheme.bodySmall?.copyWith(
                       fontStyle: FontStyle.italic,
                     ),
                   ),
@@ -456,27 +421,27 @@ class _SensorConnectionStep extends ConsumerWidget {
     IconData icon;
 
     if (state.isConnected) {
-      bgColor = Colors.green.shade50;
-      textColor = Colors.green.shade700;
+      bgColor = AppColors.success.withOpacity(0.1);
+      textColor = AppColors.success;
       label = 'Connected';
       icon = Icons.check_circle;
     } else if (state.isScanning) {
-      bgColor = Colors.blue.shade50;
-      textColor = Colors.blue.shade700;
+      bgColor = AppColors.info.withOpacity(0.1);
+      textColor = AppColors.info;
       label = 'Scanning';
       icon = Icons.bluetooth_searching;
     } else {
-      bgColor = Colors.grey.shade100;
-      textColor = Colors.grey.shade600;
+      bgColor = AppColors.textLight.withOpacity(0.2);
+      textColor = AppColors.textSecondary;
       label = 'Optional';
       icon = Icons.bluetooth_disabled;
     }
 
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
       decoration: BoxDecoration(
         color: bgColor,
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(20),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
