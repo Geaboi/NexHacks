@@ -5,8 +5,12 @@ import json
 import logging
 import struct
 import requests
+import dotenv
 from fastapi import APIRouter, HTTPException, UploadFile, File, Query, Form, WebSocket, WebSocketDisconnect
 from fastapi.responses import FileResponse
+
+# Load environment variables from .env file
+dotenv.load_dotenv()
 
 import aiohttp
 from aiortc import RTCPeerConnection, RTCSessionDescription, VideoStreamTrack, RTCConfiguration, RTCIceServer
@@ -380,7 +384,7 @@ async def process_video_to_angles(
         raise HTTPException(status_code=e.response.status_code, detail=e.response.text)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
-
+    
 
 @pose_router.get("/download-csv/{csv_filename}")
 def download_keypoints_csv(csv_filename: str):
