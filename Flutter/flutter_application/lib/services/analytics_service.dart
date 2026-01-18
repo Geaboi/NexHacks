@@ -224,11 +224,11 @@ class AnalyticsService {
       '[AnalyticsService] 📤 Request fields: overshoot_data=${overshootPoints.length} points, sensor_data length=${sensorDataJson.length}',
     );
 
-    // Send request with timeout
+    // Send request with timeout (extended for video processing)
     final streamedResponse = await request.send().timeout(
-      const Duration(minutes: 5),
+      const Duration(minutes: 10),
       onTimeout: () {
-        throw TimeoutException('Backend request timed out after 5 minutes');
+        throw TimeoutException('Backend request timed out after 10 minutes');
       },
     );
 
