@@ -420,6 +420,8 @@ def _overshoot_api_key() -> str:
 
 @overshoot_router.post("/streams")
 async def overshoot_create_stream(body: OvershootCreateStreamRequest):
+    logger.info(f"[Overshoot] Creating stream with model={body.inference.model}, backend={body.inference.backend}")
+    logger.debug(f"[Overshoot] Prompt: {body.inference.prompt[:100]}...")
     client = OvershootHttpClient(_overshoot_api_url(), _overshoot_api_key())
     processing = body.processing or StreamProcessingConfig()
     inference = StreamInferenceConfig(
@@ -436,13 +438,17 @@ async def overshoot_create_stream(body: OvershootCreateStreamRequest):
             request_id=body.request_id,
         )
         stream_id = resp["stream_id"]
+        logger.info(f"[Overshoot] Stream created successfully: {stream_id}")
+        logger.debug(f"[Overshoot] Create stream response: {resp}")
         async with _overshoot_sessions_lock:
             _overshoot_sessions[stream_id] = client
         return resp
     except ApiError as e:
+        logger.error(f"[Overshoot] API error creating stream: {e.status_code} - {e.message}")
         await client.close()
         raise HTTPException(status_code=e.status_code, detail=e.message)
     except Exception as e:
+        logger.error(f"[Overshoot] Unexpected error creating stream: {type(e).__name__}: {e}", exc_info=True)
         await client.close()
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -679,7 +685,9 @@ async def overshoot_video_websocket(websocket: WebSocket):
     try:
         # Wait for config message
         config_data = await websocket.receive_json()
+        logger.info(f"[Overshoot WS Stream] Received config: {config_data}")
         if config_data.get("type") != "config":
+            logger.warning("[Overshoot WS Stream] First message was not config type")
             await websocket.send_json({"type": "error", "error": "First message must be config"})
             await websocket.close()
             return
@@ -690,6 +698,8 @@ async def overshoot_video_websocket(websocket: WebSocket):
         fps = config_data.get("fps", 30)
         width = config_data.get("width", 640)
         height = config_data.get("height", 480)
+
+        logger.info(f"[Overshoot WS Stream] Config: model={model}, backend={backend}, fps={fps}, size={width}x{height}")
 
         # Create video track
         video_track = QueuedVideoTrack(frame_queue, width=width, height=height)
@@ -710,6 +720,7 @@ async def overshoot_video_websocket(websocket: WebSocket):
         # Create offer
         offer = await pc.createOffer()
         await pc.setLocalDescription(offer)
+        logger.info("[Overshoot WS Stream] WebRTC offer created")
 
         # Create Overshoot stream
         client = OvershootHttpClient(api_url, api_key)
@@ -726,11 +737,13 @@ async def overshoot_video_websocket(websocket: WebSocket):
             model=model,
         )
 
+        logger.info("[Overshoot WS Stream] Creating Overshoot stream...")
         response = await client.create_stream(
             offer_sdp=pc.localDescription.sdp,
             processing=processing,
             inference=inference,
         )
+        logger.info(f"[Overshoot WS Stream] Stream created, response: {response}")
 
         stream_id = response["stream_id"]
         answer_sdp = response["webrtc"]["sdp"]
@@ -738,6 +751,7 @@ async def overshoot_video_websocket(websocket: WebSocket):
         # Set remote description
         answer = RTCSessionDescription(sdp=answer_sdp, type="answer")
         await pc.setRemoteDescription(answer)
+        logger.info(f"[Overshoot WS Stream] WebRTC connection established, stream_id={stream_id}")
 
         # Store client for session management
         async with _overshoot_sessions_lock:
@@ -746,6 +760,7 @@ async def overshoot_video_websocket(websocket: WebSocket):
         # Get WebSocket URL for inference results
         ws_url = client.get_websocket_url(stream_id)
         cookies = client.get_cookies()
+        logger.info(f"[Overshoot WS Stream] Inference WS URL: {ws_url}")
 
         # Start background tasks
         ws_task = asyncio.create_task(
@@ -758,6 +773,7 @@ async def overshoot_video_websocket(websocket: WebSocket):
 
         # Send ready message
         await websocket.send_json({"type": "ready", "stream_id": stream_id})
+        logger.info(f"[Overshoot WS Stream] Ready, stream_id={stream_id}")
 
         # Main loop: receive frames and control messages
         while not stop_event.is_set():
@@ -822,20 +838,22 @@ async def overshoot_video_websocket(websocket: WebSocket):
                     pass
 
     except WebSocketDisconnect:
-        logger.info("Client disconnected")
+        logger.info("[Overshoot WS Stream] Client disconnected")
     except ApiError as e:
+        logger.error(f"[Overshoot WS Stream] API error: {e.status_code} - {e.message}")
         try:
             await websocket.send_json({"type": "error", "error": e.message})
         except Exception:
             pass
     except Exception as e:
-        logger.exception(f"WebSocket error: {e}")
+        logger.exception(f"[Overshoot WS Stream] Unexpected error: {type(e).__name__}: {e}")
         try:
             await websocket.send_json({"type": "error", "error": str(e)})
         except Exception:
             pass
     finally:
         # Cleanup
+        logger.info(f"[Overshoot WS Stream] Cleaning up, stream_id={stream_id}")
         stop_event.set()
 
         for task in tasks:
