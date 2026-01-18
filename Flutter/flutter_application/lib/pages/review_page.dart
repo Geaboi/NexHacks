@@ -8,10 +8,7 @@ import 'analytics_page.dart';
 class ReviewPage extends ConsumerStatefulWidget {
   final String videoPath;
 
-  const ReviewPage({
-    super.key,
-    required this.videoPath,
-  });
+  const ReviewPage({super.key, required this.videoPath});
 
   @override
   ConsumerState<ReviewPage> createState() => _ReviewPageState();
@@ -71,10 +68,17 @@ class _ReviewPageState extends ConsumerState<ReviewPage> {
   }
 
   void _proceedToAnalysis() {
+    // Get video duration in milliseconds
+    final videoDurationMs = _controller?.value.duration.inMilliseconds ?? 0;
+
     Navigator.push(
       context,
       MaterialPageRoute(
-        builder: (_) => const AnalyticsPage(),
+        builder: (_) => AnalyticsPage(
+          videoPath: widget.videoPath,
+          videoDurationMs: videoDurationMs,
+          fps: 30, // Default FPS, adjust if needed
+        ),
       ),
     );
   }
@@ -105,10 +109,7 @@ class _ReviewPageState extends ConsumerState<ReviewPage> {
                       alignment: Alignment.center,
                       children: [
                         // Video Player
-                        AspectRatio(
-                          aspectRatio: _controller!.value.aspectRatio,
-                          child: VideoPlayer(_controller!),
-                        ),
+                        AspectRatio(aspectRatio: _controller!.value.aspectRatio, child: VideoPlayer(_controller!)),
 
                         // Play/Pause Overlay
                         GestureDetector(
@@ -125,11 +126,7 @@ class _ReviewPageState extends ConsumerState<ReviewPage> {
                                     color: Colors.black.withOpacity(0.5),
                                     shape: BoxShape.circle,
                                   ),
-                                  child: const Icon(
-                                    Icons.play_arrow,
-                                    color: Colors.white,
-                                    size: 48,
-                                  ),
+                                  child: const Icon(Icons.play_arrow, color: Colors.white, size: 48),
                                 ),
                               ),
                             ),
@@ -165,19 +162,12 @@ class _ReviewPageState extends ConsumerState<ReviewPage> {
                 children: [
                   Text(
                     projectName,
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 18,
-                      fontWeight: FontWeight.bold,
-                    ),
+                    style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
                   ),
                   const SizedBox(height: 8),
                   Text(
                     'Review your recording before submitting for analysis.',
-                    style: TextStyle(
-                      color: Colors.grey[400],
-                      fontSize: 14,
-                    ),
+                    style: TextStyle(color: Colors.grey[400], fontSize: 14),
                   ),
                 ],
               ),
@@ -225,9 +215,7 @@ class _ReviewPageState extends ConsumerState<ReviewPage> {
                         foregroundColor: Colors.white,
                         side: const BorderSide(color: Colors.white54),
                         padding: const EdgeInsets.symmetric(vertical: 16),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12),
-                        ),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                       ),
                       icon: const Icon(Icons.refresh),
                       label: const Text('Retake'),
@@ -243,9 +231,7 @@ class _ReviewPageState extends ConsumerState<ReviewPage> {
                         backgroundColor: Colors.teal,
                         foregroundColor: Colors.white,
                         padding: const EdgeInsets.symmetric(vertical: 16),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12),
-                        ),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                       ),
                       icon: const Icon(Icons.analytics),
                       label: const Text('Analyze'),
@@ -266,27 +252,11 @@ class _ReviewPageState extends ConsumerState<ReviewPage> {
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Icon(
-            Icons.videocam_outlined,
-            size: 80,
-            color: Colors.grey[600],
-          ),
+          Icon(Icons.videocam_outlined, size: 80, color: Colors.grey[600]),
           const SizedBox(height: 16),
-          Text(
-            'Video Preview',
-            style: TextStyle(
-              color: Colors.grey[500],
-              fontSize: 18,
-            ),
-          ),
+          Text('Video Preview', style: TextStyle(color: Colors.grey[500], fontSize: 18)),
           const SizedBox(height: 8),
-          Text(
-            '(Placeholder - no video recorded yet)',
-            style: TextStyle(
-              color: Colors.grey[600],
-              fontSize: 14,
-            ),
-          ),
+          Text('(Placeholder - no video recorded yet)', style: TextStyle(color: Colors.grey[600], fontSize: 14)),
         ],
       ),
     );

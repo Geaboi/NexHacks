@@ -1,13 +1,17 @@
 import 'dart:async';
 import 'dart:io';
+import 'dart:isolate';
+import 'dart:typed_data';
 import 'package:camera/camera.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:image/image.dart' as img;
 import 'package:path_provider/path_provider.dart';
 import 'package:permission_handler/permission_handler.dart';
 import '../providers/navigation_provider.dart';
 import '../providers/frame_analysis_provider.dart';
+import '../providers/sensor_provider.dart';
 import '../services/frame_streaming_service.dart';
 import 'review_page.dart';
 
@@ -29,27 +33,46 @@ class _RecordingPageState extends ConsumerState<RecordingPage> {
   int _selectedCameraIndex = 0;
   List<CameraDescription> _cameras = [];
   
+  // ==================== FRAME SAMPLING CONFIGURATION ====================
+  // Adjust this value to change how many frames per second are captured
+  // 1.0 = 1 frame per second, 0.5 = 1 frame every 2 seconds, 2.0 = 2 frames per second
+  static const double _frameSamplingFps = 1.0;
+  // ======================================================================
+  
+  // Frame sampling for hybrid approach
+  Timer? _frameSamplingTimer;
+  bool _isCapturingFrame = false;
+  int _framesCaptured = 0;
+  
   // Frame streaming
   final FrameStreamingService _frameStreamingService = FrameStreamingService();
   bool _isStreamingFrames = false;
   bool _isWaitingForResults = false;
+  bool _isAnalysisAvailable = false; // Track if WebSocket/analysis is working
   StreamSubscription<InferenceResult>? _resultsSubscription;
-  StreamSubscription<int>? _frameSentSubscription;
   StreamSubscription<void>? _allResultsSubscription;
+  StreamSubscription<bool>? _connectionSubscription;
   String? _latestInferenceResult;
+  int? _videoStartTimeUtc; // UTC timestamp when MP4 recording started
+  
+  // Timeout constants
+  static const int _wsReadyTimeoutMs = 5000; // 5 seconds to wait for WS ready
+  static const int _waitingForResultsTimeoutMs = 10000; // 10 seconds max wait for results
 
   @override
   void initState() {
     super.initState();
     _initializeCamera();
-    _initializeFrameStreaming();
+    _setupFrameStreamingListeners();
   }
 
-  Future<void> _initializeFrameStreaming() async {
-    // Listen for inference results from the server
+  void _setupFrameStreamingListeners() {
+    // Set up listeners for WebSocket events (without connecting yet)
+    
+    // Listen for inference results from the server (sparse storage - only store these)
     _resultsSubscription = _frameStreamingService.resultsStream.listen((result) {
-      // Update provider with the result
-      ref.read(frameAnalysisProvider.notifier).updateFrameResult(
+      // Add frame with result directly (sparse storage)
+      ref.read(frameAnalysisProvider.notifier).addFrameWithResult(
         result.timestampUtc,
         result.result,
       );
@@ -58,10 +81,18 @@ class _RecordingPageState extends ConsumerState<RecordingPage> {
       });
     });
     
-    // Listen for frames being sent
-    _frameSentSubscription = _frameStreamingService.frameSentStream.listen((timestamp) {
-      // Register frame in provider
-      ref.read(frameAnalysisProvider.notifier).addFrame(timestamp);
+    // Listen for connection state changes
+    _connectionSubscription = _frameStreamingService.connectionStream.listen((connected) {
+      if (!connected && _isRecording && _isAnalysisAvailable) {
+        // Connection lost during recording
+        print('[RecordingPage] ⚠️ WebSocket connection lost during recording');
+        setState(() {
+          _isAnalysisAvailable = false;
+          _isStreamingFrames = false;
+        });
+        _stopFrameSampling();
+        _showErrorSnackBar('Analysis connection lost. Recording continues without real-time analysis.');
+      }
     });
     
     // Listen for all results received
@@ -73,22 +104,6 @@ class _RecordingPageState extends ConsumerState<RecordingPage> {
       });
       _navigateToReview();
     });
-    
-    // Configure and connect to the WebSocket server
-    const config = StreamConfig(
-      prompt: 'Analyze the physical therapy exercise form',
-      model: 'gemini-2.0-flash',
-      backend: 'gemini',
-      fps: 30,
-      width: 640,
-      height: 480,
-    );
-    
-    // Update the URL to your actual backend
-    await _frameStreamingService.connect(
-      wsUrl: 'ws://localhost:8080/frames',
-      config: config,
-    );
   }
 
   Future<void> _initializeCamera() async {
@@ -162,20 +177,77 @@ class _RecordingPageState extends ConsumerState<RecordingPage> {
     }
 
     try {
-      // Start a new analysis session in the provider
-      ref.read(frameAnalysisProvider.notifier).startSession();
+      // Start BLE sensor recording (sends "Start" command and calculates RTT)
+      final sensorNotifier = ref.read(sensorProvider.notifier);
+
+      // Connect to WebSocket server NOW (when recording starts)
+      const config = StreamConfig(
+        prompt: 'Analyze the physical therapy exercise form',
+        model: 'gemini-2.0-flash',
+        backend: 'gemini',
+        samplingRatio: 1.0,
+        fps: 30,
+        clipLengthSeconds: 3.0,
+        delaySeconds: 3.0,
+        width: 640,
+        height: 480,
+      );
+      
+      // Attempt to connect to WebSocket - may fail, that's OK
+      bool wsConnected = false;
+      try {
+        wsConnected = await _frameStreamingService.connect(
+          wsUrl: 'wss://api.mateotaylortest.org/api/overshoot/ws/stream',
+          config: config,
+        );
+        
+        // Wait for WebSocket to become ready (receive 'ready' message from server)
+        if (wsConnected) {
+          wsConnected = await _waitForWebSocketReady();
+        }
+      } catch (e) {
+        print('[RecordingPage] ⚠️ WebSocket connection failed: $e');
+        wsConnected = false;
+      }
+      
+      // Set analysis availability based on connection success
+      setState(() {
+        _isAnalysisAvailable = wsConnected;
+      });
+      
+      // Notify user if analysis is not available (but don't block recording)
+      if (!wsConnected) {
+        _showWarningSnackBar(
+          'Real-time analysis unavailable. Recording will continue without frame analysis.',
+        );
+      }
+      
+      // Capture the video start timestamp BEFORE starting the recording
+      _videoStartTimeUtc = DateTime.now().toUtc().millisecondsSinceEpoch;
+      
+      // Start a new analysis session in the provider with the video start timestamp
+      ref.read(frameAnalysisProvider.notifier).startSession(_videoStartTimeUtc!);
       
       // Start video recording (saves to file)
       await _cameraController!.startVideoRecording();
+      if (ref.read(sensorProvider).isConnected) {
+        sensorNotifier.startRecording();
+      }
       
-      // Start frame streaming to WebSocket (assumes ~30fps camera)
-      _frameStreamingService.startStreaming(cameraFps: 30);
-      await _startImageStream();
+      // Only start frame streaming if analysis is available
+      if (_isAnalysisAvailable) {
+        print('[RecordingPage] 🎬 Starting frame streaming service...');
+        _frameStreamingService.startStreaming(cameraFps: 30);
+        
+        // Start hybrid frame sampling (takes pictures at configured FPS)
+        _startFrameSampling();
+      }
       
       setState(() {
         _isRecording = true;
-        _isStreamingFrames = true;
+        _isStreamingFrames = _isAnalysisAvailable;
         _recordingSeconds = 0;
+        _framesCaptured = 0;
       });
 
       // Start timer
@@ -185,37 +257,172 @@ class _RecordingPageState extends ConsumerState<RecordingPage> {
         });
       });
     } catch (e) {
-      // Recording failed silently
+      print('[RecordingPage] ❌ Recording failed: $e');
+      _showErrorSnackBar('Failed to start recording: $e');
     }
   }
 
-  Future<void> _startImageStream() async {
-    if (_cameraController == null || !_cameraController!.value.isInitialized) {
-      return;
+  /// Wait for WebSocket to receive 'ready' message from server
+  /// Returns true if ready within timeout, false otherwise
+  Future<bool> _waitForWebSocketReady() async {
+    if (_frameStreamingService.isReady) return true;
+    
+    final completer = Completer<bool>();
+    Timer? timeoutTimer;
+    
+    // Set up timeout
+    timeoutTimer = Timer(Duration(milliseconds: _wsReadyTimeoutMs), () {
+      if (!completer.isCompleted) {
+        print('[RecordingPage] ⚠️ WebSocket ready timeout after ${_wsReadyTimeoutMs}ms');
+        completer.complete(false);
+      }
+    });
+    
+    // Check if already ready
+    if (_frameStreamingService.isReady) {
+      timeoutTimer.cancel();
+      return true;
     }
     
-    // Note: startImageStream may not work simultaneously with video recording
-    // on all devices. If it doesn't work, frames will be captured from the
-    // recorded video in post-processing instead.
+    // Poll for ready state (simpler than adding a ready stream)
+    final pollTimer = Timer.periodic(const Duration(milliseconds: 100), (timer) {
+      if (_frameStreamingService.isReady) {
+        timer.cancel();
+        timeoutTimer?.cancel();
+        if (!completer.isCompleted) {
+          completer.complete(true);
+        }
+      }
+    });
+    
+    final result = await completer.future;
+    pollTimer.cancel();
+    return result;
+  }
+
+  /// Show a warning message to the user (orange, non-blocking)
+  void _showWarningSnackBar(String message) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Row(
+          children: [
+            const Icon(Icons.warning_amber_rounded, color: Colors.white),
+            const SizedBox(width: 8),
+            Expanded(child: Text(message)),
+          ],
+        ),
+        backgroundColor: Colors.orange[800],
+        duration: const Duration(seconds: 4),
+        behavior: SnackBarBehavior.floating,
+      ),
+    );
+  }
+
+  /// Start periodic frame sampling using takePicture()
+  /// This runs in parallel with video recording
+  void _startFrameSampling() {
+    print('[RecordingPage] 📸 Starting frame sampling at $_frameSamplingFps fps...');
+    
+    // Calculate interval in milliseconds from FPS
+    final intervalMs = (1000 / _frameSamplingFps).round();
+    
+    _frameSamplingTimer = Timer.periodic(
+      Duration(milliseconds: intervalMs),
+      (_) => _captureAndSendFrame(),
+    );
+    
+    // Also capture first frame immediately
+    _captureAndSendFrame();
+  }
+  
+  /// Capture a single frame and send it to the WebSocket
+  Future<void> _captureAndSendFrame() async {
+    // Prevent overlapping captures
+    if (_isCapturingFrame || !_isRecording || _cameraController == null) return;
+    
+    _isCapturingFrame = true;
+    
     try {
-      await _cameraController!.startImageStream((CameraImage image) {
-        // Send frame to WebSocket service
-        _frameStreamingService.processFrame(image);
+      // Get timestamp BEFORE taking picture for accuracy
+      final timestampUtc = DateTime.now().toUtc().millisecondsSinceEpoch;
+      
+      // Take a picture (this works even during video recording)
+      final XFile imageFile = await _cameraController!.takePicture();
+      
+      // Read the JPEG bytes
+      final Uint8List jpegBytes = await File(imageFile.path).readAsBytes();
+      
+      // Convert JPEG to RGB24 in an isolate to avoid blocking UI
+      final rgb24Bytes = await _decodeJpegToRgb24(
+        jpegBytes,
+        _frameStreamingService.configWidth,
+        _frameStreamingService.configHeight,
+      );
+      
+      // Send to WebSocket with the captured timestamp
+      _frameStreamingService.sendRawFrameWithTimestamp(rgb24Bytes, timestampUtc);
+      
+      // Clean up the temporary image file
+      await File(imageFile.path).delete();
+      
+      setState(() {
+        _framesCaptured++;
       });
+      
+      print('[RecordingPage] 📸 Frame $_framesCaptured captured and sent');
+      
     } catch (e) {
-      // Image stream not available during video recording on this device
-      // This is expected on some devices
+      print('[RecordingPage] ⚠️ Frame capture failed: $e');
+    } finally {
+      _isCapturingFrame = false;
     }
   }
-
-  Future<void> _stopImageStream() async {
-    if (_cameraController == null) return;
-    
-    try {
-      await _cameraController!.stopImageStream();
-    } catch (e) {
-      // Image stream wasn't running
-    }
+  
+  /// Decode JPEG bytes to RGB24 format
+  /// Runs in isolate to avoid blocking the UI thread
+  Future<Uint8List> _decodeJpegToRgb24(
+    Uint8List jpegBytes,
+    int targetWidth,
+    int targetHeight,
+  ) async {
+    return await Isolate.run(() {
+      // Decode JPEG
+      final image = img.decodeJpg(jpegBytes);
+      if (image == null) {
+        return Uint8List(targetWidth * targetHeight * 3);
+      }
+      
+      // Resize to target dimensions
+      final resized = img.copyResize(
+        image,
+        width: targetWidth,
+        height: targetHeight,
+        interpolation: img.Interpolation.linear,
+      );
+      
+      // Convert to RGB24 bytes
+      final rgb24 = Uint8List(targetWidth * targetHeight * 3);
+      int index = 0;
+      
+      for (int y = 0; y < targetHeight; y++) {
+        for (int x = 0; x < targetWidth; x++) {
+          final pixel = resized.getPixel(x, y);
+          rgb24[index++] = pixel.r.toInt();
+          rgb24[index++] = pixel.g.toInt();
+          rgb24[index++] = pixel.b.toInt();
+        }
+      }
+      
+      return rgb24;
+    });
+  }
+  
+  /// Stop frame sampling
+  void _stopFrameSampling() {
+    _frameSamplingTimer?.cancel();
+    _frameSamplingTimer = null;
+    print('[RecordingPage] 📸 Frame sampling stopped. Total frames captured: $_framesCaptured');
   }
 
   Future<void> _stopRecording() async {
@@ -225,10 +432,27 @@ class _RecordingPageState extends ConsumerState<RecordingPage> {
 
     _recordingTimer?.cancel();
     
+    // Stop frame sampling first (only if it was running)
+    if (_isAnalysisAvailable) {
+      _stopFrameSampling();
+    }
+    
+    // Stop BLE sensor recording
+    final sensorNotifier = ref.read(sensorProvider.notifier);
+    if (ref.read(sensorProvider).isConnected) {
+      await sensorNotifier.stopRecording();
+      // Get sensor data as JSON for later use
+      final sensorData = sensorNotifier.getSamplesAsMap();
+      debugPrint('Collected ${sensorData['total_samples']} IMU samples');
+    }
+    
     // Stop frame streaming - mark session as stopped in provider
     ref.read(frameAnalysisProvider.notifier).stopRecording();
-    _frameStreamingService.stopStreaming();
-    await _stopImageStream();
+    
+    // Only stop streaming if it was active
+    if (_isAnalysisAvailable) {
+      _frameStreamingService.stopStreaming();
+    }
 
     try {
       final XFile videoFile = await _cameraController!.stopVideoRecording();
@@ -245,23 +469,45 @@ class _RecordingPageState extends ConsumerState<RecordingPage> {
         _isStreamingFrames = false;
       });
 
-      // Check if we need to wait for remaining results
-      if (_frameStreamingService.pendingFrameCount > 0) {
+      // Check if we need to wait for remaining results (only if analysis was available)
+      final pendingCount = _frameStreamingService.pendingFrameCount;
+      if (_isAnalysisAvailable && pendingCount > 0) {
+        print('[RecordingPage] ⏳ Waiting for $pendingCount pending results...');
         setState(() {
           _isWaitingForResults = true;
         });
-        // Navigation will happen when allResultsReceivedStream fires
+        
+        // Start a timeout timer - don't wait forever for results
+        Timer(Duration(milliseconds: _waitingForResultsTimeoutMs), () {
+          if (_isWaitingForResults && mounted) {
+            print('[RecordingPage] ⚠️ Timeout waiting for results, proceeding to review');
+            _showErrorSnackBar('Some analysis results were not received.');
+            setState(() {
+              _isWaitingForResults = false;
+            });
+            ref.read(frameAnalysisProvider.notifier).markSessionComplete();
+            _navigateToReview();
+          }
+        });
+        
+        // Navigation will happen when allResultsReceivedStream fires (or timeout)
       } else {
-        // No pending frames, navigate immediately
+        // No pending frames or analysis wasn't available, navigate immediately
         ref.read(frameAnalysisProvider.notifier).markSessionComplete();
         _navigateToReview();
       }
     } catch (e) {
+      print('[RecordingPage] ⚠️ Error stopping recording: $e');
       setState(() {
         _isRecording = false;
         _isStreamingFrames = false;
         _isWaitingForResults = false;
       });
+      // Still try to navigate to review if we have a video path
+      if (_tempVideoPath != null) {
+        ref.read(frameAnalysisProvider.notifier).markSessionComplete();
+        _navigateToReview();
+      }
     }
   }
 
@@ -342,12 +588,26 @@ class _RecordingPageState extends ConsumerState<RecordingPage> {
     return '${minutes.toString().padLeft(2, '0')}:${secs.toString().padLeft(2, '0')}';
   }
 
+  /// Show an error/warning message to the user
+  void _showErrorSnackBar(String message) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
+        backgroundColor: Colors.orange[800],
+        duration: const Duration(seconds: 4),
+        behavior: SnackBarBehavior.floating,
+      ),
+    );
+  }
+
   @override
   void dispose() {
     _recordingTimer?.cancel();
+    _frameSamplingTimer?.cancel();
     _resultsSubscription?.cancel();
-    _frameSentSubscription?.cancel();
     _allResultsSubscription?.cancel();
+    _connectionSubscription?.cancel();
     _frameStreamingService.dispose();
     _cameraController?.dispose();
     super.dispose();

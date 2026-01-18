@@ -119,14 +119,16 @@ class _ProjectCard extends StatelessWidget {
       child: InkWell(
         onTap: onTap,
         borderRadius: BorderRadius.circular(12),
+        splashColor: Colors.teal.withOpacity(0.2),
+        highlightColor: Colors.teal.withOpacity(0.1),
         child: Padding(
-          padding: const EdgeInsets.all(16.0),
+          padding: const EdgeInsets.all(20.0),
           child: Row(
             children: [
               // Placeholder Icon/Image
               Container(
-                width: 60,
-                height: 60,
+                width: 70,
+                height: 70,
                 decoration: BoxDecoration(
                   color: Colors.teal.withOpacity(0.1),
                   borderRadius: BorderRadius.circular(12),
@@ -134,10 +136,10 @@ class _ProjectCard extends StatelessWidget {
                 child: const Icon(
                   Icons.fitness_center,
                   color: Colors.teal,
-                  size: 30,
+                  size: 36,
                 ),
               ),
-              const SizedBox(width: 16),
+              const SizedBox(width: 20),
 
               // Project Info
               Expanded(
@@ -147,15 +149,15 @@ class _ProjectCard extends StatelessWidget {
                     Text(
                       project.name,
                       style: const TextStyle(
-                        fontSize: 18,
+                        fontSize: 20,
                         fontWeight: FontWeight.w600,
                       ),
                     ),
-                    const SizedBox(height: 4),
+                    const SizedBox(height: 6),
                     Text(
                       project.description,
                       style: TextStyle(
-                        fontSize: 14,
+                        fontSize: 15,
                         color: Colors.grey[600],
                       ),
                     ),
@@ -167,6 +169,7 @@ class _ProjectCard extends StatelessWidget {
               const Icon(
                 Icons.chevron_right,
                 color: Colors.grey,
+                size: 30,
               ),
             ],
           ),
