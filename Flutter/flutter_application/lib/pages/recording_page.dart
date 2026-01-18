@@ -177,9 +177,6 @@ class _RecordingPageState extends ConsumerState<RecordingPage> {
     }
 
     try {
-      // Start a new analysis session in the provider
-      ref.read(frameAnalysisProvider.notifier).startSession();
-
       // Start BLE sensor recording (sends "Start" command and calculates RTT)
       final sensorNotifier = ref.read(sensorProvider.notifier);
 
@@ -196,10 +193,40 @@ class _RecordingPageState extends ConsumerState<RecordingPage> {
         height: 480,
       );
       
-      wsConnected = await _frameStreamingService.connect(
-        wsUrl: 'wss://api.mateotaylortest.org/api/overshoot/ws/stream',
-        config: config,
-      );
+      // Attempt to connect to WebSocket - may fail, that's OK
+      bool wsConnected = false;
+      try {
+        wsConnected = await _frameStreamingService.connect(
+          wsUrl: 'wss://api.mateotaylortest.org/api/overshoot/ws/stream',
+          config: config,
+        );
+        
+        // Wait for WebSocket to become ready (receive 'ready' message from server)
+        if (wsConnected) {
+          wsConnected = await _waitForWebSocketReady();
+        }
+      } catch (e) {
+        print('[RecordingPage] ⚠️ WebSocket connection failed: $e');
+        wsConnected = false;
+      }
+      
+      // Set analysis availability based on connection success
+      setState(() {
+        _isAnalysisAvailable = wsConnected;
+      });
+      
+      // Notify user if analysis is not available (but don't block recording)
+      if (!wsConnected) {
+        _showWarningSnackBar(
+          'Real-time analysis unavailable. Recording will continue without frame analysis.',
+        );
+      }
+      
+      // Capture the video start timestamp BEFORE starting the recording
+      _videoStartTimeUtc = DateTime.now().toUtc().millisecondsSinceEpoch;
+      
+      // Start a new analysis session in the provider with the video start timestamp
+      ref.read(frameAnalysisProvider.notifier).startSession(_videoStartTimeUtc!);
       
       // Start video recording (saves to file)
       await _cameraController!.startVideoRecording();
@@ -230,8 +257,66 @@ class _RecordingPageState extends ConsumerState<RecordingPage> {
         });
       });
     } catch (e) {
-      // Recording failed silently
+      print('[RecordingPage] ❌ Recording failed: $e');
+      _showErrorSnackBar('Failed to start recording: $e');
     }
+  }
+
+  /// Wait for WebSocket to receive 'ready' message from server
+  /// Returns true if ready within timeout, false otherwise
+  Future<bool> _waitForWebSocketReady() async {
+    if (_frameStreamingService.isReady) return true;
+    
+    final completer = Completer<bool>();
+    Timer? timeoutTimer;
+    
+    // Set up timeout
+    timeoutTimer = Timer(Duration(milliseconds: _wsReadyTimeoutMs), () {
+      if (!completer.isCompleted) {
+        print('[RecordingPage] ⚠️ WebSocket ready timeout after ${_wsReadyTimeoutMs}ms');
+        completer.complete(false);
+      }
+    });
+    
+    // Check if already ready
+    if (_frameStreamingService.isReady) {
+      timeoutTimer.cancel();
+      return true;
+    }
+    
+    // Poll for ready state (simpler than adding a ready stream)
+    final pollTimer = Timer.periodic(const Duration(milliseconds: 100), (timer) {
+      if (_frameStreamingService.isReady) {
+        timer.cancel();
+        timeoutTimer?.cancel();
+        if (!completer.isCompleted) {
+          completer.complete(true);
+        }
+      }
+    });
+    
+    final result = await completer.future;
+    pollTimer.cancel();
+    return result;
+  }
+
+  /// Show a warning message to the user (orange, non-blocking)
+  void _showWarningSnackBar(String message) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Row(
+          children: [
+            const Icon(Icons.warning_amber_rounded, color: Colors.white),
+            const SizedBox(width: 8),
+            Expanded(child: Text(message)),
+          ],
+        ),
+        backgroundColor: Colors.orange[800],
+        duration: const Duration(seconds: 4),
+        behavior: SnackBarBehavior.floating,
+      ),
+    );
   }
 
   /// Start periodic frame sampling using takePicture()

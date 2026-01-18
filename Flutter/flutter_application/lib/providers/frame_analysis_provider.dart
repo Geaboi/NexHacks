@@ -76,9 +76,10 @@ class FrameAnalysisNotifier extends Notifier<FrameAnalysisState> {
   }
 
   /// Start a new recording session with the video start timestamp
-  void startSession(int videoStartTimeUtc) {
+  /// If videoStartTimeUtc is not provided, uses current UTC time
+  void startSession([int? videoStartTimeUtc]) {
     state = FrameAnalysisState(
-      videoStartTimeUtc: videoStartTimeUtc,
+      videoStartTimeUtc: videoStartTimeUtc ?? DateTime.now().toUtc().millisecondsSinceEpoch,
       isRecording: true,
       sessionStartTime: DateTime.now().toUtc(),
     );
