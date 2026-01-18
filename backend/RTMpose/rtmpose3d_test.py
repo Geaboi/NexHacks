@@ -3,6 +3,7 @@
 testing the rtmpose module in rtmpose3d_handler.py
 '''
 import os
+import numpy as np
 from rtmpose3d_handler import RTMPose3DHandler
 
 if __name__ == "__main__":
@@ -12,7 +13,7 @@ if __name__ == "__main__":
     with open(os.path.join(script_dir, "walking.mp4"), "rb") as f:
         video_bytes = f.read()
     all_poses, output_2d_video, csv_path = handler.process_video(video_bytes)
-    print("Processed poses shape:", all_poses.shape)
+    print("Processed poses shape:", np.array(all_poses).shape)
     print("2D overlay video saved at:", output_2d_video)
     print("CSV of keypoints saved at:", csv_path)
 
