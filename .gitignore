@@ -1,2 +1,7 @@
-.claude
 .env
+.vscode/
+.claude/
+rtm/
+venv/
+
+*.DS_Store
