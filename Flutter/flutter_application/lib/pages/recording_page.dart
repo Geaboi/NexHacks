@@ -42,10 +42,12 @@ class _RecordingPageState extends ConsumerState<RecordingPage> {
   void initState() {
     super.initState();
     _initializeCamera();
-    _initializeFrameStreaming();
+    _setupFrameStreamingListeners();
   }
 
-  Future<void> _initializeFrameStreaming() async {
+  void _setupFrameStreamingListeners() {
+    // Set up listeners for WebSocket events (without connecting yet)
+    
     // Listen for inference results from the server
     _resultsSubscription = _frameStreamingService.resultsStream.listen((result) {
       // Update provider with the result
@@ -73,22 +75,6 @@ class _RecordingPageState extends ConsumerState<RecordingPage> {
       });
       _navigateToReview();
     });
-    
-    // Configure and connect to the WebSocket server
-    const config = StreamConfig(
-      prompt: 'Analyze the physical therapy exercise form',
-      model: 'gemini-2.0-flash',
-      backend: 'gemini',
-      fps: 30,
-      width: 640,
-      height: 480,
-    );
-    
-    // Update the URL to your actual backend
-    await _frameStreamingService.connect(
-      wsUrl: 'ws://localhost:8080/frames',
-      config: config,
-    );
   }
 
   Future<void> _initializeCamera() async {
@@ -164,6 +150,21 @@ class _RecordingPageState extends ConsumerState<RecordingPage> {
     try {
       // Start a new analysis session in the provider
       ref.read(frameAnalysisProvider.notifier).startSession();
+      
+      // Connect to WebSocket server NOW (when recording starts)
+      const config = StreamConfig(
+        prompt: 'Analyze the physical therapy exercise form',
+        model: 'gemini-2.0-flash',
+        backend: 'gemini',
+        fps: 30,
+        width: 640,
+        height: 480,
+      );
+      
+      await _frameStreamingService.connect(
+        wsUrl: 'ws://localhost:8080/frames',
+        config: config,
+      );
       
       // Start video recording (saves to file)
       await _cameraController!.startVideoRecording();
