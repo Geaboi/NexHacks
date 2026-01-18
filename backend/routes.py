@@ -362,7 +362,7 @@ async def process_video_to_angles(
                 result["dataset"] = dataset_info
 
             # Step 2: Run anomaly detection inference using the uploaded dataset
-            infer_url = f"{BASE_URL}/api/models/anomaly/{model_id}/infer"
+            infer_url = f"{BASE_URL}/api/models/anomaly/1OZUO0uahYoua8SklFmr/infer"
             infer_params = {"dataset_name": dataset_name}
             infer_data = {"coerce_schema": True}
             infer_response = requests.post(
@@ -390,6 +390,16 @@ def download_keypoints_csv(csv_filename: str):
     if not os.path.exists(csv_path):
         raise HTTPException(status_code=404, detail="CSV file not found")
     return FileResponse(csv_path, media_type="text/csv", filename=csv_filename)
+
+
+@pose_router.get("/download-video/{video_filename}")
+def download_overlay_video(video_filename: str):
+    """Download a previously generated overlay video file."""
+    import tempfile
+    video_path = os.path.join(tempfile.gettempdir(), video_filename)
+    if not os.path.exists(video_path):
+        raise HTTPException(status_code=404, detail="Overlay video file not found")
+    return FileResponse(video_path, media_type="video/mp4", filename=video_filename)
 
 
 overshoot_router = APIRouter(prefix="/api/overshoot", tags=["Overshoot"])

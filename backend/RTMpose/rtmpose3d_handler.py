@@ -305,12 +305,12 @@ class RTMPose3DHandler:
                 np.mean([score_list[12], score_list[14], score_list[16]]), # "right_knee_score"
 
                 # Hip Flexion: Shoulder (5/6) -> Hip (11/12) -> Knee (13/14)
-                np.mean(score_list[5], score_list[11], score_list[13]), # "left_hip_score"
-                np.mean(score_list[6], score_list[12], score_list[14]), # "right_hip_score"
+                np.mean([score_list[5], score_list[11], score_list[13]]), # "left_hip_score"
+                np.mean([score_list[6], score_list[12], score_list[14]]), # "right_hip_score"
 
                 # Ankle Dorsiflexion: Knee (13/14) -> Ankle (15/16) -> Big Toe (17/20)
-                np.mean(score_list[13], score_list[15], score_list[17]), # "left_ankle_score"
-                np.mean(score_list[14], score_list[16], score_list[20]), # "right_ankle_score"
+                np.mean([score_list[13], score_list[15], score_list[17]]), # "left_ankle_score"
+                np.mean([score_list[14], score_list[16], score_list[20]]), # "right_ankle_score"
             ]
             leg_scores.append(frame_scores)
 

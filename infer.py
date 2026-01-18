@@ -1,17 +1,27 @@
 import os
 import dotenv
-from woodwide import WoodWide
+import requests
 
 dotenv.load_dotenv()
 
-print(os.environ.get("WOODWIDE_AI_API_KEY"))
-client = WoodWide(
-    api_key=os.environ.get("WOODWIDE_AI_API_KEY"),  # This is the default and can be omitted
-)
+API_KEY = os.environ.get("WOODWIDE_AI_API_KEY")
+BASE_URL = "https://beta.woodwide.ai"
 
-result = client.api.models.anomaly.infer(
-    model_id="8gyw1IPYmLzwQCK7GeRO",
-    dataset_id="hdrkG2THFEV8weO3asDA",
-)
+print("API Key:", API_KEY[:10] + "..." if API_KEY else None)
 
-print(result)
+# Using direct HTTP request like in routes.py
+model_id = "1OZUO0uahYoua8SklFmr"
+dataset_name = "timeseries1"  # Use dataset NAME, not ID
+
+url = f"{BASE_URL}/api/models/anomaly/{model_id}/infer"
+headers = {"Authorization": f"Bearer {API_KEY}"}
+params = {"dataset_name": dataset_name}
+data = {"coerce_schema": True}
+
+response = requests.post(url, headers=headers, params=params, data=data)
+print("Status:", response.status_code)
+print("Response:", response.text[:500] if response.text else "(empty)")
+
+if response.ok:
+    result = response.json()
+    print("Result:", result)

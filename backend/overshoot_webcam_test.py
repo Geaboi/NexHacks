@@ -336,10 +336,10 @@ Be concise but descriptive."""
 
     try:
         processing = StreamProcessingConfig(
-            sampling_ratio=0.5,  # Sample every other frame
+            sampling_ratio=0.8,  # Sample every other frame
             fps=30,
-            clip_length_seconds=2.0,  # Shorter clips
-            delay_seconds=5.0,  # More time between inferences (constraint: 30*0.5*2/5 = 6 <= 30)
+            clip_length_seconds=0.2,  # Shorter clips
+            delay_seconds=0.2,  # More time between inferences (constraint: 30*0.5*2/5 = 6 <= 30)
         )
 
         inference = StreamInferenceConfig(
