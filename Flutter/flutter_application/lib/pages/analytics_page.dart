@@ -173,11 +173,86 @@ class _AnalyticsPageState extends ConsumerState<AnalyticsPage> {
   /// Get the min-avg range for subtitle
   String _getAngleRange(String angleType) {
     if (_sessionStats == null) return '';
-    
+
     final stat = _sessionStats!.where((s) => s.angleName == angleType).firstOrNull;
     if (stat == null) return '';
-    
+
     return 'Min: ${stat.min?.toStringAsFixed(1) ?? '--'}° • Avg: ${stat.avg?.toStringAsFixed(1) ?? '--'}°';
+  }
+
+  /// Build tips list from overshoot inference results
+  List<Widget> _buildTipsFromOvershoot(FrameAnalysisState frameAnalysis) {
+    final inferencePoints = frameAnalysis.sortedPoints;
+
+    // If no inference results, show placeholder
+    if (inferencePoints.isEmpty) {
+      return [
+        _FeedbackItem(
+          icon: Icons.info_outline,
+          text: 'No real-time analysis data available',
+          color: Colors.grey,
+        ),
+        const SizedBox(height: 8),
+        _FeedbackItem(
+          icon: Icons.lightbulb_outline,
+          text: 'Record with a stable connection for AI tips',
+          color: Colors.amber,
+        ),
+      ];
+    }
+
+    // Extract unique tips from inference results
+    final uniqueTips = <String>{};
+    for (final point in inferencePoints) {
+      final result = point.inferenceResult.trim();
+      if (result.isNotEmpty && !result.startsWith('Error:')) {
+        uniqueTips.add(result);
+      }
+    }
+
+    // If no valid tips after filtering
+    if (uniqueTips.isEmpty) {
+      return [
+        _FeedbackItem(
+          icon: Icons.check_circle_outline,
+          text: 'Analysis complete - no issues detected',
+          color: Colors.green,
+        ),
+      ];
+    }
+
+    // Build tip widgets (limit to 5 most recent unique tips)
+    final tipsList = uniqueTips.toList();
+    final displayTips = tipsList.length > 5 ? tipsList.sublist(tipsList.length - 5) : tipsList;
+
+    final widgets = <Widget>[];
+    for (int i = 0; i < displayTips.length; i++) {
+      widgets.add(
+        _FeedbackItem(
+          icon: Icons.lightbulb_outline,
+          text: displayTips[i],
+          color: Colors.amber,
+        ),
+      );
+      if (i < displayTips.length - 1) {
+        widgets.add(const SizedBox(height: 8));
+      }
+    }
+
+    // Add summary at the top if multiple tips
+    if (uniqueTips.length > 1) {
+      widgets.insert(
+        0,
+        _FeedbackItem(
+          icon: Icons.auto_awesome,
+          text: '${uniqueTips.length} tips from AI analysis',
+          color: Colors.teal,
+        ),
+      );
+      widgets.insert(1, const SizedBox(height: 8));
+    }
+
+    return widgets;
   }
 
   @override
@@ -434,16 +509,10 @@ class _AnalyticsPageState extends ConsumerState<AnalyticsPage> {
               ),
               const SizedBox(height: 24),
 
-              // Feedback Section
+              // Feedback Section - Tips from Overshoot
               const Text('Recommendations', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
               const SizedBox(height: 12),
-              _FeedbackItem(icon: Icons.info_outline, text: 'AI feedback will appear here', color: Colors.blue),
-              const SizedBox(height: 8),
-              _FeedbackItem(
-                icon: Icons.lightbulb_outline,
-                text: 'Tips for improvement coming soon',
-                color: Colors.amber,
-              ),
+              ..._buildTipsFromOvershoot(frameAnalysis),
               const SizedBox(height: 32),
 
               // Action Buttons
