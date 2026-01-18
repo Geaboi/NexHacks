@@ -40,6 +40,7 @@ class AppColors {
 }
 
 void main() {
+  WidgetsFlutterBinding.ensureInitialized();
   runApp(
     ProviderScope(
       child: MaterialApp(

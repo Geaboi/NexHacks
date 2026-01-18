@@ -4,11 +4,9 @@ import 'dart:isolate';
 import 'dart:typed_data';
 import 'package:camera/camera.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image/image.dart' as img;
 import 'package:path_provider/path_provider.dart';
-import 'package:permission_handler/permission_handler.dart';
 import '../main.dart';
 import '../providers/navigation_provider.dart';
 import '../providers/frame_analysis_provider.dart';
@@ -26,7 +24,6 @@ class RecordingPage extends ConsumerStatefulWidget {
 class _RecordingPageState extends ConsumerState<RecordingPage> {
   CameraController? _cameraController;
   bool _isCameraInitialized = false;
-  bool _isCameraAvailable = false;
   bool _isRecording = false;
   String? _tempVideoPath;
   Timer? _recordingTimer;
@@ -63,8 +60,8 @@ class _RecordingPageState extends ConsumerState<RecordingPage> {
   @override
   void initState() {
     super.initState();
-    _initializeCamera();
     _setupFrameStreamingListeners();
+    _initializeCamera();
   }
 
   void _setupFrameStreamingListeners() {
@@ -108,34 +105,22 @@ class _RecordingPageState extends ConsumerState<RecordingPage> {
   }
 
   Future<void> _initializeCamera() async {
-    // Request camera permission
-    final cameraStatus = await Permission.camera.request();
-    final micStatus = await Permission.microphone.request();
-
-    if (cameraStatus.isDenied || micStatus.isDenied) {
-      setState(() {
-        _isCameraAvailable = false;
-        _isCameraInitialized = true;
-      });
-      return;
-    }
-
     try {
       _cameras = await availableCameras();
       if (_cameras.isEmpty) {
-        setState(() {
-          _isCameraAvailable = false;
-          _isCameraInitialized = true;
-        });
+        if (mounted) {
+          _showErrorSnackBar('No cameras found on this device');
+          Navigator.pop(context);
+        }
         return;
       }
 
       await _setupCamera(_selectedCameraIndex);
     } catch (e) {
-      setState(() {
-        _isCameraAvailable = false;
-        _isCameraInitialized = true;
-      });
+      if (mounted) {
+        _showErrorSnackBar('Failed to initialize camera: $e');
+        Navigator.pop(context);
+      }
     }
   }
 
@@ -153,18 +138,24 @@ class _RecordingPageState extends ConsumerState<RecordingPage> {
 
     try {
       await _cameraController!.initialize();
-      // Disable flash to prevent constant flashing during frame capture
-      await _cameraController!.setFlashMode(FlashMode.off);
+
+      // Disable flash to prevent constant flashing during frame capture (if flash is available)
+      try {
+        await _cameraController!.setFlashMode(FlashMode.off);
+      } catch (flashError) {
+        // Flash not supported on this camera - silently ignore
+        print('[RecordingPage] Flash not available on this camera');
+      }
+
       setState(() {
-        _isCameraAvailable = true;
         _isCameraInitialized = true;
         _selectedCameraIndex = cameraIndex;
       });
     } catch (e) {
-      setState(() {
-        _isCameraAvailable = false;
-        _isCameraInitialized = true;
-      });
+      if (mounted) {
+        _showErrorSnackBar('Failed to initialize camera: $e');
+        Navigator.pop(context);
+      }
     }
   }
 
@@ -299,24 +290,6 @@ class _RecordingPageState extends ConsumerState<RecordingPage> {
     return result;
   }
 
-  /// Show a warning message to the user (orange, non-blocking)
-  void _showWarningSnackBar(String message) {
-    if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Row(
-          children: [
-            const Icon(Icons.warning_amber_rounded, color: Colors.white),
-            const SizedBox(width: 8),
-            Expanded(child: Text(message)),
-          ],
-        ),
-        backgroundColor: AppColors.warning,
-        duration: const Duration(seconds: 4),
-        behavior: SnackBarBehavior.floating,
-      ),
-    );
-  }
 
   /// Start periodic frame sampling using takePicture()
   /// This runs in parallel with video recording
@@ -510,62 +483,18 @@ class _RecordingPageState extends ConsumerState<RecordingPage> {
   }
 
   Future<void> _toggleRecording() async {
-    if (_isCameraAvailable && _cameraController != null) {
+    if (_cameraController != null) {
       if (_isRecording) {
         await _stopRecording();
       } else {
         await _startRecording();
       }
-    } else {
-      // No camera available - simulate recording with fallback
-      if (_isRecording) {
-        _recordingTimer?.cancel();
-        setState(() {
-          _isRecording = false;
-        });
-        await _useFallbackVideo();
-      } else {
-        setState(() {
-          _isRecording = true;
-          _recordingSeconds = 0;
-        });
-        _recordingTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
-          setState(() {
-            _recordingSeconds++;
-          });
-        });
-      }
     }
   }
 
   Future<void> _finishRecording() async {
-    if (_isCameraAvailable && _cameraController != null && _isRecording) {
+    if (_cameraController != null && _isRecording) {
       await _stopRecording();
-    } else {
-      _recordingTimer?.cancel();
-      setState(() {
-        _isRecording = false;
-      });
-      await _useFallbackVideo();
-    }
-  }
-
-  Future<void> _useFallbackVideo() async {
-    try {
-      final tempDir = await getTemporaryDirectory();
-      _tempVideoPath = '${tempDir.path}/temp_record.mp4';
-
-      final byteData = await rootBundle.load('static/walking.mp4');
-      final file = File(_tempVideoPath!);
-      await file.writeAsBytes(byteData.buffer.asUint8List());
-
-      _navigateToReview();
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Error loading video')),
-        );
-      }
     }
   }
 
@@ -586,13 +515,19 @@ class _RecordingPageState extends ConsumerState<RecordingPage> {
     return '${minutes.toString().padLeft(2, '0')}:${secs.toString().padLeft(2, '0')}';
   }
 
-  /// Show an error/warning message to the user
+  /// Show an error message to the user
   void _showErrorSnackBar(String message) {
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Text(message),
-        backgroundColor: AppColors.warning,
+        content: Row(
+          children: [
+            const Icon(Icons.error_outline, color: Colors.white),
+            const SizedBox(width: 8),
+            Expanded(child: Text(message)),
+          ],
+        ),
+        backgroundColor: AppColors.error,
         duration: const Duration(seconds: 4),
         behavior: SnackBarBehavior.floating,
       ),
@@ -782,28 +717,7 @@ class _RecordingPageState extends ConsumerState<RecordingPage> {
                       fontSize: 16,
                     ),
                   ),
-                  const SizedBox(height: 8),
-
-                  // Camera status indicator
-                  if (!_isCameraAvailable && _isCameraInitialized)
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 12,
-                        vertical: 4,
-                      ),
-                      decoration: BoxDecoration(
-                        color: AppColors.warning.withOpacity(0.9),
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      child: const Text(
-                        'Using demo video',
-                        style: TextStyle(
-                          color: Colors.white,
-                          fontSize: 12,
-                        ),
-                      ),
-                    ),
-                  const SizedBox(height: 16),
+                  const SizedBox(height: 24),
 
                   // Record Button Row
                   Row(
@@ -847,13 +761,9 @@ class _RecordingPageState extends ConsumerState<RecordingPage> {
 
                       // Flip Camera Button
                       IconButton(
-                        onPressed: _isCameraAvailable && _cameras.length > 1
-                            ? _flipCamera
-                            : null,
+                        onPressed: _cameras.length > 1 ? _flipCamera : null,
                         icon: const Icon(Icons.flip_camera_ios),
-                        color: _isCameraAvailable && _cameras.length > 1
-                            ? Colors.white
-                            : Colors.grey,
+                        color: _cameras.length > 1 ? Colors.white : Colors.grey,
                         iconSize: 32,
                       ),
                     ],
@@ -868,7 +778,7 @@ class _RecordingPageState extends ConsumerState<RecordingPage> {
   }
 
   Widget _buildCameraPreview() {
-    if (!_isCameraInitialized) {
+    if (!_isCameraInitialized || _cameraController == null) {
       return Container(
         color: AppColors.primaryDark,
         child: const Center(
@@ -877,42 +787,16 @@ class _RecordingPageState extends ConsumerState<RecordingPage> {
       );
     }
 
-    if (_isCameraAvailable && _cameraController != null && _cameraController!.value.isInitialized) {
+    if (_cameraController!.value.isInitialized) {
       return Center(
         child: CameraPreview(_cameraController!),
       );
     }
 
-    // Fallback placeholder when camera is not available
     return Container(
-      width: double.infinity,
-      height: double.infinity,
-      color: AppColors.primary,
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Icon(
-            Icons.videocam_off_outlined,
-            size: 80,
-            color: AppColors.primaryLight.withOpacity(0.6),
-          ),
-          const SizedBox(height: 16),
-          Text(
-            'Camera Unavailable',
-            style: TextStyle(
-              color: AppColors.primaryLight.withOpacity(0.8),
-              fontSize: 18,
-            ),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            'Demo video will be used',
-            style: TextStyle(
-              color: AppColors.primaryLight.withOpacity(0.6),
-              fontSize: 14,
-            ),
-          ),
-        ],
+      color: AppColors.primaryDark,
+      child: const Center(
+        child: CircularProgressIndicator(color: AppColors.accent),
       ),
     );
   }
