@@ -4,7 +4,10 @@
       "WebFetch(domain:docs.overshoot.ai)",
       "WebSearch",
       "WebFetch(domain:overshoot.ai)",
-      "WebFetch(domain:docs.woodwide.ai)"
+      "WebFetch(domain:docs.woodwide.ai)",
+      "WebFetch(domain:cluster1.overshoot.ai)",
+      "WebFetch(domain:github.com)",
+      "WebFetch(domain:raw.githubusercontent.com)"
     ]
   }
 }

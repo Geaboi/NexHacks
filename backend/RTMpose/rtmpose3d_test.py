@@ -11,7 +11,7 @@ if __name__ == "__main__":
     handler = RTMPose3DHandler(device='cpu')
     with open(os.path.join(script_dir, "walking.mp4"), "rb") as f:
         video_bytes = f.read()
-    all_poses, output_2d_video = handler.process_video(video_bytes)
+    all_poses, output_2d_video, csv_path = handler.process_video(video_bytes)
     print("Processed poses shape:", all_poses.shape)
     print("2D overlay video saved at:", output_2d_video)
 
