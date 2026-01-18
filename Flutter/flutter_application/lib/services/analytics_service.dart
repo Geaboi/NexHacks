@@ -8,18 +8,32 @@ import 'package:path_provider/path_provider.dart';
 class AnalyticsResponse {
   final String? processedVideoPath; // Path to the downloaded processed video (null if not provided)
   final Map<String, dynamic> analyticsData; // JSON analytics data
+  final List<int> anomalousIds; // Frame indices flagged as anomalous by backend
   final bool success;
   final String? errorMessage;
 
   const AnalyticsResponse({
     this.processedVideoPath,
     required this.analyticsData,
+    this.anomalousIds = const [],
     this.success = true,
     this.errorMessage,
   });
 
   factory AnalyticsResponse.fromJson(Map<String, dynamic> json, String? videoPath) {
-    return AnalyticsResponse(processedVideoPath: videoPath, analyticsData: json, success: true);
+    // Parse anomalous_ids from response
+    List<int> anomalousIds = [];
+    if (json.containsKey('anomalous_ids') && json['anomalous_ids'] != null) {
+      final rawIds = json['anomalous_ids'] as List<dynamic>;
+      anomalousIds = rawIds.map((e) => e as int).toList();
+    }
+    
+    return AnalyticsResponse(
+      processedVideoPath: videoPath,
+      analyticsData: json,
+      anomalousIds: anomalousIds,
+      success: true,
+    );
   }
 
   factory AnalyticsResponse.error(String message) {
@@ -246,6 +260,7 @@ class AnalyticsService {
       print('[AnalyticsService]   - num_frames: ${jsonResponse['num_frames']}');
       print('[AnalyticsService]   - num_angles: ${jsonResponse['num_angles']}');
       print('[AnalyticsService]   - overlay_video_path: ${jsonResponse['overlay_video_path']}');
+      print('[AnalyticsService]   - anomalous_ids: ${jsonResponse['anomalous_ids']}');
 
       // Download overlay video if path is provided
       String? processedVideoPath;

@@ -90,9 +90,10 @@ class SessionHistoryNotifier extends Notifier<SessionHistoryState> {
     String? processedVideoPath,
     int? durationMs,
     int? fps,
+    List<int> anomalousFrameIds = const [],
   }) async {
     try {
-      print('[SessionHistory] 💾 Saving session with ${angles.length} frames...');
+      print('[SessionHistory] 💾 Saving session with ${angles.length} frames, ${anomalousFrameIds.length} anomalous...');
 
       // Create session
       final session = Session(
@@ -103,6 +104,7 @@ class SessionHistoryNotifier extends Notifier<SessionHistoryState> {
         fps: fps,
         totalFrames: angles.length,
         numAngles: 6,
+        anomalousFrameIds: anomalousFrameIds,
         createdAt: DateTime.now().toUtc(),
       );
 
