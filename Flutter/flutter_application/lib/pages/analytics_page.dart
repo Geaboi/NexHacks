@@ -6,6 +6,7 @@ import '../providers/sensor_provider.dart';
 import '../providers/session_history_provider.dart';
 import '../models/frame_angle.dart';
 import '../services/analytics_service.dart';
+import '../main.dart';
 import 'home_page.dart';
 
 class AnalyticsPage extends ConsumerStatefulWidget {
@@ -35,6 +36,28 @@ class _AnalyticsPageState extends ConsumerState<AnalyticsPage> {
     super.initState();
     // Submit analysis when page loads
     _submitAnalysis();
+    
+    // Show a brief snackbar if analysis wasn't available
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final frameAnalysis = ref.read(frameAnalysisProvider);
+      if (frameAnalysis.inferencePoints.isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: const Row(
+              children: [
+                Icon(Icons.info_outline, color: Colors.white, size: 18),
+                SizedBox(width: 8),
+                Text('Model saved! Analysis will be available soon.'),
+              ],
+            ),
+            backgroundColor: Colors.orange.shade700,
+            duration: const Duration(seconds: 3),
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+          ),
+        );
+      }
+    });
   }
 
   Future<void> _submitAnalysis() async {
@@ -68,6 +91,7 @@ class _AnalyticsPageState extends ConsumerState<AnalyticsPage> {
       print('[AnalyticsPage] 📊 Inference points: ${inferencePointsJson.length}');
       print('[AnalyticsPage] ⏱️ Video duration: ${widget.videoDurationMs}ms, FPS: ${widget.fps}');
 
+      
       final response = await _analyticsService.submitAnalysis(
         videoPath: widget.videoPath,
         inferencePoints: inferencePointsJson,
@@ -76,7 +100,7 @@ class _AnalyticsPageState extends ConsumerState<AnalyticsPage> {
         videoDurationMs: widget.videoDurationMs,
         sensorData: sensorData,
         datasetName: 'flutter_recording_${DateTime.now().millisecondsSinceEpoch}',
-        modelId: 'default_model',
+        modelId: '1OZUO0uahYoua8SklFmr',
       );
 
       setState(() {
@@ -263,13 +287,12 @@ class _AnalyticsPageState extends ConsumerState<AnalyticsPage> {
     final sensorState = ref.watch(sensorProvider);
     final hasAnalysisData = frameAnalysis.inferencePoints.isNotEmpty;
     final hasSensorData = sensorState.sampleBuffer.isNotEmpty;
+    final theme = Theme.of(context);
 
     return Scaffold(
-      backgroundColor: const Color(0xFFF5F5F5),
+      backgroundColor: AppColors.background,
       appBar: AppBar(
         title: const Text('Analysis Results'),
-        backgroundColor: Colors.teal,
-        foregroundColor: Colors.white,
         leading: IconButton(
           icon: const Icon(Icons.close),
           onPressed: () {
@@ -284,64 +307,62 @@ class _AnalyticsPageState extends ConsumerState<AnalyticsPage> {
       ),
       body: SafeArea(
         child: SingleChildScrollView(
-          padding: const EdgeInsets.all(16.0),
+          padding: const EdgeInsets.all(20.0),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Success Header - different based on analysis availability
+              // Success Header
               Container(
                 width: double.infinity,
-                padding: const EdgeInsets.all(24),
+                padding: const EdgeInsets.all(28),
                 decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    colors: hasAnalysisData
-                        ? [Colors.teal, Colors.teal.shade700]
-                        : [Colors.orange.shade600, Colors.orange.shade800],
+                  gradient: const LinearGradient(
+                    colors: [AppColors.primary, AppColors.primaryLight],
                     begin: Alignment.topLeft,
                     end: Alignment.bottomRight,
                   ),
-                  borderRadius: BorderRadius.circular(16),
+                  borderRadius: BorderRadius.circular(20),
+                  boxShadow: [
+                    BoxShadow(
+                      color: AppColors.primary.withOpacity(0.3),
+                      blurRadius: 20,
+                      offset: const Offset(0, 8),
+                    ),
+                  ],
                 ),
                 child: Column(
                   children: [
-                    Icon(
-                      hasAnalysisData ? Icons.check_circle_outline : Icons.videocam_outlined,
-                      color: Colors.white,
-                      size: 48,
+                    Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: Colors.white.withOpacity(0.2),
+                        shape: BoxShape.circle,
+                      ),
+                      child: const Icon(
+                        Icons.check_circle_outline,
+                        color: Colors.white,
+                        size: 48,
+                      ),
                     ),
-                    const SizedBox(height: 12),
-                    Text(
-                      hasAnalysisData ? 'Recording Complete!' : 'Recording Saved',
-                      style: const TextStyle(color: Colors.white, fontSize: 24, fontWeight: FontWeight.bold),
+                    const SizedBox(height: 16),
+                    const Text(
+                      'Recording Complete!',
+                      style: TextStyle(color: Colors.white, fontSize: 26, fontWeight: FontWeight.bold),
                     ),
                     const SizedBox(height: 8),
-                    Text(projectName, style: const TextStyle(color: Colors.white70, fontSize: 16)),
-                    if (!hasAnalysisData) ...[
-                      const SizedBox(height: 12),
+                    Text(projectName, style: TextStyle(color: Colors.white.withOpacity(0.8), fontSize: 16)),
+                    if (hasAnalysisData) ...[
+                      const SizedBox(height: 8),
                       Container(
                         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                         decoration: BoxDecoration(
                           color: Colors.white.withOpacity(0.2),
                           borderRadius: BorderRadius.circular(20),
                         ),
-                        child: const Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Icon(Icons.info_outline, color: Colors.white, size: 16),
-                            SizedBox(width: 6),
-                            Text(
-                              'Real-time analysis was unavailable',
-                              style: TextStyle(color: Colors.white, fontSize: 12),
-                            ),
-                          ],
+                        child: Text(
+                          '${frameAnalysis.pointCount} analysis points captured',
+                          style: TextStyle(color: Colors.white.withOpacity(0.9), fontSize: 14),
                         ),
-                      ),
-                    ],
-                    if (hasAnalysisData) ...[
-                      const SizedBox(height: 8),
-                      Text(
-                        '${frameAnalysis.pointCount} analysis points captured',
-                        style: const TextStyle(color: Colors.white70, fontSize: 14),
                       ),
                     ],
                   ],
@@ -354,81 +375,81 @@ class _AnalyticsPageState extends ConsumerState<AnalyticsPage> {
               const SizedBox(height: 24),
 
               // Most Recent Recording Placeholder
-              const Text('Most Recent Recording', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+              Text('Most Recent Recording', style: theme.textTheme.headlineSmall),
               const SizedBox(height: 12),
               Container(
                 width: double.infinity,
                 height: 200,
                 decoration: BoxDecoration(
-                  color: Colors.black,
+                  color: AppColors.primaryDark,
                   borderRadius: BorderRadius.circular(16),
                   boxShadow: [
-                    BoxShadow(color: Colors.black.withOpacity(0.1), blurRadius: 10, offset: const Offset(0, 2)),
+                    BoxShadow(color: Colors.black.withOpacity(0.1), blurRadius: 10, offset: const Offset(0, 4)),
                   ],
                 ),
                 child: Column(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    Icon(Icons.play_circle_outline, size: 48, color: Colors.grey[400]),
+                    Icon(Icons.play_circle_outline, size: 56, color: Colors.white.withOpacity(0.4)),
                     const SizedBox(height: 12),
-                    Text('Video Preview', style: TextStyle(color: Colors.grey[500], fontSize: 16)),
+                    Text('Video Preview', style: TextStyle(color: Colors.white.withOpacity(0.5), fontSize: 16)),
                   ],
                 ),
               ),
-              const SizedBox(height: 24),
+              const SizedBox(height: 28),
 
               // Flexion Metrics
               Row(
                 children: [
-                  const Text('Flexion Analysis', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+                  Text('Flexion Analysis', style: theme.textTheme.headlineSmall),
                   const Spacer(),
                   if (_isSavingToDb)
                     const SizedBox(
-                      width: 16,
-                      height: 16,
-                      child: CircularProgressIndicator(strokeWidth: 2),
+                      width: 18,
+                      height: 18,
+                      child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.primary),
                     )
                   else if (_sessionStats != null)
                     Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
                       decoration: BoxDecoration(
-                        color: Colors.green.shade50,
-                        borderRadius: BorderRadius.circular(12),
+                        color: AppColors.success.withOpacity(0.1),
+                        borderRadius: BorderRadius.circular(20),
                       ),
-                      child: Row(
+                      child: const Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          Icon(Icons.save, size: 14, color: Colors.green.shade700),
-                          const SizedBox(width: 4),
+                          Icon(Icons.check_circle, size: 14, color: AppColors.success),
+                          SizedBox(width: 4),
                           Text(
                             'Saved',
-                            style: TextStyle(fontSize: 12, color: Colors.green.shade700, fontWeight: FontWeight.w500),
+                            style: TextStyle(fontSize: 12, color: AppColors.success, fontWeight: FontWeight.w600),
                           ),
                         ],
                       ),
                     ),
                 ],
               ),
-              const SizedBox(height: 12),
+              const SizedBox(height: 16),
               Row(
                 children: [
                   Expanded(
                     child: _MetricCard(
-                      icon: Icons.straighten,
-                      title: 'Left Knee Flexion',
+                      icon: Icons.accessibility_new,
+                      title: 'Left Knee',
                       value: _getAngleValue('left_knee_flexion'),
                       subtitle: _getAngleRange('left_knee_flexion'),
-                      color: Colors.blue,
+                      color: AppColors.kneeColor,
                     ),
                   ),
                   const SizedBox(width: 12),
                   Expanded(
                     child: _MetricCard(
-                      icon: Icons.straighten,
-                      title: 'Right Knee Flexion',
+                      icon: Icons.accessibility_new,
+                      title: 'Right Knee',
                       value: _getAngleValue('right_knee_flexion'),
                       subtitle: _getAngleRange('right_knee_flexion'),
-                      color: Colors.blue,
+                      color: AppColors.kneeColor,
                     ),
                   ),
                 ],
@@ -438,21 +459,21 @@ class _AnalyticsPageState extends ConsumerState<AnalyticsPage> {
                 children: [
                   Expanded(
                     child: _MetricCard(
-                      icon: Icons.straighten,
-                      title: 'Left Hip Flexion',
+                      icon: Icons.airline_seat_legroom_normal,
+                      title: 'Left Hip',
                       value: _getAngleValue('left_hip_flexion'),
                       subtitle: _getAngleRange('left_hip_flexion'),
-                      color: Colors.purple,
+                      color: AppColors.hipColor,
                     ),
                   ),
                   const SizedBox(width: 12),
                   Expanded(
                     child: _MetricCard(
-                      icon: Icons.straighten,
-                      title: 'Right Hip Flexion',
+                      icon: Icons.airline_seat_legroom_normal,
+                      title: 'Right Hip',
                       value: _getAngleValue('right_hip_flexion'),
                       subtitle: _getAngleRange('right_hip_flexion'),
-                      color: Colors.purple,
+                      color: AppColors.hipColor,
                     ),
                   ),
                 ],
@@ -462,57 +483,63 @@ class _AnalyticsPageState extends ConsumerState<AnalyticsPage> {
                 children: [
                   Expanded(
                     child: _MetricCard(
-                      icon: Icons.straighten,
-                      title: 'Left Ankle Flexion',
+                      icon: Icons.directions_walk,
+                      title: 'Left Ankle',
                       value: _getAngleValue('left_ankle_flexion'),
                       subtitle: _getAngleRange('left_ankle_flexion'),
-                      color: Colors.orange,
+                      color: AppColors.ankleColor,
                     ),
                   ),
                   const SizedBox(width: 12),
                   Expanded(
                     child: _MetricCard(
-                      icon: Icons.straighten,
-                      title: 'Right Ankle Flexion',
+                      icon: Icons.directions_walk,
+                      title: 'Right Ankle',
                       value: _getAngleValue('right_ankle_flexion'),
                       subtitle: _getAngleRange('right_ankle_flexion'),
-                      color: Colors.orange,
+                      color: AppColors.ankleColor,
                     ),
                   ),
                 ],
               ),
-              const SizedBox(height: 24),
+              const SizedBox(height: 28),
 
               // Chart Placeholder
-              const Text('Progress Over Time', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+              Text('Progress Over Time', style: theme.textTheme.headlineSmall),
               const SizedBox(height: 12),
               Container(
                 width: double.infinity,
                 height: 200,
                 decoration: BoxDecoration(
-                  color: Colors.white,
+                  color: AppColors.cardBackground,
                   borderRadius: BorderRadius.circular(16),
                   boxShadow: [
-                    BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 10, offset: const Offset(0, 2)),
+                    BoxShadow(color: AppColors.primary.withOpacity(0.06), blurRadius: 16, offset: const Offset(0, 4)),
                   ],
                 ),
                 child: Column(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    Icon(Icons.show_chart, size: 48, color: Colors.grey[400]),
+                    Icon(Icons.show_chart, size: 48, color: AppColors.textLight),
                     const SizedBox(height: 12),
-                    Text('Chart Placeholder', style: TextStyle(color: Colors.grey[500], fontSize: 16)),
+                    Text('Chart Placeholder', style: theme.textTheme.bodyMedium),
                     const SizedBox(height: 4),
-                    Text('Progress visualization coming soon', style: TextStyle(color: Colors.grey[400], fontSize: 14)),
+                    Text('Progress visualization coming soon', style: theme.textTheme.bodySmall),
                   ],
                 ),
               ),
-              const SizedBox(height: 24),
+              const SizedBox(height: 28),
 
-              // Feedback Section - Tips from Overshoot
-              const Text('Recommendations', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+              // Feedback Section
+              Text('Recommendations', style: theme.textTheme.headlineSmall),
               const SizedBox(height: 12),
-              ..._buildTipsFromOvershoot(frameAnalysis),
+              _FeedbackItem(icon: Icons.info_outline, text: 'AI feedback will appear here', color: AppColors.info),
+              const SizedBox(height: 8),
+              _FeedbackItem(
+                icon: Icons.lightbulb_outline,
+                text: 'Tips for improvement coming soon',
+                color: AppColors.warning,
+              ),
               const SizedBox(height: 32),
 
               // Action Buttons
@@ -521,16 +548,15 @@ class _AnalyticsPageState extends ConsumerState<AnalyticsPage> {
                   Expanded(
                     child: OutlinedButton.icon(
                       onPressed: () {
-                        ScaffoldMessenger.of(
-                          context,
-                        ).showSnackBar(const SnackBar(content: Text('Share feature - coming soon!')));
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: const Text('Share feature - coming soon!'),
+                            backgroundColor: AppColors.primary,
+                            behavior: SnackBarBehavior.floating,
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                          ),
+                        );
                       },
-                      style: OutlinedButton.styleFrom(
-                        foregroundColor: Colors.teal,
-                        side: const BorderSide(color: Colors.teal),
-                        padding: const EdgeInsets.symmetric(vertical: 16),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                      ),
                       icon: const Icon(Icons.share),
                       label: const Text('Share'),
                     ),
@@ -545,12 +571,6 @@ class _AnalyticsPageState extends ConsumerState<AnalyticsPage> {
                           (route) => false,
                         );
                       },
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.teal,
-                        foregroundColor: Colors.white,
-                        padding: const EdgeInsets.symmetric(vertical: 16),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                      ),
                       icon: const Icon(Icons.home),
                       label: const Text('Home'),
                     ),
@@ -566,97 +586,130 @@ class _AnalyticsPageState extends ConsumerState<AnalyticsPage> {
   }
 
   Widget _buildSubmissionStatus(bool hasSensorData) {
+    final theme = Theme.of(context);
+    
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: AppColors.cardBackground,
         borderRadius: BorderRadius.circular(16),
-        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 10, offset: const Offset(0, 2))],
+        boxShadow: [BoxShadow(color: AppColors.primary.withOpacity(0.06), blurRadius: 16, offset: const Offset(0, 4))],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
             children: [
-              Icon(
-                _isSubmitting
-                    ? Icons.cloud_upload_outlined
-                    : _errorMessage != null
-                    ? Icons.error_outline
-                    : Icons.cloud_done_outlined,
-                color: _isSubmitting
-                    ? Colors.blue
-                    : _errorMessage != null
-                    ? Colors.red
-                    : Colors.green,
-                size: 24,
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: _isSubmitting
+                      ? AppColors.info.withOpacity(0.1)
+                      : _errorMessage != null
+                          ? AppColors.error.withOpacity(0.1)
+                          : AppColors.success.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Icon(
+                  _isSubmitting
+                      ? Icons.cloud_upload_outlined
+                      : _errorMessage != null
+                          ? Icons.error_outline
+                          : Icons.cloud_done_outlined,
+                  color: _isSubmitting
+                      ? AppColors.info
+                      : _errorMessage != null
+                          ? AppColors.error
+                          : AppColors.success,
+                  size: 24,
+                ),
               ),
               const SizedBox(width: 12),
               Text(
                 'Backend Analysis',
-                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.grey[800]),
+                style: theme.textTheme.titleLarge,
               ),
             ],
           ),
-          const SizedBox(height: 12),
+          const SizedBox(height: 16),
 
           // Status message
           if (_isSubmitting) ...[
             Row(
               children: [
                 const SizedBox(
-                  width: 16,
-                  height: 16,
+                  width: 18,
+                  height: 18,
                   child: CircularProgressIndicator(
                     strokeWidth: 2,
-                    valueColor: AlwaysStoppedAnimation<Color>(Colors.blue),
+                    valueColor: AlwaysStoppedAnimation<Color>(AppColors.info),
                   ),
                 ),
                 const SizedBox(width: 12),
                 Expanded(
                   child: Text(
                     'Uploading video and data for analysis...',
-                    style: TextStyle(color: Colors.grey[600], fontSize: 14),
+                    style: theme.textTheme.bodyMedium,
                   ),
                 ),
               ],
             ),
           ] else if (_errorMessage != null) ...[
             Container(
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(color: Colors.red.shade50, borderRadius: BorderRadius.circular(8)),
+              padding: const EdgeInsets.all(14),
+              decoration: BoxDecoration(
+                color: AppColors.error.withOpacity(0.08),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: AppColors.error.withOpacity(0.2)),
+              ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
                     'Analysis failed',
-                    style: TextStyle(color: Colors.red.shade700, fontWeight: FontWeight.w600),
+                    style: theme.textTheme.titleMedium?.copyWith(
+                      color: AppColors.error,
+                      fontWeight: FontWeight.w600,
+                    ),
                   ),
                   const SizedBox(height: 4),
-                  Text(_errorMessage!, style: TextStyle(color: Colors.red.shade600, fontSize: 12)),
-                  const SizedBox(height: 8),
+                  Text(
+                    _errorMessage!,
+                    style: theme.textTheme.bodySmall?.copyWith(color: AppColors.error),
+                  ),
+                  const SizedBox(height: 10),
                   TextButton.icon(
                     onPressed: _submitAnalysis,
                     icon: const Icon(Icons.refresh, size: 16),
                     label: const Text('Retry'),
-                    style: TextButton.styleFrom(foregroundColor: Colors.red.shade700, padding: EdgeInsets.zero),
+                    style: TextButton.styleFrom(
+                      foregroundColor: AppColors.error,
+                      padding: EdgeInsets.zero,
+                    ),
                   ),
                 ],
               ),
             ),
           ] else if (_hasSubmitted && _response != null) ...[
             Container(
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(color: Colors.green.shade50, borderRadius: BorderRadius.circular(8)),
+              padding: const EdgeInsets.all(14),
+              decoration: BoxDecoration(
+                color: AppColors.success.withOpacity(0.08),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: AppColors.success.withOpacity(0.2)),
+              ),
               child: Row(
                 children: [
-                  Icon(Icons.check_circle, color: Colors.green.shade600, size: 20),
-                  const SizedBox(width: 8),
+                  const Icon(Icons.check_circle, color: AppColors.success, size: 22),
+                  const SizedBox(width: 10),
                   Expanded(
                     child: Text(
                       'Analysis submitted successfully',
-                      style: TextStyle(color: Colors.green.shade700, fontWeight: FontWeight.w500),
+                      style: theme.textTheme.titleMedium?.copyWith(
+                        color: AppColors.success,
+                        fontWeight: FontWeight.w500,
+                      ),
                     ),
                   ),
                 ],
@@ -664,7 +717,7 @@ class _AnalyticsPageState extends ConsumerState<AnalyticsPage> {
             ),
           ],
 
-          const SizedBox(height: 12),
+          const SizedBox(height: 16),
 
           // Data summary
           Row(
@@ -696,22 +749,28 @@ class _DataChip extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
       decoration: BoxDecoration(
-        color: isAvailable ? Colors.teal.shade50 : Colors.grey.shade100,
+        color: isAvailable ? AppColors.primary.withOpacity(0.08) : AppColors.textLight.withOpacity(0.15),
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: isAvailable ? Colors.teal.shade200 : Colors.grey.shade300),
+        border: Border.all(
+          color: isAvailable ? AppColors.primary.withOpacity(0.2) : AppColors.textLight.withOpacity(0.3),
+        ),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(icon, size: 14, color: isAvailable ? Colors.teal.shade700 : Colors.grey.shade500),
-          const SizedBox(width: 4),
+          Icon(
+            icon,
+            size: 14,
+            color: isAvailable ? AppColors.primary : AppColors.textLight,
+          ),
+          const SizedBox(width: 6),
           Text(
             label,
             style: TextStyle(
               fontSize: 12,
-              color: isAvailable ? Colors.teal.shade700 : Colors.grey.shade500,
+              color: isAvailable ? AppColors.primary : AppColors.textLight,
               fontWeight: FontWeight.w500,
             ),
           ),
@@ -719,7 +778,7 @@ class _DataChip extends StatelessWidget {
           Icon(
             isAvailable ? Icons.check_circle : Icons.cancel,
             size: 12,
-            color: isAvailable ? Colors.teal.shade600 : Colors.grey.shade400,
+            color: isAvailable ? AppColors.success : AppColors.textLight,
           ),
         ],
       ),
@@ -738,24 +797,40 @@ class _MetricCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    
     return Container(
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(12),
-        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 10, offset: const Offset(0, 2))],
+        color: AppColors.cardBackground,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [BoxShadow(color: color.withOpacity(0.1), blurRadius: 16, offset: const Offset(0, 4))],
+        border: Border.all(color: color.withOpacity(0.15)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Icon(icon, color: color, size: 28),
-          const SizedBox(height: 12),
-          Text(value, style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold)),
+          Container(
+            padding: const EdgeInsets.all(8),
+            decoration: BoxDecoration(
+              color: color.withOpacity(0.1),
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: Icon(icon, color: color, size: 24),
+          ),
+          const SizedBox(height: 14),
+          Text(
+            value,
+            style: theme.textTheme.headlineMedium?.copyWith(
+              fontWeight: FontWeight.bold,
+              color: AppColors.textPrimary,
+            ),
+          ),
           const SizedBox(height: 4),
-          Text(title, style: TextStyle(fontSize: 14, color: Colors.grey[600])),
+          Text(title, style: theme.textTheme.bodyMedium),
           if (subtitle != null && subtitle!.isNotEmpty) ...[
             const SizedBox(height: 4),
-            Text(subtitle!, style: TextStyle(fontSize: 11, color: Colors.grey[500])),
+            Text(subtitle!, style: theme.textTheme.bodySmall),
           ],
         ],
       ),
@@ -772,15 +847,21 @@ class _FeedbackItem extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    
     return Container(
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(color: color.withOpacity(0.1), borderRadius: BorderRadius.circular(8)),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: color.withOpacity(0.08),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: color.withOpacity(0.2)),
+      ),
       child: Row(
         children: [
-          Icon(icon, color: color, size: 20),
-          const SizedBox(width: 12),
+          Icon(icon, color: color, size: 22),
+          const SizedBox(width: 14),
           Expanded(
-            child: Text(text, style: TextStyle(color: Colors.grey[700], fontSize: 14)),
+            child: Text(text, style: theme.textTheme.bodyMedium),
           ),
         ],
       ),

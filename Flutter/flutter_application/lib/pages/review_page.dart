@@ -2,6 +2,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:video_player/video_player.dart';
+import '../main.dart';
 import '../providers/navigation_provider.dart';
 import 'analytics_page.dart';
 
@@ -91,13 +92,15 @@ class _ReviewPageState extends ConsumerState<ReviewPage> {
   Widget build(BuildContext context) {
     final navState = ref.watch(navigationProvider);
     final projectName = navState.selectedProject?.name ?? 'Exercise';
+    final theme = Theme.of(context);
 
     return Scaffold(
-      backgroundColor: Colors.black,
+      backgroundColor: AppColors.primaryDark,
       appBar: AppBar(
         title: const Text('Review Recording'),
-        backgroundColor: Colors.black,
+        backgroundColor: AppColors.primaryDark,
         foregroundColor: Colors.white,
+        elevation: 0,
       ),
       body: SafeArea(
         child: Column(
@@ -123,7 +126,7 @@ class _ReviewPageState extends ConsumerState<ReviewPage> {
                                 child: Container(
                                   padding: const EdgeInsets.all(16),
                                   decoration: BoxDecoration(
-                                    color: Colors.black.withOpacity(0.5),
+                                    color: AppColors.primaryDark.withOpacity(0.7),
                                     shape: BoxShape.circle,
                                   ),
                                   child: const Icon(Icons.play_arrow, color: Colors.white, size: 48),
@@ -141,10 +144,10 @@ class _ReviewPageState extends ConsumerState<ReviewPage> {
                           child: VideoProgressIndicator(
                             _controller!,
                             allowScrubbing: true,
-                            colors: const VideoProgressColors(
-                              playedColor: Colors.teal,
-                              bufferedColor: Colors.white24,
-                              backgroundColor: Colors.white12,
+                            colors: VideoProgressColors(
+                              playedColor: AppColors.accent,
+                              bufferedColor: AppColors.primaryLight.withOpacity(0.4),
+                              backgroundColor: AppColors.primaryLight.withOpacity(0.2),
                             ),
                           ),
                         ),
@@ -156,18 +159,23 @@ class _ReviewPageState extends ConsumerState<ReviewPage> {
             // Info Section
             Container(
               padding: const EdgeInsets.all(16),
-              color: Colors.grey[900],
+              color: AppColors.primary,
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
                     projectName,
-                    style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
+                    style: theme.textTheme.titleLarge?.copyWith(
+                      color: Colors.white,
+                      fontWeight: FontWeight.bold,
+                    ),
                   ),
                   const SizedBox(height: 8),
                   Text(
                     'Review your recording before submitting for analysis.',
-                    style: TextStyle(color: Colors.grey[400], fontSize: 14),
+                    style: theme.textTheme.bodyMedium?.copyWith(
+                      color: Colors.white70,
+                    ),
                   ),
                 ],
               ),
@@ -176,7 +184,7 @@ class _ReviewPageState extends ConsumerState<ReviewPage> {
             // Playback Controls
             Container(
               padding: const EdgeInsets.symmetric(vertical: 16),
-              color: Colors.grey[900],
+              color: AppColors.primary,
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                 children: [
@@ -203,8 +211,9 @@ class _ReviewPageState extends ConsumerState<ReviewPage> {
             ),
 
             // Action Buttons
-            Padding(
+            Container(
               padding: const EdgeInsets.all(16),
+              color: AppColors.primary,
               child: Row(
                 children: [
                   // Retake Button
@@ -213,7 +222,7 @@ class _ReviewPageState extends ConsumerState<ReviewPage> {
                       onPressed: _retakeRecording,
                       style: OutlinedButton.styleFrom(
                         foregroundColor: Colors.white,
-                        side: const BorderSide(color: Colors.white54),
+                        side: BorderSide(color: Colors.white.withOpacity(0.4)),
                         padding: const EdgeInsets.symmetric(vertical: 16),
                         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                       ),
@@ -228,7 +237,7 @@ class _ReviewPageState extends ConsumerState<ReviewPage> {
                     child: ElevatedButton.icon(
                       onPressed: _proceedToAnalysis,
                       style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.teal,
+                        backgroundColor: AppColors.accent,
                         foregroundColor: Colors.white,
                         padding: const EdgeInsets.symmetric(vertical: 16),
                         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
@@ -248,15 +257,15 @@ class _ReviewPageState extends ConsumerState<ReviewPage> {
 
   Widget _buildPlaceholder() {
     return Container(
-      color: Colors.grey[900],
+      color: AppColors.primary,
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Icon(Icons.videocam_outlined, size: 80, color: Colors.grey[600]),
+          Icon(Icons.videocam_outlined, size: 80, color: AppColors.primaryLight.withOpacity(0.6)),
           const SizedBox(height: 16),
-          Text('Video Preview', style: TextStyle(color: Colors.grey[500], fontSize: 18)),
+          Text('Video Preview', style: TextStyle(color: AppColors.primaryLight.withOpacity(0.8), fontSize: 18)),
           const SizedBox(height: 8),
-          Text('(Placeholder - no video recorded yet)', style: TextStyle(color: Colors.grey[600], fontSize: 14)),
+          Text('(Placeholder - no video recorded yet)', style: TextStyle(color: AppColors.primaryLight.withOpacity(0.6), fontSize: 14)),
         ],
       ),
     );

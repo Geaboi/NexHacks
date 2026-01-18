@@ -80,6 +80,6 @@ void testGyro() {
 }
 
 extern "C" void app_main(void) {
-  testGyro();
-  // mainfunc();
+  // testGyro();
+  mainfunc();
 }

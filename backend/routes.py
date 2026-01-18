@@ -5,8 +5,12 @@ import json
 import logging
 import struct
 import requests
+import dotenv
 from fastapi import APIRouter, HTTPException, UploadFile, File, Query, Form, WebSocket, WebSocketDisconnect
 from fastapi.responses import FileResponse
+
+# Load environment variables from .env file
+dotenv.load_dotenv()
 
 import aiohttp
 from aiortc import RTCPeerConnection, RTCSessionDescription, VideoStreamTrack, RTCConfiguration, RTCIceServer
@@ -325,7 +329,10 @@ async def process_video_to_angles(
     model_id: str = Query(..., description="Anomaly detection model ID for inference"),
     upload_to_woodwide: bool = Query(True, description="Upload angles to Woodwide"),
     overwrite: bool = Query(False, description="Overwrite existing dataset"),
-    sensor_data: str = Form(None, description="Sensor data associated with the video")
+    sensor_data: str = Form([], description="Sensor data associated with the video"),
+    overshoot_data: str = Form([], description="Overshoot data associated with the video"),
+    video_start_time: int = Form(None, description="Start time of the video in UTC")
+
 ):
     """Process video through RTMpose and run anomaly detection via Woodwide.
 
@@ -346,7 +353,7 @@ async def process_video_to_angles(
         result = {
             "num_frames": len(angles),
             "num_angles": 6,
-            "csv_path": csv_path,
+            "angles": angles,  # Include the actual angles data
             "overlay_video_path": overlay_video_path,
         }
 
@@ -380,7 +387,7 @@ async def process_video_to_angles(
         raise HTTPException(status_code=e.response.status_code, detail=e.response.text)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
-
+    
 
 @pose_router.get("/download-csv/{csv_filename}")
 def download_keypoints_csv(csv_filename: str):

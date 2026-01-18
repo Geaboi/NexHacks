@@ -4,6 +4,27 @@
 <dict>
 	<key>CADisableMinimumFrameDurationOnPhone</key>
 	<true/>
+	
+	<!-- Camera Permission -->
+	<key>NSCameraUsageDescription</key>
+	<string>This app needs camera access to record videos for physical therapy analysis.</string>
+	
+	<!-- Microphone Permission (often required with camera) -->
+	<key>NSMicrophoneUsageDescription</key>
+	<string>This app may use the microphone for audio during video recording.</string>
+	
+	<!-- Bluetooth Permissions -->
+	<key>NSBluetoothAlwaysUsageDescription</key>
+	<string>This app uses Bluetooth to connect to IMU sensors for motion tracking.</string>
+	<key>NSBluetoothPeripheralUsageDescription</key>
+	<string>This app uses Bluetooth to connect to IMU sensors for motion tracking.</string>
+	
+	<!-- Background Modes for BLE -->
+	<key>UIBackgroundModes</key>
+	<array>
+		<string>bluetooth-central</string>
+	</array>
+	
 	<key>CFBundleDevelopmentRegion</key>
 	<string>$(DEVELOPMENT_LANGUAGE)</string>
 	<key>CFBundleDisplayName</key>
