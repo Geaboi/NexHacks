@@ -329,8 +329,8 @@ async def process_video_to_angles(
     model_id: str = Query(..., description="Anomaly detection model ID for inference"),
     upload_to_woodwide: bool = Query(True, description="Upload angles to Woodwide"),
     overwrite: bool = Query(False, description="Overwrite existing dataset"),
-    sensor_data: str = Form([], description="Sensor data associated with the video"),
-    overshoot_data: str = Form([], description="Overshoot data associated with the video"),
+    sensor_data: str = Form("", description="Sensor data associated with the video"),
+    overshoot_data: str = Form("", description="Overshoot data associated with the video"),
     video_start_time: int = Form(None, description="Start time of the video in UTC")
 
 ):
@@ -347,8 +347,16 @@ async def process_video_to_angles(
         video_bytes = await video.read()
         handler = get_pose_handler()
 
+        # Parse sensor_data from JSON string to list
+        parsed_sensor_data = None
+        if sensor_data:
+            try:
+                parsed_sensor_data = json.loads(sensor_data)
+            except (json.JSONDecodeError, TypeError):
+                parsed_sensor_data = None
+
         # Process video to get joint angles and CSV
-        angles, overlay_video_path, csv_path = handler.process_video(video_bytes, sensor_data)
+        angles, overlay_video_path, csv_path = handler.process_video(video_bytes, parsed_sensor_data)
 
         result = {
             "num_frames": len(angles),
