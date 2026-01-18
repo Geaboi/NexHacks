@@ -547,10 +547,12 @@ async def _listen_overshoot_ws(
     Connect to Overshoot WebSocket and forward inference results to the client.
     Includes the latest frame timestamp in all inference responses.
     """
+    logger.info(f"[Overshoot WS] Connecting to: {ws_url}")
     headers = {"Authorization": f"Bearer {api_key}"}
     if cookies:
         cookie_str = "; ".join(f"{k}={v}" for k, v in cookies.items())
         headers["Cookie"] = cookie_str
+        logger.debug(f"[Overshoot WS] Using cookies: {list(cookies.keys())}")
 
     async with aiohttp.ClientSession() as session:
         try:
@@ -558,35 +560,57 @@ async def _listen_overshoot_ws(
                 # Send authentication message
                 auth_msg = json.dumps({"api_key": api_key})
                 await ws.send_str(auth_msg)
+                logger.info("[Overshoot WS] Sent authentication message")
 
                 # Notify client that we're connected
                 await client_ws.send_json({"type": "connected", "message": "Connected to Overshoot"})
+                logger.info("[Overshoot WS] Connected successfully")
 
                 async for msg in ws:
                     if stop_event.is_set():
+                        logger.info("[Overshoot WS] Stop event set, exiting")
                         break
 
                     if msg.type == aiohttp.WSMsgType.TEXT:
+                        logger.info(f"[Overshoot WS] Raw message received: {msg.data[:500] if len(msg.data) > 500 else msg.data}")
                         try:
                             data = json.loads(msg.data)
+                            logger.info(f"[Overshoot WS] Parsed data keys: {list(data.keys()) if isinstance(data, dict) else type(data)}")
                             # Get current timestamp to include in response
                             current_ts = timestamp_state.get("latest")
                             # Forward inference results to client
                             if data.get("error"):
+                                logger.error(f"[Overshoot WS] Error from Overshoot: {data['error']}")
                                 await client_ws.send_json({"type": "error", "error": data["error"], "timestamp": current_ts})
                             elif "result" in data:
+                                logger.info(f"[Overshoot WS] Result received: {str(data['result'])[:200]}")
                                 await client_ws.send_json({"type": "inference", "result": data["result"], "timestamp": current_ts})
                             elif "inference" in data:
                                 result = data["inference"].get("result", data["inference"])
+                                logger.info(f"[Overshoot WS] Inference received: {str(result)[:200]}")
                                 await client_ws.send_json({"type": "inference", "result": result, "timestamp": current_ts})
                             else:
+                                logger.info(f"[Overshoot WS] Other message type: {data}")
                                 await client_ws.send_json({"type": "message", "data": data, "timestamp": current_ts})
-                        except json.JSONDecodeError:
+                        except json.JSONDecodeError as e:
+                            logger.warning(f"[Overshoot WS] JSON decode error: {e}, raw data: {msg.data[:200]}")
                             await client_ws.send_json({"type": "raw", "data": msg.data})
-                    elif msg.type in (aiohttp.WSMsgType.CLOSED, aiohttp.WSMsgType.ERROR):
+                    elif msg.type == aiohttp.WSMsgType.CLOSED:
+                        logger.info("[Overshoot WS] Connection closed by server")
                         break
+                    elif msg.type == aiohttp.WSMsgType.ERROR:
+                        logger.error(f"[Overshoot WS] WebSocket error: {ws.exception()}")
+                        break
+                    else:
+                        logger.debug(f"[Overshoot WS] Unhandled message type: {msg.type}")
+        except aiohttp.ClientError as e:
+            logger.error(f"[Overshoot WS] Client error: {type(e).__name__}: {e}")
+            try:
+                await client_ws.send_json({"type": "error", "error": f"Connection error: {e}"})
+            except Exception:
+                pass
         except Exception as e:
-            logger.error(f"Overshoot WebSocket error: {e}")
+            logger.error(f"[Overshoot WS] Unexpected error: {type(e).__name__}: {e}", exc_info=True)
             try:
                 await client_ws.send_json({"type": "error", "error": str(e)})
             except Exception:
