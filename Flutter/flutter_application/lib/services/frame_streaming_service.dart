@@ -6,11 +6,21 @@ import 'package:flutter/foundation.dart';
 import 'package:web_socket_channel/io.dart';
 
 /// Configuration for the frame streaming service
+/// Maps to Overshoot API's processing and inference config
 class StreamConfig {
+  // Inference config
   final String prompt;
   final String model;
   final String backend;
+  final String? outputSchemaJson;
+  
+  // Processing config
+  final double samplingRatio;
   final int fps;
+  final double clipLengthSeconds;
+  final double delaySeconds;
+  
+  // Frame dimensions (for RGB24 conversion)
   final int width;
   final int height;
 
@@ -18,17 +28,29 @@ class StreamConfig {
     this.prompt = 'Describe what you see',
     this.model = 'gemini-2.0-flash',
     this.backend = 'gemini',
+    this.outputSchemaJson,
+    this.samplingRatio = 1.0,
     this.fps = 30,
+    this.clipLengthSeconds = 3.0,
+    this.delaySeconds = 3.0,
     this.width = 640,
     this.height = 480,
   });
 
   Map<String, dynamic> toJson() => {
     'type': 'config',
-    'prompt': prompt,
-    'model': model,
-    'backend': backend,
-    'fps': fps,
+    'inference': {
+      'prompt': prompt,
+      'model': model,
+      'backend': backend,
+      if (outputSchemaJson != null) 'output_schema_json': outputSchemaJson,
+    },
+    'processing': {
+      'sampling_ratio': samplingRatio,
+      'fps': fps,
+      'clip_length_seconds': clipLengthSeconds,
+      'delay_seconds': delaySeconds,
+    },
     'width': width,
     'height': height,
   };
@@ -37,8 +59,8 @@ class StreamConfig {
 /// Service for streaming camera frames to a WebSocket server
 class FrameStreamingService {
   // WebSocket Configuration - Update these for your backend
-  static const String _defaultWsUrl = 'ws://localhost:8080/frames';
-  
+  static const String _defaultWsUrl = 'wss://api.mateotaylortest.org/api/overshoot/ws/stream';
+    
   IOWebSocketChannel? _wsChannel;
   StreamSubscription? _wsSubscription;
   bool _isConnected = false;
@@ -51,10 +73,14 @@ class FrameStreamingService {
   int _frameSkipCount = 0;
   int _frameSkipRate = 1; // Calculated based on camera fps vs desired fps
   
-  // Track pending frames by timestamp
+  // Track pending frames by timestamp (frames sent but awaiting response)
   final Set<int> _pendingFrameTimestamps = {};
   
-  // Callback for when a frame is sent (provides timestamp)
+  // Callback for when a frame is captured from camera (ALL frames)
+  final StreamController<int> _frameCapturedController = 
+      StreamController<int>.broadcast();
+  
+  // Callback for when a frame is sent to WebSocket (subset of captured frames)
   final StreamController<int> _frameSentController = 
       StreamController<int>.broadcast();
   
@@ -70,6 +96,7 @@ class FrameStreamingService {
   final StreamController<void> _allResultsReceivedController =
       StreamController<void>.broadcast();
   
+  Stream<int> get frameCapturedStream => _frameCapturedController.stream;
   Stream<int> get frameSentStream => _frameSentController.stream;
   Stream<InferenceResult> get resultsStream => _resultsController.stream;
   Stream<bool> get connectionStream => _connectionController.stream;
@@ -88,7 +115,12 @@ class FrameStreamingService {
     
     try {
       final url = wsUrl ?? _defaultWsUrl;
-      _wsChannel = IOWebSocketChannel.connect(Uri.parse(url));
+      print('[FrameStreaming] 🔌 Connecting to: $url');
+      
+      _wsChannel = IOWebSocketChannel.connect(
+        Uri.parse(url),
+        pingInterval: const Duration(seconds: 10),
+      );
       
       _wsSubscription = _wsChannel!.stream.listen(
         _handleMessage,
@@ -102,8 +134,10 @@ class FrameStreamingService {
       // Send config message
       _sendConfig();
       
+      print('[FrameStreaming] ✅ WebSocket connected successfully');
       return true;
     } catch (e) {
+      print('[FrameStreaming] ❌ WebSocket connection failed: $e');
       _isConnected = false;
       _connectionController.add(false);
       return false;
@@ -155,7 +189,10 @@ class FrameStreamingService {
 
   /// Start streaming frames
   void startStreaming({int cameraFps = 30}) {
-    if (!_isReady) return;
+    if (!_isReady) {
+      print('[FrameStreaming] ⚠️ Cannot start streaming - not ready');
+      return;
+    }
     
     _isStreaming = true;
     _frameSkipCount = 0;
@@ -163,6 +200,8 @@ class FrameStreamingService {
     // Calculate frame skip rate to match desired fps
     _frameSkipRate = (cameraFps / _config.fps).ceil();
     if (_frameSkipRate < 1) _frameSkipRate = 1;
+    
+    print('[FrameStreaming] 🎬 Streaming started (skip rate: $_frameSkipRate)');
   }
 
   /// Stop streaming frames
@@ -182,6 +221,13 @@ class FrameStreamingService {
   /// Process and send a camera frame to the WebSocket server
   /// Call this method from the camera's image stream callback
   void processFrame(CameraImage image) {
+    // Get UTC timestamp for this frame (for ALL frames)
+    final timestampUtc = DateTime.now().toUtc().millisecondsSinceEpoch;
+    
+    // Notify listeners that a frame was captured (for ALL frames)
+    _frameCapturedController.add(timestampUtc);
+    
+    // Check if we should send this frame to WebSocket
     if (!_isConnected || !_isStreaming || !_isReady || _wsChannel == null) return;
     
     // Skip frames to match desired fps
@@ -189,22 +235,22 @@ class FrameStreamingService {
     if (_frameSkipCount % _frameSkipRate != 0) return;
     
     try {
-      // Get UTC timestamp for this frame
-      final timestampUtc = DateTime.now().toUtc().millisecondsSinceEpoch;
-      
       // Convert CameraImage to RGB24 bytes
       final rgb24Data = _convertToRgb24(image);
       
       // Create frame with timestamp header (8 bytes for int64 timestamp + RGB data)
       final frameWithTimestamp = _createFrameWithTimestamp(timestampUtc, rgb24Data);
       
-      // Track this frame as pending
+      // Track this frame as pending (awaiting server response)
       _pendingFrameTimestamps.add(timestampUtc);
       
       // Send as binary data
       _wsChannel!.sink.add(frameWithTimestamp);
       
-      // Notify listeners that a frame was sent
+      // Debug: Print frame sent info
+      debugPrint('[FrameStreaming] Frame sent - timestamp: $timestampUtc, pending: ${_pendingFrameTimestamps.length}');
+      
+      // Notify listeners that a frame was sent to WebSocket
       _frameSentController.add(timestampUtc);
     } catch (e) {
       // Frame processing failed silently
@@ -238,10 +284,35 @@ class FrameStreamingService {
       _pendingFrameTimestamps.add(timestampUtc);
       _wsChannel!.sink.add(frameWithTimestamp);
       _frameSentController.add(timestampUtc);
+      print('[FrameStreaming] 📤 Frame sent - timestamp: $timestampUtc, pending: ${_pendingFrameTimestamps.length}');
     } catch (e) {
       // Send failed silently
     }
   }
+
+  /// Send raw RGB24 bytes with a specific timestamp
+  /// Use this when you have a pre-determined timestamp (e.g., from frame sampling)
+  void sendRawFrameWithTimestamp(Uint8List rgb24Bytes, int timestampUtc) {
+    if (!_isConnected || !_isStreaming || !_isReady || _wsChannel == null) {
+      print('[FrameStreaming] ⚠️ Cannot send frame - not ready (connected: $_isConnected, streaming: $_isStreaming, ready: $_isReady)');
+      return;
+    }
+    
+    try {
+      final frameWithTimestamp = _createFrameWithTimestamp(timestampUtc, rgb24Bytes);
+      
+      _pendingFrameTimestamps.add(timestampUtc);
+      _wsChannel!.sink.add(frameWithTimestamp);
+      _frameSentController.add(timestampUtc);
+      print('[FrameStreaming] 📤 Frame sent - timestamp: $timestampUtc, pending: ${_pendingFrameTimestamps.length}');
+    } catch (e) {
+      print('[FrameStreaming] ❌ Failed to send frame: $e');
+    }
+  }
+
+  /// Get the configured frame dimensions
+  int get configWidth => _config.width;
+  int get configHeight => _config.height;
 
   /// Convert CameraImage to RGB24 format (height, width, 3)
   Uint8List _convertToRgb24(CameraImage image) {
@@ -359,12 +430,20 @@ class FrameStreamingService {
             case 'ready':
               _isReady = true;
               _streamId = data['stream_id'] as String?;
+              print('[FrameStreaming] ✅ WebSocket READY - stream_id: $_streamId');
+              debugPrint('[FrameStreaming] ✅ WebSocket READY - stream_id: $_streamId');
               break;
               
             case 'inference':
               final result = data['result'] as String?;
               final timestamp = data['timestamp'] as int?;
               if (result != null) {
+                // Debug: Print inference result received
+                debugPrint('[FrameStreaming] ========== INFERENCE RESULT ==========');
+                debugPrint('[FrameStreaming] Timestamp: $timestamp');
+                debugPrint('[FrameStreaming] Result: $result');
+                debugPrint('[FrameStreaming] Pending frames before: ${_pendingFrameTimestamps.length}');
+                
                 // Remove from pending if timestamp provided
                 if (timestamp != null) {
                   _pendingFrameTimestamps.remove(timestamp);
@@ -373,6 +452,9 @@ class FrameStreamingService {
                   final oldest = _pendingFrameTimestamps.reduce((a, b) => a < b ? a : b);
                   _pendingFrameTimestamps.remove(oldest);
                 }
+                
+                debugPrint('[FrameStreaming] Pending frames after: ${_pendingFrameTimestamps.length}');
+                debugPrint('[FrameStreaming] ======================================');
                 
                 _resultsController.add(InferenceResult(
                   timestampUtc: timestamp ?? DateTime.now().toUtc().millisecondsSinceEpoch,
@@ -389,6 +471,7 @@ class FrameStreamingService {
             case 'error':
               final error = data['message'] as String?;
               if (error != null) {
+                debugPrint('[FrameStreaming] ERROR received: $error');
                 _resultsController.add(InferenceResult(
                   timestampUtc: DateTime.now().toUtc().millisecondsSinceEpoch,
                   result: 'Error: $error',
@@ -405,6 +488,7 @@ class FrameStreamingService {
 
   /// Handle WebSocket errors
   void _handleError(dynamic error) {
+    print('[FrameStreaming] ❌ WebSocket error: $error');
     _isConnected = false;
     _isStreaming = false;
     _isReady = false;
@@ -413,6 +497,7 @@ class FrameStreamingService {
 
   /// Handle WebSocket connection closed
   void _handleDone() {
+    print('[FrameStreaming] 🔌 WebSocket connection closed');
     _isConnected = false;
     _isStreaming = false;
     _isReady = false;
@@ -422,6 +507,7 @@ class FrameStreamingService {
   /// Clean up resources
   void dispose() {
     disconnect();
+    _frameCapturedController.close();
     _frameSentController.close();
     _resultsController.close();
     _connectionController.close();

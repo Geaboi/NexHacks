@@ -1,84 +1,65 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-/// Represents a single frame's analysis result
-class FrameAnalysis {
-  final int timestampUtc; // UTC milliseconds since epoch - primary key
-  final String? inferenceResult;
-  final bool isPending; // True if still waiting for server response
+/// Represents a single inference result with its UTC timestamp
+class InferencePoint {
+  final int timestampUtc; // UTC milliseconds since epoch when frame was captured
+  final String inferenceResult;
 
-  const FrameAnalysis({
+  const InferencePoint({
     required this.timestampUtc,
-    this.inferenceResult,
-    this.isPending = true,
+    required this.inferenceResult,
   });
-
-  FrameAnalysis copyWith({
-    String? inferenceResult,
-    bool? isPending,
-  }) {
-    return FrameAnalysis(
-      timestampUtc: timestampUtc,
-      inferenceResult: inferenceResult ?? this.inferenceResult,
-      isPending: isPending ?? this.isPending,
-    );
-  }
 
   Map<String, dynamic> toJson() => {
     'timestampUtc': timestampUtc,
     'inferenceResult': inferenceResult,
-    'isPending': isPending,
   };
 
-  factory FrameAnalysis.fromJson(Map<String, dynamic> json) => FrameAnalysis(
+  factory InferencePoint.fromJson(Map<String, dynamic> json) => InferencePoint(
     timestampUtc: json['timestampUtc'] as int,
-    inferenceResult: json['inferenceResult'] as String?,
-    isPending: json['isPending'] as bool? ?? false,
+    inferenceResult: json['inferenceResult'] as String,
   );
 }
 
-/// State for the frame analysis session
+/// State for the frame analysis session (sparse storage - only inference results)
 class FrameAnalysisState {
-  final Map<int, FrameAnalysis> frames; // keyed by timestampUtc
+  final List<InferencePoint> inferencePoints; // Only frames with inference results
+  final int? videoStartTimeUtc; // UTC milliseconds when MP4 recording started
   final bool isRecording;
   final bool isWaitingForResults;
   final DateTime? sessionStartTime;
   final DateTime? sessionEndTime;
 
   const FrameAnalysisState({
-    this.frames = const {},
+    this.inferencePoints = const [],
+    this.videoStartTimeUtc,
     this.isRecording = false,
     this.isWaitingForResults = false,
     this.sessionStartTime,
     this.sessionEndTime,
   });
 
-  /// Get frames sorted by timestamp
-  List<FrameAnalysis> get sortedFrames {
-    final sorted = frames.values.toList()
+  /// Get inference points sorted by timestamp
+  List<InferencePoint> get sortedPoints {
+    final sorted = List<InferencePoint>.from(inferencePoints)
       ..sort((a, b) => a.timestampUtc.compareTo(b.timestampUtc));
     return sorted;
   }
 
-  /// Get completed frames with inference results
-  List<FrameAnalysis> get completedFrames {
-    return sortedFrames.where((f) => !f.isPending && f.inferenceResult != null).toList();
-  }
-
-  /// Get count of pending frames
-  int get pendingCount => frames.values.where((f) => f.isPending).length;
-
-  /// Check if all frames have received results
-  bool get allResultsReceived => frames.isNotEmpty && pendingCount == 0;
+  /// Get count of inference points
+  int get pointCount => inferencePoints.length;
 
   FrameAnalysisState copyWith({
-    Map<int, FrameAnalysis>? frames,
+    List<InferencePoint>? inferencePoints,
+    int? videoStartTimeUtc,
     bool? isRecording,
     bool? isWaitingForResults,
     DateTime? sessionStartTime,
     DateTime? sessionEndTime,
   }) {
     return FrameAnalysisState(
-      frames: frames ?? this.frames,
+      inferencePoints: inferencePoints ?? this.inferencePoints,
+      videoStartTimeUtc: videoStartTimeUtc ?? this.videoStartTimeUtc,
       isRecording: isRecording ?? this.isRecording,
       isWaitingForResults: isWaitingForResults ?? this.isWaitingForResults,
       sessionStartTime: sessionStartTime ?? this.sessionStartTime,
@@ -87,77 +68,31 @@ class FrameAnalysisState {
   }
 }
 
-/// Notifier for managing frame analysis state
+/// Notifier for managing frame analysis state (sparse storage)
 class FrameAnalysisNotifier extends Notifier<FrameAnalysisState> {
   @override
   FrameAnalysisState build() {
     return const FrameAnalysisState();
   }
 
-  /// Start a new recording session
-  void startSession() {
+  /// Start a new recording session with the video start timestamp
+  /// If videoStartTimeUtc is not provided, uses current UTC time
+  void startSession([int? videoStartTimeUtc]) {
     state = FrameAnalysisState(
+      videoStartTimeUtc: videoStartTimeUtc ?? DateTime.now().toUtc().millisecondsSinceEpoch,
       isRecording: true,
       sessionStartTime: DateTime.now().toUtc(),
     );
   }
 
-  /// Register a frame that was sent to the server
-  void addFrame(int timestampUtc) {
-    final newFrames = Map<int, FrameAnalysis>.from(state.frames);
-    newFrames[timestampUtc] = FrameAnalysis(
+  /// Add a frame with its inference result (only called when result received)
+  void addFrameWithResult(int timestampUtc, String result) {
+    final newPoints = List<InferencePoint>.from(state.inferencePoints);
+    newPoints.add(InferencePoint(
       timestampUtc: timestampUtc,
-      isPending: true,
-    );
-    state = state.copyWith(frames: newFrames);
-  }
-
-  /// Update a frame with its inference result
-  void updateFrameResult(int timestampUtc, String result) {
-    final newFrames = Map<int, FrameAnalysis>.from(state.frames);
-    
-    if (newFrames.containsKey(timestampUtc)) {
-      newFrames[timestampUtc] = newFrames[timestampUtc]!.copyWith(
-        inferenceResult: result,
-        isPending: false,
-      );
-    } else {
-      // Frame not found by exact timestamp - might be a slight mismatch
-      // Find the closest pending frame
-      final pendingFrames = newFrames.entries
-          .where((e) => e.value.isPending)
-          .toList()
-        ..sort((a, b) => 
-            (a.key - timestampUtc).abs().compareTo((b.key - timestampUtc).abs()));
-      
-      if (pendingFrames.isNotEmpty) {
-        final closestKey = pendingFrames.first.key;
-        newFrames[closestKey] = newFrames[closestKey]!.copyWith(
-          inferenceResult: result,
-          isPending: false,
-        );
-      }
-    }
-    
-    state = state.copyWith(frames: newFrames);
-  }
-
-  /// Mark oldest pending frame as complete with result
-  void addResultToOldestPending(String result) {
-    final pendingFrames = state.frames.entries
-        .where((e) => e.value.isPending)
-        .toList()
-      ..sort((a, b) => a.key.compareTo(b.key));
-    
-    if (pendingFrames.isNotEmpty) {
-      final oldestKey = pendingFrames.first.key;
-      final newFrames = Map<int, FrameAnalysis>.from(state.frames);
-      newFrames[oldestKey] = newFrames[oldestKey]!.copyWith(
-        inferenceResult: result,
-        isPending: false,
-      );
-      state = state.copyWith(frames: newFrames);
-    }
+      inferenceResult: result,
+    ));
+    state = state.copyWith(inferencePoints: newPoints);
   }
 
   /// Stop recording and start waiting for remaining results
@@ -179,15 +114,41 @@ class FrameAnalysisNotifier extends Notifier<FrameAnalysisState> {
     state = const FrameAnalysisState();
   }
 
+  /// Map inference points to video frame indices
+  /// Returns list of [frameIndex, inferenceResult] pairs
+  List<List<dynamic>> mapToVideoFrames(int fps, int videoDurationMs, {int toleranceMs = 100}) {
+    final videoStart = state.videoStartTimeUtc;
+    if (videoStart == null) return [];
+
+    final result = <List<dynamic>>[];
+    final totalFrames = (videoDurationMs * fps / 1000).round();
+
+    for (final point in state.sortedPoints) {
+      // Calculate offset from video start
+      final offsetMs = point.timestampUtc - videoStart;
+      
+      // Skip if before video started or after video ended
+      if (offsetMs < -toleranceMs || offsetMs > videoDurationMs + toleranceMs) {
+        continue;
+      }
+
+      // Calculate frame index (clamped to valid range)
+      final frameIndex = (offsetMs * fps / 1000).round().clamp(0, totalFrames - 1);
+      
+      result.add([frameIndex, point.inferenceResult]);
+    }
+
+    return result;
+  }
+
   /// Get the analysis summary
   Map<String, dynamic> getSessionSummary() {
     return {
       'sessionStart': state.sessionStartTime?.toIso8601String(),
       'sessionEnd': state.sessionEndTime?.toIso8601String(),
-      'totalFrames': state.frames.length,
-      'completedFrames': state.completedFrames.length,
-      'pendingFrames': state.pendingCount,
-      'frames': state.sortedFrames.map((f) => f.toJson()).toList(),
+      'videoStartTimeUtc': state.videoStartTimeUtc,
+      'totalInferencePoints': state.inferencePoints.length,
+      'points': state.sortedPoints.map((p) => p.toJson()).toList(),
     };
   }
 }
