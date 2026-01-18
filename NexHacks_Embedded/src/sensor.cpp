@@ -9,12 +9,10 @@
 #include "BLE.hpp"
 
 static const char* TAG = "IMU_SYSTEM";
+uint64_t session_start;
 
 void sensor_task(void *pvParameters) {
   ble_packet_t packet_buffer;
-  int sample_index = 0;
-  uint32_t sequence_counter = 0;
-  uint64_t packet_start_time = 0;
 
   // Wake up sensors
   mpu6050_write_byte(MPU_ADDR_A, REG_PWR_MGMT_1, 0x00);
@@ -27,6 +25,9 @@ void sensor_task(void *pvParameters) {
   uint8_t raw_data[14];
 
   while (1) {
+    int sample_index = 0;
+    uint32_t sequence_counter = 0;
+
     // Block until semaphore is given
     xSemaphoreTake(sensor_run_semaphore, portMAX_DELAY);
     
@@ -41,7 +42,6 @@ void sensor_task(void *pvParameters) {
       vTaskDelayUntil(&xLastWakeTime, xFrequency);
     
       uint64_t now_us = esp_timer_get_time();
-      if (sample_index == 0) packet_start_time = now_us;
 
       // 1. Read Sensor A and copy to packet buffer
       esp_err_t retA = mpu6050_read_burst(MPU_ADDR_A, REG_ACCEL_XOUT_H, raw_data, 14);
@@ -57,7 +57,7 @@ void sensor_task(void *pvParameters) {
 
       if (retA == ESP_OK && retB == ESP_OK) {
         // Calculate time offset in ms
-        packet_buffer.samples[sample_index].time_offset = (uint16_t)((now_us - packet_start_time) / 1000);
+        packet_buffer.samples[sample_index].time_offset = (uint16_t)((now_us - session_start) / 1000);
         
         sample_index++;
 
