@@ -1,9 +1,11 @@
 import os
 import asyncio
+import base64
 import json
 import logging
+import struct
 import requests
-from fastapi import APIRouter, HTTPException, UploadFile, File, Query, WebSocket, WebSocketDisconnect
+from fastapi import APIRouter, HTTPException, UploadFile, File, Query, Form, WebSocket, WebSocketDisconnect
 from fastapi.responses import FileResponse
 
 import aiohttp
@@ -320,13 +322,19 @@ def get_pose_handler():
 async def process_video_to_angles(
     video: UploadFile = File(...),
     dataset_name: str = Query(..., description="Name for the dataset in Woodwide"),
+    model_id: str = Query(..., description="Anomaly detection model ID for inference"),
     upload_to_woodwide: bool = Query(True, description="Upload angles to Woodwide"),
     overwrite: bool = Query(False, description="Overwrite existing dataset"),
     sensor_data: str = Form(None, description="Sensor data associated with the video")
 ):
-    """Process video through RTMpose and optionally upload joint angles to Woodwide.
+    """Process video through RTMpose and run anomaly detection via Woodwide.
 
-    Returns the angle CSV and Woodwide upload result.
+    Flow:
+    1. Process video to extract joint angles
+    2. Upload angles CSV as a dataset
+    3. Run anomaly detection inference on the dataset
+
+    Returns the angle CSV, dataset info, and anomaly detection results.
     """
     try:
         video_bytes = await video.read()
@@ -342,15 +350,29 @@ async def process_video_to_angles(
             "overlay_video_path": overlay_video_path,
         }
 
-        # Upload to Woodwide if requested
         if upload_to_woodwide:
-            url = f"{BASE_URL}/api/datasets"
+            # Step 1: Upload the CSV as a dataset
+            upload_url = f"{BASE_URL}/api/datasets"
             with open(csv_path, "rb") as f:
                 files = {"file": (f"{dataset_name}.csv", f, "text/csv")}
-                data = {"name": dataset_name, "overwrite": str(overwrite).lower()}
-                response = requests.post(url, headers=HEADERS, files=files, data=data)
-                response.raise_for_status()
-                result["woodwide_response"] = response.json()
+                params = {"overwrite": overwrite}
+                upload_response = requests.post(upload_url, headers=HEADERS, files=files, params=params)
+                upload_response.raise_for_status()
+                dataset_info = upload_response.json()
+                result["dataset"] = dataset_info
+
+            # Step 2: Run anomaly detection inference using the uploaded dataset
+            infer_url = f"{BASE_URL}/api/models/anomaly/{model_id}/infer"
+            infer_params = {"dataset_name": dataset_name}
+            infer_data = {"coerce_schema": True}
+            infer_response = requests.post(
+                infer_url,
+                headers=HEADERS,
+                params=infer_params,
+                data=infer_data
+            )
+            infer_response.raise_for_status()
+            result["anomaly_detection"] = infer_response.json()
 
         return result
 
@@ -509,9 +531,11 @@ async def _listen_overshoot_ws(
     cookies: dict,
     client_ws: WebSocket,
     stop_event: asyncio.Event,
+    timestamp_state: dict,
 ):
     """
     Connect to Overshoot WebSocket and forward inference results to the client.
+    Includes the latest frame timestamp in all inference responses.
     """
     headers = {"Authorization": f"Bearer {api_key}"}
     if cookies:
@@ -535,16 +559,18 @@ async def _listen_overshoot_ws(
                     if msg.type == aiohttp.WSMsgType.TEXT:
                         try:
                             data = json.loads(msg.data)
+                            # Get current timestamp to include in response
+                            current_ts = timestamp_state.get("latest")
                             # Forward inference results to client
                             if data.get("error"):
-                                await client_ws.send_json({"type": "error", "error": data["error"]})
+                                await client_ws.send_json({"type": "error", "error": data["error"], "timestamp": current_ts})
                             elif "result" in data:
-                                await client_ws.send_json({"type": "inference", "result": data["result"]})
+                                await client_ws.send_json({"type": "inference", "result": data["result"], "timestamp": current_ts})
                             elif "inference" in data:
                                 result = data["inference"].get("result", data["inference"])
-                                await client_ws.send_json({"type": "inference", "result": result})
+                                await client_ws.send_json({"type": "inference", "result": result, "timestamp": current_ts})
                             else:
-                                await client_ws.send_json({"type": "message", "data": data})
+                                await client_ws.send_json({"type": "message", "data": data, "timestamp": current_ts})
                         except json.JSONDecodeError:
                             await client_ws.send_json({"type": "raw", "data": msg.data})
                     elif msg.type in (aiohttp.WSMsgType.CLOSED, aiohttp.WSMsgType.ERROR):
@@ -591,10 +617,13 @@ async def overshoot_video_websocket(websocket: WebSocket):
     2. Server responds with:
        {"type": "ready", "stream_id": "..."}
 
-    3. Client sends binary video frames (RGB24 numpy arrays as bytes)
+    3. Client sends video frames with timestamps:
+       - Binary format: first 8 bytes = timestamp (float64 little-endian),
+         remaining bytes = RGB24 numpy array
+       - OR JSON format: {"type": "frame", "timestamp": 1234567890.123, "data": "<base64>"}
 
-    4. Server forwards inference results:
-       {"type": "inference", "result": "..."}
+    4. Server forwards inference results with the latest timestamp:
+       {"type": "inference", "result": "...", "timestamp": 1234567890.123}
 
     5. Client can send control messages:
        {"type": "stop"} - Stop the stream
@@ -607,6 +636,7 @@ async def overshoot_video_websocket(websocket: WebSocket):
 
     frame_queue: asyncio.Queue = asyncio.Queue(maxsize=30)
     stop_event = asyncio.Event()
+    timestamp_state: dict = {"latest": None}  # Shared state for tracking latest timestamp
     pc: RTCPeerConnection | None = None
     client: OvershootHttpClient | None = None
     stream_id: str | None = None
@@ -685,7 +715,7 @@ async def overshoot_video_websocket(websocket: WebSocket):
 
         # Start background tasks
         ws_task = asyncio.create_task(
-            _listen_overshoot_ws(ws_url, api_key, cookies, websocket, stop_event)
+            _listen_overshoot_ws(ws_url, api_key, cookies, websocket, stop_event, timestamp_state)
         )
         keepalive_task = asyncio.create_task(
             _keepalive_loop(client, stream_id, stop_event)
@@ -703,18 +733,29 @@ async def overshoot_video_websocket(websocket: WebSocket):
                 break
 
             if "bytes" in message:
-                # Binary frame data
+                # Binary frame data with timestamp
+                # Format: first 8 bytes = timestamp (float64 little-endian), rest = RGB24 frame
                 frame_bytes = message["bytes"]
                 try:
+                    expected_frame_size = height * width * 3
+                    if len(frame_bytes) == expected_frame_size + 8:
+                        # Extract timestamp (first 8 bytes as float64 little-endian)
+                        timestamp = struct.unpack('<d', frame_bytes[:8])[0]
+                        timestamp_state["latest"] = timestamp
+                        frame_data = frame_bytes[8:]
+                    else:
+                        # Backward compatibility: no timestamp, just frame data
+                        frame_data = frame_bytes
+
                     # Decode frame (expecting RGB24 numpy array)
-                    frame = np.frombuffer(frame_bytes, dtype=np.uint8).reshape((height, width, 3))
+                    frame = np.frombuffer(frame_data, dtype=np.uint8).reshape((height, width, 3))
                     # Put frame in queue (non-blocking, drop if full)
                     try:
                         frame_queue.put_nowait(frame)
                     except asyncio.QueueFull:
                         # Drop frame if queue is full
                         pass
-                except ValueError as e:
+                except (ValueError, struct.error) as e:
                     logger.warning(f"Invalid frame data: {e}")
 
             elif "text" in message:
@@ -730,6 +771,19 @@ async def overshoot_video_websocket(websocket: WebSocket):
                         if new_prompt and stream_id:
                             await client.update_prompt(stream_id, new_prompt)
                             await websocket.send_json({"type": "prompt_updated", "prompt": new_prompt})
+                    elif msg_type == "frame":
+                        # JSON frame with timestamp and base64-encoded data
+                        timestamp = data.get("timestamp")
+                        if timestamp is not None:
+                            timestamp_state["latest"] = timestamp
+                        frame_b64 = data.get("data")
+                        if frame_b64:
+                            frame_data = base64.b64decode(frame_b64)
+                            frame = np.frombuffer(frame_data, dtype=np.uint8).reshape((height, width, 3))
+                            try:
+                                frame_queue.put_nowait(frame)
+                            except asyncio.QueueFull:
+                                pass
                 except json.JSONDecodeError:
                     pass
 

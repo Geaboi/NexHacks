@@ -5,3 +5,4 @@ rtm/
 venv/
 
 *.DS_Store
+backend/__pycache__/
