@@ -111,7 +111,7 @@ class RTMPose3DHandler:
 
         all_poses = []
         all_scores = []
-        frame_timestamps = [] #TODO: get timestamps for each frame!!
+        frame_timestamps = [] #TODO: get timestamps for each frame!! use fps?
         
         # INITIAL PASS: PROCESS FRAMES
         for _ in tqdm(range(total)): # for all frames

@@ -8,6 +8,7 @@ import 'package:path_provider/path_provider.dart';
 import 'package:permission_handler/permission_handler.dart';
 import '../providers/navigation_provider.dart';
 import '../providers/frame_analysis_provider.dart';
+import '../providers/sensor_provider.dart';
 import '../services/frame_streaming_service.dart';
 import 'review_page.dart';
 
@@ -142,6 +143,12 @@ class _RecordingPageState extends ConsumerState<RecordingPage> {
     _setupCamera(newIndex);
   }
 
+  Future<void> _startSensorSafe(SensorNotifier sensorNotifier) async {
+    if (ref.read(sensorProvider).isConnected) {
+      sensorNotifier.startRecording();
+    }
+  }
+
   Future<void> _startRecording() async {
     if (_cameraController == null || !_cameraController!.value.isInitialized) {
       return;
@@ -150,6 +157,9 @@ class _RecordingPageState extends ConsumerState<RecordingPage> {
     try {
       // Start a new analysis session in the provider
       ref.read(frameAnalysisProvider.notifier).startSession();
+      
+      // Start BLE sensor recording (sends "Start" command and calculates RTT)
+      final sensorNotifier = ref.read(sensorProvider.notifier);
       
       // Connect to WebSocket server NOW (when recording starts)
       const config = StreamConfig(
@@ -166,8 +176,11 @@ class _RecordingPageState extends ConsumerState<RecordingPage> {
         config: config,
       );
       
-      // Start video recording (saves to file)
-      await _cameraController!.startVideoRecording();
+      await Future.wait([
+        _startSensorSafe(sensorNotifier),
+        // Start video recording (saves to file)
+        _cameraController!.startVideoRecording(),
+      ]);
       
       // Start frame streaming to WebSocket (assumes ~30fps camera)
       _frameStreamingService.startStreaming(cameraFps: 30);
@@ -225,6 +238,15 @@ class _RecordingPageState extends ConsumerState<RecordingPage> {
     }
 
     _recordingTimer?.cancel();
+    
+    // Stop BLE sensor recording
+    final sensorNotifier = ref.read(sensorProvider.notifier);
+    if (ref.read(sensorProvider).isConnected) {
+      await sensorNotifier.stopRecording();
+      // Get sensor data as JSON for later use
+      final sensorData = sensorNotifier.getSamplesAsMap();
+      debugPrint('Collected ${sensorData['total_samples']} IMU samples');
+    }
     
     // Stop frame streaming - mark session as stopped in provider
     ref.read(frameAnalysisProvider.notifier).stopRecording();
