@@ -1,6 +1,6 @@
 import os
 import requests
-from fastapi import APIRouter, HTTPException, UploadFile, File, Query
+from fastapi import APIRouter, HTTPException, UploadFile, File, Query, Form
 from fastapi.responses import FileResponse
 
 from config import BASE_URL, HEADERS
@@ -297,26 +297,27 @@ def get_pose_handler():
 
 
 @pose_router.post("/process")
-async def process_video_to_keypoints(
+async def process_video_to_angles(
     video: UploadFile = File(...),
     dataset_name: str = Query(..., description="Name for the dataset in Woodwide"),
-    upload_to_woodwide: bool = Query(True, description="Upload keypoints to Woodwide"),
+    upload_to_woodwide: bool = Query(True, description="Upload angles to Woodwide"),
     overwrite: bool = Query(False, description="Overwrite existing dataset"),
+    sensor_data: str = Form(None, description="Sensor data associated with the video")
 ):
-    """Process video through RTMpose and optionally upload keypoints to Woodwide.
+    """Process video through RTMpose and optionally upload joint angles to Woodwide.
 
-    Returns the keypoint CSV and Woodwide upload result.
+    Returns the angle CSV and Woodwide upload result.
     """
     try:
         video_bytes = await video.read()
         handler = get_pose_handler()
 
-        # Process video to get 3D keypoints and CSV
-        all_poses, overlay_video_path, csv_path = handler.process_video(video_bytes)
+        # Process video to get joint angles and CSV
+        angles, overlay_video_path, csv_path = handler.process_video(video_bytes, sensor_data)
 
         result = {
-            "num_frames": all_poses.shape[0],
-            "num_keypoints": all_poses.shape[1],
+            "num_frames": len(angles),
+            "num_angles": 6,
             "csv_path": csv_path,
             "overlay_video_path": overlay_video_path,
         }

@@ -95,7 +95,7 @@ class RTMPose3DHandler:
         self.output_file_csv = tempfile.NamedTemporaryFile(delete=False, suffix='.csv')
         self.CONF_THRESHOLD = 0.3
     
-    def process_video(self, video_bytes):
+    def process_video(self, video_bytes, sensor_data=None):
         video_handler = VideoHandler(video_bytes)
 
         total = int(video_handler.cap.get(cv2.CAP_PROP_FRAME_COUNT))
@@ -138,11 +138,18 @@ class RTMPose3DHandler:
 
         # NOW NORMALIZE AND STUFF
         norm_poses = self.normalize_by_torso_height(all_poses)
+        
+        # build angles from leg keypoints, should be same size as norm_poses
+        angles = self.build_leg_angles(norm_poses)
 
-        # Save keypoints to CSV
-        csv_path = self.keypoints_to_csv(norm_poses, self.output_file_csv.name)
+        if sensor_data is not None:
+            # Kaplan filtering with sensor data implemented here
+            pass
 
-        return norm_poses, self.output_file_2D.name, csv_path
+        # Save angles to CSV
+        csv_path = self.angles_to_csv(angles, self.output_file_csv.name)
+
+        return angles, self.output_file_2D.name, csv_path
 
     def normalize_by_torso_height(self, all_poses):
         norm_poses = []
@@ -159,44 +166,41 @@ class RTMPose3DHandler:
         return np.array(norm_poses)
 
     @staticmethod
-    def keypoints_to_dataframe(all_poses: np.ndarray) -> pd.DataFrame:
-        """Convert keypoint array to pandas DataFrame for Woodwide upload.
+    def angles_to_dataframe(angles_list: list) -> pd.DataFrame:
+        """Convert angle list to pandas DataFrame for Woodwide upload.
 
         Args:
-            all_poses: numpy array of shape (num_frames, 23, 3)
+            angles_list: list of 6-element lists containing joint angles
+                [left_knee, right_knee, left_hip, right_hip, left_ankle, right_ankle]
 
         Returns:
-            DataFrame with columns: frame, kp_name_x, kp_name_y, kp_name_z for each keypoint
+            DataFrame with columns: frame, left_knee_flexion, right_knee_flexion,
+                left_hip_flexion, right_hip_flexion, left_ankle_flexion, right_ankle_flexion
         """
-        num_frames = all_poses.shape[0]
-
-        # Build column names
-        columns = ["frame"]
-        for kp_name in KEYPOINT_NAMES:
-            columns.extend([f"{kp_name}_x", f"{kp_name}_y", f"{kp_name}_z"])
-
-        # Flatten data
-        rows = []
-        for frame_idx in range(num_frames):
-            row = [frame_idx]
-            for kp_idx in range(23):
-                row.extend(all_poses[frame_idx, kp_idx, :].tolist())
-            rows.append(row)
-
-        return pd.DataFrame(rows, columns=columns)
+        df = pd.DataFrame(angles_list, columns=[
+            "left_knee_flexion",
+            "right_knee_flexion",
+            "left_hip_flexion",
+            "right_hip_flexion",
+            "left_ankle_flexion",
+            "right_ankle_flexion"
+        ])
+        df.insert(0, 'frame', range(len(angles_list)))
+        return df
 
     @staticmethod
-    def keypoints_to_csv(all_poses: np.ndarray, output_path: str = '/output.csv') -> str:
-        """Convert keypoint array to CSV file.
+    def angles_to_csv(angles_list: list, output_path: str = '/output.csv') -> str:
+        """Convert angle list to CSV file.
 
         Args:
-            all_poses: numpy array of shape (num_frames, 23, 3)
+            angles_list: list of 6-element lists containing joint angles
+                [left_knee, right_knee, left_hip, right_hip, left_ankle, right_ankle]
             output_path: optional path for output file, creates temp file if None
 
         Returns:
             Path to the CSV file
         """
-        df = RTMPose3DHandler.keypoints_to_dataframe(all_poses)
+        df = RTMPose3DHandler.angles_to_dataframe(angles_list)
 
         if output_path is None:
             temp_file = tempfile.NamedTemporaryFile(delete=False, suffix='.csv')
@@ -205,3 +209,58 @@ class RTMPose3DHandler:
 
         df.to_csv(output_path, index=False)
         return output_path
+
+    def build_leg_angles(self, norm_poses):
+        angles_list = []
+        for pose in norm_poses:
+            # Check if the pose is entirely empty (sum is 0) to skip fast
+            if np.sum(np.abs(pose)) == 0:
+                # Append a dict of NaNs so the row count matches the frame count
+                angles_list.append([
+                    np.nan, np.nan,
+                    np.nan, np.nan,
+                    np.nan, np.nan
+                ])
+                continue
+
+            frame_angles = [
+                # Knee Flexion: Hip (11/12) -> Knee (13/14) -> Ankle (15/16)
+                self.calculate_angle(pose[11], pose[13], pose[15]), # "left_knee_flexion"
+                self.calculate_angle(pose[12], pose[14], pose[16]), # "right_knee_flexion"
+
+                # Hip Flexion: Shoulder (5/6) -> Hip (11/12) -> Knee (13/14)
+                self.calculate_angle(pose[5], pose[11], pose[13]), # "left_hip_flexion"
+                self.calculate_angle(pose[6], pose[12], pose[14]), # "right_hip_flexion"
+
+                # Ankle Dorsiflexion: Knee (13/14) -> Ankle (15/16) -> Big Toe (17/20)
+                self.calculate_angle(pose[13], pose[15], pose[17]), # "left_ankle_flexion"
+                self.calculate_angle(pose[14], pose[16], pose[20]), # "right_ankle_flexion"
+            ]
+            angles_list.append(frame_angles)
+            
+        return angles_list
+
+    def calculate_angle(self, a, b, c):
+        """
+        Calculates angle at vertex b, given points a, b, c.
+        Returns np.nan if points are missing/invalid.
+        """
+        # Create vectors BA and BC
+        ba = a - b
+        bc = c - b
+
+        norm_ba = np.linalg.norm(ba)
+        norm_bc = np.linalg.norm(bc)
+
+        # EDGE CASE CHECK:
+        # If the magnitude of the vector is 0 (meaning a point is missing/zero 
+        # or two points are identical), return NaN.
+        if norm_ba == 0 or norm_bc == 0:
+            return np.nan
+
+        # Calculate cosine and angle
+        cosine_angle = np.dot(ba, bc) / (norm_ba * norm_bc)
+        angle = np.arccos(np.clip(cosine_angle, -1.0, 1.0))
+
+        return np.degrees(angle)
+    
