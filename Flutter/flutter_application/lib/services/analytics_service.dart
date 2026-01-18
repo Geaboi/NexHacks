@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 import 'package:http/http.dart' as http;
 
@@ -20,6 +21,10 @@ class AnalyticsResponse {
   }
 }
 
+/// Represents overshoot points mapped to video frames
+/// Each point is [frameIndex, inferenceResult]
+typedef OvershootPoints = List<List<dynamic>>;
+
 /// Service for sending video and analysis data to backend and receiving analytics
 class AnalyticsService {
   // Backend Configuration - Update with your actual backend URL
@@ -29,45 +34,93 @@ class AnalyticsService {
   /// 
   /// This method will:
   /// 1. Gather the recorded video file (temp_record.mp4)
-  /// 2. Gather frame analysis data from FrameAnalysisProvider
+  /// 2. Gather overshoot points from FrameAnalysisProvider
   /// 3. Gather sensor data from SensorProvider (when available)
   /// 4. Send all data to backend
   /// 5. Receive processed video and analytics JSON
   /// 
+  /// Parameters:
+  /// - videoPath: Path to the recorded MP4 file
+  /// - overshootPoints: List of [frameIndex, inferenceResult] pairs
+  /// - videoStartTimeUtc: UTC timestamp (ms) when the MP4 recording started
+  /// - fps: Frame rate of the video (for frame index calculation)
+  /// - videoDurationMs: Duration of the video in milliseconds
+  /// 
   /// Returns: AnalyticsResponse with video path and analytics data
   Future<AnalyticsResponse> submitAnalysis({
     required String videoPath,
+    required OvershootPoints overshootPoints,
+    required int videoStartTimeUtc,
+    required int fps,
+    required int videoDurationMs,
     String? backendUrl,
   }) async {
     final url = backendUrl ?? _defaultBackendUrl;
     
-    // TODO: Gather video file
+    // Gather video file
     final videoFile = await _gatherVideoFile(videoPath);
     
-    // TODO: Gather frame analysis data
-    final frameAnalysisData = await _gatherFrameAnalysisData();
-    
-    // TODO: Gather sensor data (placeholder for future SensorProvider)
+    // Gather sensor data (placeholder for future SensorProvider)
     final sensorData = await _gatherSensorData();
     
-    // TODO: Send data to backend
+    // Send data to backend
     final response = await _sendDataToBackend(
       url: url,
       videoFile: videoFile,
-      frameAnalysisData: frameAnalysisData,
+      overshootPoints: overshootPoints,
+      videoStartTimeUtc: videoStartTimeUtc,
       sensorData: sensorData,
     );
     
-    // TODO: Process response and download video
+    // Process response and download video
     final result = await _processResponse(response);
     
     return result;
   }
   
+  /// Helper function to map inference timestamps to video frame indices
+  /// 
+  /// Parameters:
+  /// - inferencePoints: List of {timestampUtc, inferenceResult} maps
+  /// - videoStartTimeUtc: UTC timestamp when the MP4 started recording
+  /// - fps: Frame rate of the video
+  /// - videoDurationMs: Total duration of the video in milliseconds
+  /// - toleranceMs: Tolerance for matching frames (default 100ms)
+  /// 
+  /// Returns: List of [frameIndex, inferenceResult] pairs
+  static OvershootPoints mapInferenceToVideoFrames({
+    required List<Map<String, dynamic>> inferencePoints,
+    required int videoStartTimeUtc,
+    required int fps,
+    required int videoDurationMs,
+    int toleranceMs = 100,
+  }) {
+    final result = <List<dynamic>>[];
+    final totalFrames = (videoDurationMs * fps / 1000).round();
+
+    for (final point in inferencePoints) {
+      final timestampUtc = point['timestampUtc'] as int;
+      final inferenceResult = point['inferenceResult'] as String;
+      
+      // Calculate offset from video start
+      final offsetMs = timestampUtc - videoStartTimeUtc;
+      
+      // Skip if before video started or after video ended (with tolerance)
+      if (offsetMs < -toleranceMs || offsetMs > videoDurationMs + toleranceMs) {
+        continue;
+      }
+
+      // Calculate frame index (clamped to valid range)
+      final frameIndex = (offsetMs * fps / 1000).round().clamp(0, totalFrames - 1);
+      
+      result.add([frameIndex, inferenceResult]);
+    }
+
+    return result;
+  }
+  
   /// Gather the recorded video file
   Future<File> _gatherVideoFile(String videoPath) async {
-    // TODO: Load video file from path
-    // The videoPath will be the temp_record.mp4 location
     final file = File(videoPath);
     
     if (!await file.exists()) {
@@ -75,23 +128,6 @@ class AnalyticsService {
     }
     
     return file;
-  }
-  
-  /// Gather frame analysis data from FrameAnalysisProvider
-  Future<Map<String, dynamic>> _gatherFrameAnalysisData() async {
-    // TODO: Access FrameAnalysisProvider and extract data
-    // This will be filled in to gather data like:
-    // - List of frames with timestamps
-    // - Inference results for each frame
-    // - Session metadata (start time, end time, etc.)
-    
-    // Placeholder return
-    return {
-      'frames': [],
-      'sessionStart': null,
-      'sessionEnd': null,
-      'totalFrames': 0,
-    };
   }
   
   /// Gather sensor data from SensorProvider (future implementation)
@@ -110,37 +146,39 @@ class AnalyticsService {
   Future<http.Response> _sendDataToBackend({
     required String url,
     required File videoFile,
-    required Map<String, dynamic> frameAnalysisData,
+    required OvershootPoints overshootPoints,
+    required int videoStartTimeUtc,
     required Map<String, dynamic>? sensorData,
   }) async {
-    // TODO: Create multipart request with:
+    // Create multipart request with:
     // - Video file
-    // - Frame analysis JSON
+    // - Overshoot points as JSON (list of [frameIndex, result])
+    // - Video start time
     // - Sensor data JSON (if available)
     
-    // Placeholder implementation
     final request = http.MultipartRequest('POST', Uri.parse(url));
     
     // Add video file
-    // request.files.add(await http.MultipartFile.fromPath(
-    //   'video',
-    //   videoFile.path,
-    //   filename: 'recording.mp4',
-    // ));
+    request.files.add(await http.MultipartFile.fromPath(
+      'video',
+      videoFile.path,
+      filename: 'recording.mp4',
+    ));
     
-    // Add frame analysis data
-    // request.fields['frameAnalysis'] = jsonEncode(frameAnalysisData);
+    // Add overshoot points as JSON
+    request.fields['overshootPoints'] = jsonEncode(overshootPoints);
+    
+    // Add video start time
+    request.fields['videoStartTimeUtc'] = videoStartTimeUtc.toString();
     
     // Add sensor data if available
-    // if (sensorData != null) {
-    //   request.fields['sensorData'] = jsonEncode(sensorData);
-    // }
+    if (sensorData != null) {
+      request.fields['sensorData'] = jsonEncode(sensorData);
+    }
     
     // Send request
-    // final streamedResponse = await request.send();
-    // return await http.Response.fromStream(streamedResponse);
-    
-    throw UnimplementedError('Backend submission not yet implemented');
+    final streamedResponse = await request.send();
+    return await http.Response.fromStream(streamedResponse);
   }
   
   /// Process backend response
