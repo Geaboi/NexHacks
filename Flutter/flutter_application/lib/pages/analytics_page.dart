@@ -1,6 +1,8 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:fl_chart/fl_chart.dart';
+import 'package:video_player/video_player.dart';
 import '../providers/navigation_provider.dart';
 import '../providers/frame_analysis_provider.dart';
 import '../providers/sensor_provider.dart';
@@ -33,6 +35,12 @@ class _AnalyticsPageState extends ConsumerState<AnalyticsPage> {
   List<FrameAngle>? _sessionAngles;
   List<int> _anomalousFrameIds = [];
   int? _savedSessionId;
+  DateTime? _sessionTimestamp;
+
+  // Video player state
+  VideoPlayerController? _videoController;
+  bool _isVideoInitialized = false;
+  bool _isVideoPlaying = false;
 
   @override
   void initState() {
@@ -63,10 +71,55 @@ class _AnalyticsPageState extends ConsumerState<AnalyticsPage> {
     });
   }
 
+  @override
+  void dispose() {
+    _videoController?.removeListener(_videoListener);
+    _videoController?.dispose();
+    super.dispose();
+  }
+
+  void _videoListener() {
+    final isPlaying = _videoController?.value.isPlaying ?? false;
+    if (isPlaying != _isVideoPlaying) {
+      setState(() {
+        _isVideoPlaying = isPlaying;
+      });
+    }
+  }
+
+  Future<void> _initializeVideo(String videoPath) async {
+    // Dispose old controller if exists
+    _videoController?.removeListener(_videoListener);
+    _videoController?.dispose();
+
+    final file = File(videoPath);
+    if (await file.exists()) {
+      _videoController = VideoPlayerController.file(file);
+      await _videoController!.initialize();
+      _videoController!.addListener(_videoListener);
+      setState(() {
+        _isVideoInitialized = true;
+      });
+      print('[AnalyticsPage] 🎬 Video initialized: $videoPath');
+    } else {
+      print('[AnalyticsPage] ⚠️ Video file not found: $videoPath');
+    }
+  }
+
+  void _togglePlayPause() {
+    if (_videoController == null) return;
+    if (_videoController!.value.isPlaying) {
+      _videoController!.pause();
+    } else {
+      _videoController!.play();
+    }
+  }
+
   Future<void> _submitAnalysis() async {
     setState(() {
       _isSubmitting = true;
       _errorMessage = null;
+      _sessionTimestamp = DateTime.now();
     });
 
     try {
@@ -176,6 +229,11 @@ class _AnalyticsPageState extends ConsumerState<AnalyticsPage> {
           _anomalousFrameIds = response.anomalousIds;
           _isSavingToDb = false;
         });
+
+        // Initialize video player with processed video if available
+        if (response.processedVideoPath != null) {
+          await _initializeVideo(response.processedVideoPath!);
+        }
 
         print(
           '[AnalyticsPage] 💾 Session saved with ID: $sessionId, ${_sessionAngles?.length ?? 0} frames, ${_anomalousFrameIds.length} anomalous',
@@ -329,6 +387,118 @@ class _AnalyticsPageState extends ConsumerState<AnalyticsPage> {
     return widgets;
   }
 
+  /// Build video preview widget with actual video player or placeholder
+  Widget _buildVideoPreview() {
+    // Show loading state while submitting
+    if (_isSubmitting) {
+      return Container(
+        width: double.infinity,
+        height: 200,
+        decoration: BoxDecoration(
+          color: AppColors.primaryDark,
+          borderRadius: BorderRadius.circular(16),
+          boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.1), blurRadius: 10, offset: const Offset(0, 4))],
+        ),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const CircularProgressIndicator(color: Colors.white),
+            const SizedBox(height: 16),
+            Text('Processing video...', style: TextStyle(color: Colors.white.withOpacity(0.7), fontSize: 14)),
+          ],
+        ),
+      );
+    }
+
+    // Show video player if initialized
+    if (_isVideoInitialized && _videoController != null) {
+      return Container(
+        width: double.infinity,
+        decoration: BoxDecoration(
+          color: AppColors.primaryDark,
+          borderRadius: BorderRadius.circular(16),
+          boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.1), blurRadius: 10, offset: const Offset(0, 4))],
+        ),
+        clipBehavior: Clip.antiAlias,
+        child: Column(
+          children: [
+            // Video player
+            AspectRatio(aspectRatio: _videoController!.value.aspectRatio, child: VideoPlayer(_videoController!)),
+            // Controls
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+              color: AppColors.primaryDark,
+              child: Row(
+                children: [
+                  // Play/Pause button
+                  IconButton(
+                    onPressed: _togglePlayPause,
+                    icon: Icon(
+                      _isVideoPlaying ? Icons.pause_circle_filled : Icons.play_circle_filled,
+                      color: Colors.white,
+                      size: 36,
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  // Progress indicator
+                  Expanded(
+                    child: VideoProgressIndicator(
+                      _videoController!,
+                      allowScrubbing: true,
+                      colors: VideoProgressColors(
+                        playedColor: AppColors.accent,
+                        bufferedColor: Colors.white.withOpacity(0.3),
+                        backgroundColor: Colors.white.withOpacity(0.1),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  // Duration
+                  Text(
+                    _formatDuration(_videoController!.value.duration),
+                    style: const TextStyle(color: Colors.white, fontSize: 12),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    // Show placeholder if no video
+    return Container(
+      width: double.infinity,
+      height: 200,
+      decoration: BoxDecoration(
+        color: AppColors.primaryDark,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.1), blurRadius: 10, offset: const Offset(0, 4))],
+      ),
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(
+            _hasSubmitted && _response?.success == true ? Icons.videocam_off : Icons.play_circle_outline,
+            size: 56,
+            color: Colors.white.withOpacity(0.4),
+          ),
+          const SizedBox(height: 12),
+          Text(
+            _hasSubmitted && _response?.success == true ? 'Processed video not available' : 'Video will appear here',
+            style: TextStyle(color: Colors.white.withOpacity(0.5), fontSize: 16),
+          ),
+        ],
+      ),
+    );
+  }
+
+  String _formatDuration(Duration duration) {
+    final minutes = duration.inMinutes.remainder(60).toString().padLeft(2, '0');
+    final seconds = duration.inSeconds.remainder(60).toString().padLeft(2, '0');
+    return '$minutes:$seconds';
+  }
+
   @override
   Widget build(BuildContext context) {
     final navState = ref.watch(navigationProvider);
@@ -361,80 +531,31 @@ class _AnalyticsPageState extends ConsumerState<AnalyticsPage> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Success Header
-              Container(
-                width: double.infinity,
-                padding: const EdgeInsets.all(28),
-                decoration: BoxDecoration(
-                  gradient: const LinearGradient(
-                    colors: [AppColors.primary, AppColors.primaryLight],
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
+              // Session Header
+              if (_sessionTimestamp != null) ...[
+                Text(
+                  'Your results from ${_sessionTimestamp!.day}/${_sessionTimestamp!.month}/${_sessionTimestamp!.year} at ${_sessionTimestamp!.hour.toString().padLeft(2, '0')}:${_sessionTimestamp!.minute.toString().padLeft(2, '0')}',
+                  style: theme.textTheme.titleMedium?.copyWith(
+                    color: AppColors.textSecondary,
+                    fontWeight: FontWeight.w500,
                   ),
-                  borderRadius: BorderRadius.circular(20),
-                  boxShadow: [
-                    BoxShadow(color: AppColors.primary.withOpacity(0.3), blurRadius: 20, offset: const Offset(0, 8)),
-                  ],
                 ),
-                child: Column(
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.all(12),
-                      decoration: BoxDecoration(color: Colors.white.withOpacity(0.2), shape: BoxShape.circle),
-                      child: const Icon(Icons.check_circle_outline, color: Colors.white, size: 48),
-                    ),
-                    const SizedBox(height: 16),
-                    const Text(
-                      'Recording Complete!',
-                      style: TextStyle(color: Colors.white, fontSize: 26, fontWeight: FontWeight.bold),
-                    ),
-                    const SizedBox(height: 8),
-                    Text(projectName, style: TextStyle(color: Colors.white.withOpacity(0.8), fontSize: 16)),
-                    if (hasAnalysisData) ...[
-                      const SizedBox(height: 8),
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                        decoration: BoxDecoration(
-                          color: Colors.white.withOpacity(0.2),
-                          borderRadius: BorderRadius.circular(20),
-                        ),
-                        child: Text(
-                          '${frameAnalysis.pointCount} analysis points captured',
-                          style: TextStyle(color: Colors.white.withOpacity(0.9), fontSize: 14),
-                        ),
-                      ),
-                    ],
-                  ],
-                ),
-              ),
-              const SizedBox(height: 24),
+                if (_savedSessionId != null)
+                  Text(
+                    'Session #$_savedSessionId',
+                    style: theme.textTheme.bodySmall?.copyWith(color: AppColors.textLight),
+                  ),
+                const SizedBox(height: 16),
+              ],
 
               // Backend Submission Status
               _buildSubmissionStatus(hasSensorData),
               const SizedBox(height: 24),
 
-              // Most Recent Recording Placeholder
-              Text('Most Recent Recording', style: theme.textTheme.headlineSmall),
+              // Processed Video Preview
+              Text('Processed Recording', style: theme.textTheme.headlineSmall),
               const SizedBox(height: 12),
-              Container(
-                width: double.infinity,
-                height: 200,
-                decoration: BoxDecoration(
-                  color: AppColors.primaryDark,
-                  borderRadius: BorderRadius.circular(16),
-                  boxShadow: [
-                    BoxShadow(color: Colors.black.withOpacity(0.1), blurRadius: 10, offset: const Offset(0, 4)),
-                  ],
-                ),
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Icon(Icons.play_circle_outline, size: 56, color: Colors.white.withOpacity(0.4)),
-                    const SizedBox(height: 12),
-                    Text('Video Preview', style: TextStyle(color: Colors.white.withOpacity(0.5), fontSize: 16)),
-                  ],
-                ),
-              ),
+              _buildVideoPreview(),
               const SizedBox(height: 28),
 
               // Flexion Metrics
