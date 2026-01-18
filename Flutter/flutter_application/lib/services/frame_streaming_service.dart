@@ -51,16 +51,30 @@ class FrameStreamingService {
   int _frameSkipCount = 0;
   int _frameSkipRate = 1; // Calculated based on camera fps vs desired fps
   
-  // Callback for receiving inference results from server
-  final StreamController<String> _resultsController = 
-      StreamController<String>.broadcast();
+  // Track pending frames by timestamp
+  final Set<int> _pendingFrameTimestamps = {};
+  
+  // Callback for when a frame is sent (provides timestamp)
+  final StreamController<int> _frameSentController = 
+      StreamController<int>.broadcast();
+  
+  // Callback for receiving inference results from server (timestamp, result)
+  final StreamController<InferenceResult> _resultsController = 
+      StreamController<InferenceResult>.broadcast();
   
   // Callback for connection state changes
   final StreamController<bool> _connectionController = 
       StreamController<bool>.broadcast();
   
-  Stream<String> get resultsStream => _resultsController.stream;
+  // Callback for when all pending results are received
+  final StreamController<void> _allResultsReceivedController =
+      StreamController<void>.broadcast();
+  
+  Stream<int> get frameSentStream => _frameSentController.stream;
+  Stream<InferenceResult> get resultsStream => _resultsController.stream;
   Stream<bool> get connectionStream => _connectionController.stream;
+  Stream<void> get allResultsReceivedStream => _allResultsReceivedController.stream;
+  int get pendingFrameCount => _pendingFrameTimestamps.length;
   bool get isConnected => _isConnected;
   bool get isStreaming => _isStreaming;
   bool get isReady => _isReady;
@@ -155,7 +169,15 @@ class FrameStreamingService {
   void stopStreaming() {
     _isStreaming = false;
     sendStop();
+    
+    // If no pending frames, signal completion immediately
+    if (_pendingFrameTimestamps.isEmpty) {
+      _allResultsReceivedController.add(null);
+    }
   }
+  
+  /// Check if still waiting for results
+  bool get isWaitingForResults => !_isStreaming && _pendingFrameTimestamps.isNotEmpty;
 
   /// Process and send a camera frame to the WebSocket server
   /// Call this method from the camera's image stream callback
@@ -167,22 +189,55 @@ class FrameStreamingService {
     if (_frameSkipCount % _frameSkipRate != 0) return;
     
     try {
+      // Get UTC timestamp for this frame
+      final timestampUtc = DateTime.now().toUtc().millisecondsSinceEpoch;
+      
       // Convert CameraImage to RGB24 bytes
       final rgb24Data = _convertToRgb24(image);
       
+      // Create frame with timestamp header (8 bytes for int64 timestamp + RGB data)
+      final frameWithTimestamp = _createFrameWithTimestamp(timestampUtc, rgb24Data);
+      
+      // Track this frame as pending
+      _pendingFrameTimestamps.add(timestampUtc);
+      
       // Send as binary data
-      _wsChannel!.sink.add(rgb24Data);
+      _wsChannel!.sink.add(frameWithTimestamp);
+      
+      // Notify listeners that a frame was sent
+      _frameSentController.add(timestampUtc);
     } catch (e) {
       // Frame processing failed silently
     }
   }
 
-  /// Send raw RGB24 bytes directly
+  /// Create a frame with timestamp header
+  /// Format: [8 bytes timestamp (big endian int64)] + [RGB24 data]
+  Uint8List _createFrameWithTimestamp(int timestampUtc, Uint8List rgb24Data) {
+    final buffer = ByteData(8 + rgb24Data.length);
+    
+    // Write timestamp as 64-bit big-endian integer
+    buffer.setInt64(0, timestampUtc, Endian.big);
+    
+    // Create result buffer
+    final result = Uint8List(8 + rgb24Data.length);
+    result.setRange(0, 8, buffer.buffer.asUint8List());
+    result.setRange(8, result.length, rgb24Data);
+    
+    return result;
+  }
+
+  /// Send raw RGB24 bytes directly with timestamp
   void sendRawFrame(Uint8List rgb24Bytes) {
     if (!_isConnected || !_isStreaming || !_isReady || _wsChannel == null) return;
     
     try {
-      _wsChannel!.sink.add(rgb24Bytes);
+      final timestampUtc = DateTime.now().toUtc().millisecondsSinceEpoch;
+      final frameWithTimestamp = _createFrameWithTimestamp(timestampUtc, rgb24Bytes);
+      
+      _pendingFrameTimestamps.add(timestampUtc);
+      _wsChannel!.sink.add(frameWithTimestamp);
+      _frameSentController.add(timestampUtc);
     } catch (e) {
       // Send failed silently
     }
@@ -308,15 +363,36 @@ class FrameStreamingService {
               
             case 'inference':
               final result = data['result'] as String?;
+              final timestamp = data['timestamp'] as int?;
               if (result != null) {
-                _resultsController.add(result);
+                // Remove from pending if timestamp provided
+                if (timestamp != null) {
+                  _pendingFrameTimestamps.remove(timestamp);
+                } else if (_pendingFrameTimestamps.isNotEmpty) {
+                  // Remove oldest pending timestamp if no timestamp in response
+                  final oldest = _pendingFrameTimestamps.reduce((a, b) => a < b ? a : b);
+                  _pendingFrameTimestamps.remove(oldest);
+                }
+                
+                _resultsController.add(InferenceResult(
+                  timestampUtc: timestamp ?? DateTime.now().toUtc().millisecondsSinceEpoch,
+                  result: result,
+                ));
+                
+                // Check if all results received after stopping
+                if (!_isStreaming && _pendingFrameTimestamps.isEmpty) {
+                  _allResultsReceivedController.add(null);
+                }
               }
               break;
               
             case 'error':
               final error = data['message'] as String?;
               if (error != null) {
-                _resultsController.add('Error: $error');
+                _resultsController.add(InferenceResult(
+                  timestampUtc: DateTime.now().toUtc().millisecondsSinceEpoch,
+                  result: 'Error: $error',
+                ));
               }
               break;
           }
@@ -346,7 +422,21 @@ class FrameStreamingService {
   /// Clean up resources
   void dispose() {
     disconnect();
+    _frameSentController.close();
     _resultsController.close();
     _connectionController.close();
+    _allResultsReceivedController.close();
+    _pendingFrameTimestamps.clear();
   }
+}
+
+/// Represents an inference result from the server
+class InferenceResult {
+  final int timestampUtc;
+  final String result;
+
+  const InferenceResult({
+    required this.timestampUtc,
+    required this.result,
+  });
 }

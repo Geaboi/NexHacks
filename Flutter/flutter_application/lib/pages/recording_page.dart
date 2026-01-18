@@ -7,6 +7,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:permission_handler/permission_handler.dart';
 import '../providers/navigation_provider.dart';
+import '../providers/frame_analysis_provider.dart';
 import '../services/frame_streaming_service.dart';
 import 'review_page.dart';
 
@@ -31,7 +32,10 @@ class _RecordingPageState extends ConsumerState<RecordingPage> {
   // Frame streaming
   final FrameStreamingService _frameStreamingService = FrameStreamingService();
   bool _isStreamingFrames = false;
-  StreamSubscription<String>? _resultsSubscription;
+  bool _isWaitingForResults = false;
+  StreamSubscription<InferenceResult>? _resultsSubscription;
+  StreamSubscription<int>? _frameSentSubscription;
+  StreamSubscription<void>? _allResultsSubscription;
   String? _latestInferenceResult;
 
   @override
@@ -44,9 +48,30 @@ class _RecordingPageState extends ConsumerState<RecordingPage> {
   Future<void> _initializeFrameStreaming() async {
     // Listen for inference results from the server
     _resultsSubscription = _frameStreamingService.resultsStream.listen((result) {
+      // Update provider with the result
+      ref.read(frameAnalysisProvider.notifier).updateFrameResult(
+        result.timestampUtc,
+        result.result,
+      );
       setState(() {
-        _latestInferenceResult = result;
+        _latestInferenceResult = result.result;
       });
+    });
+    
+    // Listen for frames being sent
+    _frameSentSubscription = _frameStreamingService.frameSentStream.listen((timestamp) {
+      // Register frame in provider
+      ref.read(frameAnalysisProvider.notifier).addFrame(timestamp);
+    });
+    
+    // Listen for all results received
+    _allResultsSubscription = _frameStreamingService.allResultsReceivedStream.listen((_) {
+      // Mark session complete and navigate
+      ref.read(frameAnalysisProvider.notifier).markSessionComplete();
+      setState(() {
+        _isWaitingForResults = false;
+      });
+      _navigateToReview();
     });
     
     // Configure and connect to the WebSocket server
@@ -137,6 +162,9 @@ class _RecordingPageState extends ConsumerState<RecordingPage> {
     }
 
     try {
+      // Start a new analysis session in the provider
+      ref.read(frameAnalysisProvider.notifier).startSession();
+      
       // Start video recording (saves to file)
       await _cameraController!.startVideoRecording();
       
@@ -197,7 +225,8 @@ class _RecordingPageState extends ConsumerState<RecordingPage> {
 
     _recordingTimer?.cancel();
     
-    // Stop frame streaming
+    // Stop frame streaming - mark session as stopped in provider
+    ref.read(frameAnalysisProvider.notifier).stopRecording();
     _frameStreamingService.stopStreaming();
     await _stopImageStream();
 
@@ -216,11 +245,22 @@ class _RecordingPageState extends ConsumerState<RecordingPage> {
         _isStreamingFrames = false;
       });
 
-      _navigateToReview();
+      // Check if we need to wait for remaining results
+      if (_frameStreamingService.pendingFrameCount > 0) {
+        setState(() {
+          _isWaitingForResults = true;
+        });
+        // Navigation will happen when allResultsReceivedStream fires
+      } else {
+        // No pending frames, navigate immediately
+        ref.read(frameAnalysisProvider.notifier).markSessionComplete();
+        _navigateToReview();
+      }
     } catch (e) {
       setState(() {
         _isRecording = false;
         _isStreamingFrames = false;
+        _isWaitingForResults = false;
       });
     }
   }
@@ -306,6 +346,8 @@ class _RecordingPageState extends ConsumerState<RecordingPage> {
   void dispose() {
     _recordingTimer?.cancel();
     _resultsSubscription?.cancel();
+    _frameSentSubscription?.cancel();
+    _allResultsSubscription?.cancel();
     _frameStreamingService.dispose();
     _cameraController?.dispose();
     super.dispose();
@@ -356,6 +398,37 @@ class _RecordingPageState extends ConsumerState<RecordingPage> {
           children: [
             // Camera Preview or Placeholder
             _buildCameraPreview(),
+            
+            // Waiting for Results Overlay
+            if (_isWaitingForResults)
+              Container(
+                color: Colors.black.withOpacity(0.8),
+                child: Center(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      const CircularProgressIndicator(color: Colors.teal),
+                      const SizedBox(height: 24),
+                      const Text(
+                        'Processing frames...',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 18,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        '${_frameStreamingService.pendingFrameCount} frames remaining',
+                        style: TextStyle(
+                          color: Colors.grey[400],
+                          fontSize: 14,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
 
             // Recording Indicator
             if (_isRecording)
