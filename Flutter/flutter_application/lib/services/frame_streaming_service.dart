@@ -156,8 +156,11 @@ class FrameStreamingService {
   /// Send the initial config message
   void _sendConfig() {
     if (!_isConnected || _wsChannel == null) return;
-    
-    final configJson = jsonEncode(_config.toJson());
+
+    final configMap = _config.toJson();
+    final configJson = jsonEncode(configMap);
+    print('[FrameStreaming] 📤 Sending config:');
+    print('[FrameStreaming]   $configJson');
     _wsChannel!.sink.add(configJson);
   }
 
@@ -267,18 +270,21 @@ class FrameStreamingService {
   }
 
   /// Create a frame with timestamp header
-  /// Format: [8 bytes timestamp (big endian int64)] + [RGB24 data]
+  /// Format: [8 bytes timestamp (little-endian float64)] + [RGB24 data]
+  /// Backend expects: struct.unpack('<d', frame_bytes[:8]) - little-endian double
   Uint8List _createFrameWithTimestamp(int timestampUtc, Uint8List rgb24Data) {
     final buffer = ByteData(8 + rgb24Data.length);
-    
-    // Write timestamp as 64-bit big-endian integer
-    buffer.setInt64(0, timestampUtc, Endian.big);
-    
+
+    // Write timestamp as 64-bit little-endian float (double)
+    // Convert milliseconds to seconds for the backend
+    final timestampSeconds = timestampUtc / 1000.0;
+    buffer.setFloat64(0, timestampSeconds, Endian.little);
+
     // Create result buffer
     final result = Uint8List(8 + rgb24Data.length);
     result.setRange(0, 8, buffer.buffer.asUint8List());
     result.setRange(8, result.length, rgb24Data);
-    
+
     return result;
   }
 
@@ -306,14 +312,21 @@ class FrameStreamingService {
       print('[FrameStreaming] ⚠️ Cannot send frame - not ready (connected: $_isConnected, streaming: $_isStreaming, ready: $_isReady)');
       return;
     }
-    
+
     try {
       final frameWithTimestamp = _createFrameWithTimestamp(timestampUtc, rgb24Bytes);
-      
+
       _pendingFrameTimestamps.add(timestampUtc);
       _wsChannel!.sink.add(frameWithTimestamp);
       _frameSentController.add(timestampUtc);
-      print('[FrameStreaming] 📤 Frame sent - timestamp: $timestampUtc, pending: ${_pendingFrameTimestamps.length}');
+
+      final expectedSize = _config.width * _config.height * 3 + 8;
+      print('[FrameStreaming] 📤 Frame sent:');
+      print('[FrameStreaming]   - Timestamp (ms): $timestampUtc');
+      print('[FrameStreaming]   - Timestamp (sec): ${timestampUtc / 1000.0}');
+      print('[FrameStreaming]   - Frame size: ${frameWithTimestamp.length} bytes (expected: $expectedSize)');
+      print('[FrameStreaming]   - RGB data size: ${rgb24Bytes.length} bytes');
+      print('[FrameStreaming]   - Pending count: ${_pendingFrameTimestamps.length}');
     } catch (e) {
       print('[FrameStreaming] ❌ Failed to send frame: $e');
     }
@@ -510,51 +523,51 @@ class FrameStreamingService {
   }
   
   /// Handle an inference result message from the backend
-  /// Expected format: {"type": "inference", "result": "<string>", "timestamp": <int|null>}
+  /// Expected format: {"type": "inference", "result": "<string>", "timestamp": <float|null>}
+  /// Note: timestamp from backend is in seconds (float), we store as milliseconds (int)
   void _handleInferenceResult(Map<String, dynamic> data) {
     final result = data['result'] as String?;
-    
-    // Timestamp can be int or null from backend
-    int? timestamp;
+
+    // Timestamp from backend is in seconds (float), convert to milliseconds
+    int? timestampMs;
     final tsValue = data['timestamp'];
-    if (tsValue is int) {
-      timestamp = tsValue;
-    } else if (tsValue is double) {
-      timestamp = tsValue.toInt();
+    if (tsValue is num) {
+      // Backend returns seconds as float, convert to milliseconds
+      timestampMs = (tsValue.toDouble() * 1000).round();
     }
     
     print('[FrameStreaming] ========== INFERENCE RESULT ==========');
-    print('[FrameStreaming] Timestamp: $timestamp');
+    print('[FrameStreaming] Timestamp (ms): $timestampMs');
     print('[FrameStreaming] Result: ${result != null ? (result.length > 200 ? '${result.substring(0, 200)}...' : result) : 'NULL'}');
     print('[FrameStreaming] Pending frames before: ${_pendingFrameTimestamps.length}');
     print('[FrameStreaming] Has listeners: ${_resultsController.hasListener}');
-    
+
     if (result == null) {
       print('[FrameStreaming] ⚠️ Result is NULL - skipping');
       return;
     }
-    
+
     // Remove from pending if timestamp provided
-    if (timestamp != null) {
-      final removed = _pendingFrameTimestamps.remove(timestamp);
-      print('[FrameStreaming] Removed timestamp $timestamp: $removed');
+    if (timestampMs != null) {
+      final removed = _pendingFrameTimestamps.remove(timestampMs);
+      print('[FrameStreaming] Removed timestamp $timestampMs: $removed');
     } else if (_pendingFrameTimestamps.isNotEmpty) {
       // Remove oldest pending timestamp if no timestamp in response
       final oldest = _pendingFrameTimestamps.reduce((a, b) => a < b ? a : b);
       _pendingFrameTimestamps.remove(oldest);
       print('[FrameStreaming] Removed oldest timestamp: $oldest');
     }
-    
+
     print('[FrameStreaming] Pending frames after: ${_pendingFrameTimestamps.length}');
     print('[FrameStreaming] ======================================');
-    
+
     // Broadcast the result to listeners
     _resultsController.add(InferenceResult(
-      timestampUtc: timestamp ?? DateTime.now().toUtc().millisecondsSinceEpoch,
+      timestampUtc: timestampMs ?? DateTime.now().toUtc().millisecondsSinceEpoch,
       result: result,
     ));
     print('[FrameStreaming] ✅ Result broadcasted to listeners');
-    
+
     // Check if all results received after stopping
     if (!_isStreaming && _pendingFrameTimestamps.isEmpty) {
       print('[FrameStreaming] 🎉 All pending results received!');

@@ -285,7 +285,7 @@ class RTMPose3DHandler:
             "left_ankle_flexion",
             "right_ankle_flexion"
         ])
-        df.insert(0, 'frame', range(len(angles_list)))
+        df.insert(0, 'frame', pd.array(range(len(angles_list)), dtype='int64'))
         return df
 
     @staticmethod

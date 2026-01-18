@@ -1,5 +1,6 @@
 import numpy as np
 
+
 CV_CONFIDENCE_CUTOFF = 0.3
 VARIANCE_BIAS = 16
 
