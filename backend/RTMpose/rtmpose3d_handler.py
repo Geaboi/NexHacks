@@ -100,6 +100,29 @@ class RTMPose3DHandler:
         self.CONF_THRESHOLD = 0.3
     
     def process_video(self, video_bytes, sensor_data=None):
+        """Process video with optional IMU sensor data for Kalman-filtered joint angles.
+        
+        Args:
+            video_bytes: Raw video file bytes
+            sensor_data: Optional list of IMU samples from Flutter getSamplesForBackend():
+                [
+                    {
+                        'data': {
+                            'xA': float,  # Gyro A x-axis (°/s)
+                            'yA': float,  # Gyro A y-axis (°/s)
+                            'zA': float,  # Gyro A z-axis (°/s)
+                            'xB': float,  # Gyro B x-axis (°/s)
+                            'yB': float,  # Gyro B y-axis (°/s)
+                            'zB': float,  # Gyro B z-axis (°/s)
+                        },
+                        'timestamp_ms': int,  # Milliseconds from session start
+                    },
+                    ...
+                ]
+        
+        Returns:
+            tuple: (angles_list, output_2d_video_path, csv_path)
+        """
         video_handler = VideoHandler(video_bytes)
 
         total = int(video_handler.cap.get(cv2.CAP_PROP_FRAME_COUNT))
@@ -111,13 +134,21 @@ class RTMPose3DHandler:
 
         all_poses = []
         all_scores = []
-        frame_timestamps = [] #TODO: get timestamps for each frame!! use fps?
+        frame_timestamps_ms = []  # Frame timestamps in milliseconds
+        
+        # Calculate frame duration in milliseconds
+        frame_duration_ms = 1000.0 / fps if fps > 0 else 33.33  # Default to ~30fps
         
         # INITIAL PASS: PROCESS FRAMES
+        frame_idx = 0
         for _ in tqdm(range(total)): # for all frames
             ret, frame = video_handler.read_frame()
             if not ret:
                 break
+            
+            # Calculate timestamp for this frame (in milliseconds)
+            frame_timestamps_ms.append(frame_idx * frame_duration_ms)
+            frame_idx += 1
             
             kps_3d, scores, _, kps_2d = self.model(frame)
             # sizings for kps_3d: (num_people, num_keypoints, 3)
@@ -151,48 +182,69 @@ class RTMPose3DHandler:
         angles = self.build_leg_angles(norm_poses)
         angle_scores = self.average_leg_scores(all_scores)
 
-        # Assumptions:
-        # sensor_data structure: list[tuple[dict, timestamp]]
-        # dict has keys xA xB yA yB zA zB
-        if sensor_data is not None and \
-        (len(angles) == len(angle_scores) and \
-         len(angle_scores) == len(frame_timestamps)):
-            pre_sensor_angles = angles.copy()
+        # Sensor fusion with Kalman filtering
+        # sensor_data format from Flutter getSamplesForBackend():
+        # [{'data': {'xA', 'yA', 'zA', 'xB', 'yB', 'zB'}, 'timestamp_ms': int}, ...]
+        if sensor_data is not None and len(sensor_data) > 1 and \
+           len(angles) == len(angle_scores) == len(frame_timestamps_ms):
+            
+            pre_sensor_angles = [a.copy() if isinstance(a, list) else list(a) for a in angles]
             out_angles = []
-            # Kalman filtering with sensor data implemented here
+            
+            # Kalman filtering with sensor data
             ekf = FusionEKF(initial_angle=pre_sensor_angles[0][JOINT_INDEX])
 
             cv_idx = 1
 
             for i in range(1, len(sensor_data)):
-                s_samp: tuple[dict[str, float], datetime.datetime] = sensor_data[i]
-                s_prev: tuple[dict[str, float], datetime.datetime] = sensor_data[i-1]
+                s_samp = sensor_data[i]
+                s_prev = sensor_data[i-1]
 
-                w_rel = s_samp[0]["yB"] - s_samp[0]["yA"]
-                dt = (s_samp[1] - s_prev[1]).total_seconds()
-                if dt <= 0: continue
+                # Extract gyroscope values from new format
+                # Relative angular velocity between the two IMU sensors
+                w_rel = s_samp['data']['yB'] - s_samp['data']['yA']
+                
+                # Calculate dt in seconds from millisecond timestamps
+                dt = (s_samp['timestamp_ms'] - s_prev['timestamp_ms']) / 1000.0
+                if dt <= 0: 
+                    continue
 
                 ekf.predict(w_rel, dt)
 
-                while cv_idx < len(pre_sensor_angles) and s_samp[1] >= frame_timestamps[cv_idx]:
-                    ekf.update(pre_sensor_angles[cv_idx][JOINT_INDEX], angle_scores[cv_idx][JOINT_INDEX])
+                # Update with vision measurements when sensor timestamp passes frame timestamp
+                while cv_idx < len(pre_sensor_angles) and \
+                      s_samp['timestamp_ms'] >= frame_timestamps_ms[cv_idx]:
+                    # Only update if we have valid angle measurement
+                    if not np.isnan(pre_sensor_angles[cv_idx][JOINT_INDEX]) and \
+                       not np.isnan(angle_scores[cv_idx][JOINT_INDEX]):
+                        ekf.update(
+                            pre_sensor_angles[cv_idx][JOINT_INDEX], 
+                            angle_scores[cv_idx][JOINT_INDEX]
+                        )
                     cv_idx += 1
                 
                 out_angles.append({
-                    'time': s_samp[1],
-                    'joint_angle': ekf.x[0],
+                    'timestamp_ms': s_samp['timestamp_ms'],
+                    'joint_angle': float(ekf.x[0]),
                     'bias_est': float(ekf.x[1])
                 })
 
-            outAngIdx = 0
-            for i in range(len(frame_timestamps)):
-                sum = 0.0
-                cnt = 0.0
-                while out_angles[outAngIdx]['time'] < frame_timestamps[i]:
-                    sum += out_angles[outAngIdx]['joint_angle']
-                    cnt+=1
-                    outAngIdx+=1
-                angles[i][JOINT_INDEX] = sum / cnt
+            # Map fused angles back to frame timestamps
+            if out_angles:
+                out_ang_idx = 0
+                for i in range(len(frame_timestamps_ms)):
+                    angle_sum = 0.0
+                    count = 0
+                    
+                    # Average all sensor-fused angles that fall before this frame's timestamp
+                    while out_ang_idx < len(out_angles) and \
+                          out_angles[out_ang_idx]['timestamp_ms'] < frame_timestamps_ms[i]:
+                        angle_sum += out_angles[out_ang_idx]['joint_angle']
+                        count += 1
+                        out_ang_idx += 1
+                    
+                    if count > 0:
+                        angles[i][JOINT_INDEX] = angle_sum / count
                 
         # Save angles to CSV
         csv_path = self.angles_to_csv(angles, self.output_file_csv.name)
@@ -305,12 +357,12 @@ class RTMPose3DHandler:
                 np.mean([score_list[12], score_list[14], score_list[16]]), # "right_knee_score"
 
                 # Hip Flexion: Shoulder (5/6) -> Hip (11/12) -> Knee (13/14)
-                np.mean(score_list[5], score_list[11], score_list[13]), # "left_hip_score"
-                np.mean(score_list[6], score_list[12], score_list[14]), # "right_hip_score"
+                np.mean([score_list[5], score_list[11], score_list[13]]), # "left_hip_score"
+                np.mean([score_list[6], score_list[12], score_list[14]]), # "right_hip_score"
 
                 # Ankle Dorsiflexion: Knee (13/14) -> Ankle (15/16) -> Big Toe (17/20)
-                np.mean(score_list[13], score_list[15], score_list[17]), # "left_ankle_score"
-                np.mean(score_list[14], score_list[16], score_list[20]), # "right_ankle_score"
+                np.mean([score_list[13], score_list[15], score_list[17]]), # "left_ankle_score"
+                np.mean([score_list[14], score_list[16], score_list[20]]), # "right_ankle_score"
             ]
             leg_scores.append(frame_scores)
 
