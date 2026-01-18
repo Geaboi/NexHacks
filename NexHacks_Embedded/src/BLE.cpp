@@ -49,7 +49,7 @@ NimBLEAdvertising* initBLE() {
   // 0x0001 - acknowledge characteristic (for RTT)
   ackChar = pService->createCharacteristic(
                     "0001",
-                    NIMBLE_PROPERTY::READ || NIMBLE_PROPERTY::NOTIFY
+                    NIMBLE_PROPERTY::READ | NIMBLE_PROPERTY::NOTIFY
                   );
   ackChar->createDescriptor("2902"); // notifications
 

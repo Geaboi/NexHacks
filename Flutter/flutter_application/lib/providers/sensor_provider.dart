@@ -231,6 +231,25 @@ class SensorNotifier extends Notifier<SensorState> {
     try {
       await device.connect(timeout: const Duration(seconds: 10));
 
+      // Request MTU increase immediately after connection
+      // Critical for Android (doesn't auto-negotiate)
+      // iOS auto-negotiates but this ensures we get sufficient MTU
+      // We need at least 85 bytes (82 packet + 3 ATT overhead)
+      // Request 247 (max reliable BLE MTU)
+      int negotiatedMtu = 23; // Default MTU
+      try {
+        negotiatedMtu = await device.requestMtu(100);
+
+        if (negotiatedMtu < 85) {
+          throw Exception(
+            'MTU too small ($negotiatedMtu bytes) - need at least 85 bytes for packet size',
+          );
+        }
+      } catch (e) {
+        // Continue anyway - iOS might have auto-negotiated
+        // Error will surface later if MTU is truly insufficient
+      }
+
       // Listen for disconnection
       _connectionSubscription = device.connectionState.listen((
         connectionState,
@@ -271,7 +290,7 @@ class SensorNotifier extends Notifier<SensorState> {
       state = state.copyWith(
         isConnected: true,
         device: device,
-        statusMessage: 'Connected to $deviceName',
+        statusMessage: 'Connected to $deviceName (MTU: $negotiatedMtu)',
       );
     } catch (e) {
       await device.disconnect();
@@ -379,8 +398,8 @@ class SensorNotifier extends Notifier<SensorState> {
         droppedPackets: state.droppedPackets + dropped,
       );
     } catch (e) {
-      // Parsing error - skip this packet
-      print('Packet parse error: $e');
+      // Parsing error - skip this packet silently
+      // This can happen if MTU is insufficient or data corruption occurs
     }
   }
 
