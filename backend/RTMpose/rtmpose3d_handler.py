@@ -6,6 +6,10 @@ Can also output a video with 2D keypoints overlaid
 
 import os
 import sys
+from sensorFusion import FusionEKF
+import datetime
+
+JOINT_INDEX = 0 # hard-code to left knee for now.
 
 # Add cuDNN/cuBLAS DLLs to path for ONNX Runtime GPU support (Windows)
 if sys.platform == 'win32':
@@ -106,6 +110,8 @@ class RTMPose3DHandler:
         out2d = cv2.VideoWriter(self.output_file_2D.name, cv2.VideoWriter_fourcc(*'mp4v'), fps, (w, h))
 
         all_poses = []
+        all_scores = []
+        frame_timestamps = [] #TODO: get timestamps for each frame!!
         
         # INITIAL PASS: PROCESS FRAMES
         for _ in tqdm(range(total)): # for all frames
@@ -119,17 +125,19 @@ class RTMPose3DHandler:
 
             # return body + foot keypoints only as [X, Y, Z]
             if len(kps_3d) > 0:
-                raw = kps_3d[0][:23, :3]
+                raw = kps_3d[0][:23, :]
                 # Fix Axes: X->X, Z->Y, -Y->Z
                 corrected = np.zeros_like(raw)
                 corrected[:, 0] = raw[:, 0]
                 corrected[:, 1] = raw[:, 2]
                 corrected[:, 2] = -raw[:, 1]
                 all_poses.append(corrected)
+                all_scores.append(scores[0][:23])
 
                 out2d.write(draw_skeleton(frame, kps_2d, scores, kpt_thr=self.CONF_THRESHOLD)) # draw first person's 2D keypoints
             else:
                 all_poses.append(np.zeros((23, 3)))
+                all_scores.append(np.zeros(23))
                 out2d.write(frame) # write original frame if no person detected
             
         out2d.release()
@@ -141,11 +149,51 @@ class RTMPose3DHandler:
         
         # build angles from leg keypoints, should be same size as norm_poses
         angles = self.build_leg_angles(norm_poses)
+        angle_scores = self.average_leg_scores(all_scores)
 
-        if sensor_data is not None:
-            # Kaplan filtering with sensor data implemented here
-            pass
+        # Assumptions:
+        # sensor_data structure: list[tuple[dict, timestamp]]
+        # dict has keys xA xB yA yB zA zB
+        if sensor_data is not None and \
+        (len(angles) == len(angle_scores) and \
+         len(angle_scores) == len(frame_timestamps)):
+            pre_sensor_angles = angles.copy()
+            out_angles = []
+            # Kalman filtering with sensor data implemented here
+            ekf = FusionEKF(initial_angle=pre_sensor_angles[0][JOINT_INDEX])
 
+            cv_idx = 1
+
+            for i in range(1, len(sensor_data)):
+                s_samp: tuple[dict[str, float], datetime.datetime] = sensor_data[i]
+                s_prev: tuple[dict[str, float], datetime.datetime] = sensor_data[i-1]
+
+                w_rel = s_samp[0]["yB"] - s_samp[0]["yA"]
+                dt = (s_samp[1] - s_prev[1]).total_seconds()
+                if dt <= 0: continue
+
+                ekf.predict(w_rel, dt)
+
+                while cv_idx < len(pre_sensor_angles) and s_samp[1] >= frame_timestamps[cv_idx]:
+                    ekf.update(pre_sensor_angles[cv_idx][JOINT_INDEX], angle_scores[cv_idx][JOINT_INDEX])
+                    cv_idx += 1
+                
+                out_angles.append({
+                    'time': s_samp[1],
+                    'joint_angle': ekf.x[0],
+                    'bias_est': float(ekf.x[1])
+                })
+
+            outAngIdx = 0
+            for i in range(len(frame_timestamps)):
+                sum = 0.0
+                cnt = 0.0
+                while out_angles[outAngIdx]['time'] < frame_timestamps[i]:
+                    sum += out_angles[outAngIdx]['joint_angle']
+                    cnt+=1
+                    outAngIdx+=1
+                angles[i][JOINT_INDEX] = sum / cnt
+                
         # Save angles to CSV
         csv_path = self.angles_to_csv(angles, self.output_file_csv.name)
 
@@ -239,6 +287,35 @@ class RTMPose3DHandler:
             angles_list.append(frame_angles)
             
         return angles_list
+    
+    def average_leg_scores(self, scores_structure):
+        leg_scores = []
+        for score_list in scores_structure:
+            if np.sum(score_list) == 0:
+                leg_scores.append([
+                    np.nan, np.nan,
+                    np.nan, np.nan,
+                    np.nan, np.nan
+                ])
+                continue
+            
+            frame_scores = [
+                # Knee Flexion: Hip (11/12) -> Knee (13/14) -> Ankle (15/16)
+                np.mean([score_list[11], score_list[13], score_list[15]]), # "left_knee_score"
+                np.mean([score_list[12], score_list[14], score_list[16]]), # "right_knee_score"
+
+                # Hip Flexion: Shoulder (5/6) -> Hip (11/12) -> Knee (13/14)
+                np.mean(score_list[5], score_list[11], score_list[13]), # "left_hip_score"
+                np.mean(score_list[6], score_list[12], score_list[14]), # "right_hip_score"
+
+                # Ankle Dorsiflexion: Knee (13/14) -> Ankle (15/16) -> Big Toe (17/20)
+                np.mean(score_list[13], score_list[15], score_list[17]), # "left_ankle_score"
+                np.mean(score_list[14], score_list[16], score_list[20]), # "right_ankle_score"
+            ]
+            leg_scores.append(frame_scores)
+
+        return leg_scores
+            
 
     def calculate_angle(self, a, b, c):
         """
