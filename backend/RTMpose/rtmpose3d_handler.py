@@ -5,6 +5,48 @@ Can also output a video with 2D keypoints overlaid
 '''
 
 import os
+import sys
+
+# Add cuDNN/cuBLAS DLLs to path for ONNX Runtime GPU support (Windows)
+if sys.platform == 'win32':
+    nvidia_base = os.path.join(sys.prefix, 'Lib', 'site-packages', 'nvidia')
+    cudnn_path = os.path.join(nvidia_base, 'cudnn', 'bin')
+    cublas_path = os.path.join(nvidia_base, 'cublas', 'bin')
+    
+    # Add to PATH environment variable (needed for DLL dependencies)
+    paths_to_add = [p for p in [cudnn_path, cublas_path] if os.path.exists(p)]
+    if paths_to_add:
+        os.environ['PATH'] = os.pathsep.join(paths_to_add) + os.pathsep + os.environ.get('PATH', '')
+    
+    # Also use add_dll_directory for Python 3.8+
+    for path in paths_to_add:
+        os.add_dll_directory(path)
+
+def _ensure_onnxruntime_gpu():
+    """Ensure onnxruntime-gpu is installed with CUDA support."""
+    import subprocess
+    try:
+        import onnxruntime as ort
+        providers = ort.get_available_providers()
+        if 'CUDAExecutionProvider' not in providers:
+            print("CUDA provider not found. Reinstalling onnxruntime-gpu...")
+            subprocess.check_call([sys.executable, '-m', 'pip', 'uninstall', 'onnxruntime', '-y'], 
+                                  stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            subprocess.check_call([sys.executable, '-m', 'pip', 'uninstall', 'onnxruntime-gpu', '-y'], 
+                                  stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            subprocess.check_call([sys.executable, '-m', 'pip', 'install', 'onnxruntime-gpu'],
+                                  stdout=subprocess.DEVNULL)
+            print("Reinstalled onnxruntime-gpu. Please restart the script.")
+            sys.exit(0)
+    except ImportError:
+        print("onnxruntime not found. Installing onnxruntime-gpu...")
+        subprocess.check_call([sys.executable, '-m', 'pip', 'install', 'onnxruntime-gpu'],
+                              stdout=subprocess.DEVNULL)
+        print("Installed onnxruntime-gpu. Please restart the script.")
+        sys.exit(0)
+
+_ensure_onnxruntime_gpu()
+
 from rtmlib import Wholebody3d, draw_skeleton
 import tempfile
 import cv2
@@ -46,6 +88,7 @@ class VideoHandler():
 class RTMPose3DHandler:
 
     def __init__(self, device='cuda'):
+        print(f"Using device: {device}")
         self.model = Wholebody3d(mode='balanced', backend='onnxruntime', device=device)
         self.device = device
         self.output_file_2D = tempfile.NamedTemporaryFile(delete=False, suffix='.mp4')
