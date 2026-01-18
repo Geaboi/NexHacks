@@ -143,12 +143,6 @@ class _RecordingPageState extends ConsumerState<RecordingPage> {
     _setupCamera(newIndex);
   }
 
-  Future<void> _startSensorSafe(SensorNotifier sensorNotifier) async {
-    if (ref.read(sensorProvider).isConnected) {
-      sensorNotifier.startRecording();
-    }
-  }
-
   Future<void> _startRecording() async {
     if (_cameraController == null || !_cameraController!.value.isInitialized) {
       return;
@@ -175,12 +169,11 @@ class _RecordingPageState extends ConsumerState<RecordingPage> {
         wsUrl: 'ws://localhost:8080/frames',
         config: config,
       );
-      
-      await Future.wait([
-        _startSensorSafe(sensorNotifier),
-        // Start video recording (saves to file)
-        _cameraController!.startVideoRecording(),
-      ]);
+
+      _cameraController!.startVideoRecording();
+      if (ref.read(sensorProvider).isConnected) {
+        sensorNotifier.startRecording();
+      }
       
       // Start frame streaming to WebSocket (assumes ~30fps camera)
       _frameStreamingService.startStreaming(cameraFps: 30);
