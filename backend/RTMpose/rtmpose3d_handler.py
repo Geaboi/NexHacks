@@ -307,7 +307,7 @@ class RTMPose3DHandler:
             output_path = temp_file.name
             temp_file.close()
 
-        df.to_csv(output_path, index=False)
+        df.to_csv(output_path, index=True)
         return output_path
 
     def build_leg_angles(self, norm_poses):

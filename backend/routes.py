@@ -371,7 +371,8 @@ async def process_video_to_angles(
             with open(csv_path, "rb") as f:
                 files = {"file": (f"{dataset_name}.csv", f, "text/csv")}
                 params = {"overwrite": overwrite}
-                upload_response = requests.post(upload_url, headers=HEADERS, files=files, params=params)
+                data = {"name": dataset_name}
+                upload_response = requests.post(upload_url, headers=HEADERS, files=files, params=params, data=data)                
                 upload_response.raise_for_status()
                 dataset_info = upload_response.json()
                 result["dataset"] = dataset_info
