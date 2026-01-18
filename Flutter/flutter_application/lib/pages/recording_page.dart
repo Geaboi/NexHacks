@@ -11,6 +11,7 @@ import 'package:path_provider/path_provider.dart';
 import 'package:permission_handler/permission_handler.dart';
 import '../providers/navigation_provider.dart';
 import '../providers/frame_analysis_provider.dart';
+import '../providers/sensor_provider.dart';
 import '../services/frame_streaming_service.dart';
 import 'review_page.dart';
 
@@ -175,20 +176,14 @@ class _RecordingPageState extends ConsumerState<RecordingPage> {
       return;
     }
 
-    // Reset analysis availability flag
-    setState(() {
-      _isAnalysisAvailable = false;
-    });
-
-    // Try to connect to WebSocket server (non-blocking - recording will proceed regardless)
-    bool wsConnected = false;
-    bool wsReady = false;
-    
     try {
-      print('========================================');
-      print('[RecordingPage] 🔌 Attempting to connect to WebSocket...');
-      print('========================================');
-      
+      // Start a new analysis session in the provider
+      ref.read(frameAnalysisProvider.notifier).startSession();
+
+      // Start BLE sensor recording (sends "Start" command and calculates RTT)
+      final sensorNotifier = ref.read(sensorProvider.notifier);
+
+      // Connect to WebSocket server NOW (when recording starts)
       const config = StreamConfig(
         prompt: 'Analyze the physical therapy exercise form',
         model: 'gemini-2.0-flash',
@@ -205,48 +200,12 @@ class _RecordingPageState extends ConsumerState<RecordingPage> {
         wsUrl: 'wss://api.mateotaylortest.org/api/overshoot/ws/stream',
         config: config,
       );
-      print('[RecordingPage] 🔌 WebSocket connected: $wsConnected');
       
-      if (wsConnected) {
-        // Wait for READY signal with timeout
-        print('[RecordingPage] ⏳ Waiting for WebSocket READY signal...');
-        int waitedMs = 0;
-        const checkIntervalMs = 100;
-        
-        while (!_frameStreamingService.isReady && waitedMs < _wsReadyTimeoutMs) {
-          await Future.delayed(const Duration(milliseconds: checkIntervalMs));
-          waitedMs += checkIntervalMs;
-        }
-        
-        wsReady = _frameStreamingService.isReady;
-        print('[RecordingPage] 🔌 WebSocket ready: $wsReady (waited ${waitedMs}ms)');
-      }
-    } catch (e) {
-      print('[RecordingPage] ⚠️ WebSocket connection error: $e');
-      wsConnected = false;
-      wsReady = false;
-    }
-
-    // Show warning if analysis is not available (but continue with recording)
-    if (!wsConnected || !wsReady) {
-      _showErrorSnackBar('Real-time analysis unavailable. Video will still be recorded.');
-      print('[RecordingPage] ⚠️ Proceeding without real-time analysis');
-    } else {
-      setState(() {
-        _isAnalysisAvailable = true;
-      });
-      print('[RecordingPage] ✅ Real-time analysis is available');
-    }
-
-    // Capture video start time BEFORE starting video recording
-    _videoStartTimeUtc = DateTime.now().toUtc().millisecondsSinceEpoch;
-    
-    // Start a new analysis session in the provider with video start time
-    ref.read(frameAnalysisProvider.notifier).startSession(_videoStartTimeUtc!);
-
-    try {
-      // Start video recording (saves to file) - THIS IS THE CRITICAL PART
+      // Start video recording (saves to file)
       await _cameraController!.startVideoRecording();
+      if (ref.read(sensorProvider).isConnected) {
+        sensorNotifier.startRecording();
+      }
       
       // Only start frame streaming if analysis is available
       if (_isAnalysisAvailable) {
@@ -391,6 +350,15 @@ class _RecordingPageState extends ConsumerState<RecordingPage> {
     // Stop frame sampling first (only if it was running)
     if (_isAnalysisAvailable) {
       _stopFrameSampling();
+    }
+    
+    // Stop BLE sensor recording
+    final sensorNotifier = ref.read(sensorProvider.notifier);
+    if (ref.read(sensorProvider).isConnected) {
+      await sensorNotifier.stopRecording();
+      // Get sensor data as JSON for later use
+      final sensorData = sensorNotifier.getSamplesAsMap();
+      debugPrint('Collected ${sensorData['total_samples']} IMU samples');
     }
     
     // Stop frame streaming - mark session as stopped in provider
