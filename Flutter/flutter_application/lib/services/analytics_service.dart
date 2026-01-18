@@ -99,7 +99,11 @@ class AnalyticsService {
       print('[AnalyticsService] 📊 Mapped ${overshootPoints.length} overshoot points to video frames');
 
       // 3. Prepare sensor data (empty list if not available)
-      final sensorJson = sensorData != null && sensorData['samples'] != null ? jsonEncode(sensorData['samples']) : '[]';
+      // Backend expects format: [{'data': {'xA', 'yA', 'zA', 'xB', 'yB', 'zB'}, 'timestamp_ms': int}, ...]
+      // sensorData should come from getSamplesForBackend() which returns this format directly
+      final sensorJson = sensorData != null && sensorData['samples'] != null
+          ? jsonEncode(sensorData['samples'])
+          : '[]';
 
       print(
         '[AnalyticsService] 📡 Sensor data: ${sensorData != null ? '${(sensorData['total_samples'] ?? 0)} samples' : 'not available'}',
