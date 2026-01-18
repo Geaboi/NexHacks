@@ -358,10 +358,23 @@ async def process_video_to_angles(
         # Process video to get joint angles and CSV
         angles, overlay_video_path, csv_path = handler.process_video(video_bytes, parsed_sensor_data)
 
+        # Convert numpy values to native Python floats for JSON serialization
+        import math
+        def to_json_float(v):
+            if v is None:
+                return None
+            try:
+                f = float(v)
+                return None if math.isnan(f) else f
+            except (TypeError, ValueError):
+                return None
+
+        serializable_angles = [[to_json_float(v) for v in frame] for frame in angles]
+
         result = {
             "num_frames": len(angles),
             "num_angles": 6,
-            "angles": angles,  # Include the actual angles data
+            "angles": serializable_angles,
             "overlay_video_path": overlay_video_path,
         }
 
@@ -371,7 +384,8 @@ async def process_video_to_angles(
             with open(csv_path, "rb") as f:
                 files = {"file": (f"{dataset_name}.csv", f, "text/csv")}
                 params = {"overwrite": overwrite}
-                upload_response = requests.post(upload_url, headers=HEADERS, files=files, params=params)
+                data = {"name": dataset_name}
+                upload_response = requests.post(upload_url, headers=HEADERS, files=files, params=params, data=data)
                 upload_response.raise_for_status()
                 dataset_info = upload_response.json()
                 result["dataset"] = dataset_info
