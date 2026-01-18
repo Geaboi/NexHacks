@@ -85,14 +85,14 @@ class _RecordingPageState extends ConsumerState<RecordingPage> {
     // Listen for connection state changes
     _connectionSubscription = _frameStreamingService.connectionStream.listen((connected) {
       if (!connected && _isRecording && _isAnalysisAvailable) {
-        // Connection lost during recording
+        // Connection lost during recording - silently continue without analysis
         print('[RecordingPage] ⚠️ WebSocket connection lost during recording');
         setState(() {
           _isAnalysisAvailable = false;
           _isStreamingFrames = false;
         });
         _stopFrameSampling();
-        _showErrorSnackBar('Analysis connection lost. Recording continues without real-time analysis.');
+        // Removed error popup - recording continues silently
       }
     });
     
@@ -153,6 +153,8 @@ class _RecordingPageState extends ConsumerState<RecordingPage> {
 
     try {
       await _cameraController!.initialize();
+      // Disable flash to prevent constant flashing during frame capture
+      await _cameraController!.setFlashMode(FlashMode.off);
       setState(() {
         _isCameraAvailable = true;
         _isCameraInitialized = true;
@@ -216,12 +218,8 @@ class _RecordingPageState extends ConsumerState<RecordingPage> {
         _isAnalysisAvailable = wsConnected;
       });
       
-      // Notify user if analysis is not available (but don't block recording)
-      if (!wsConnected) {
-        _showWarningSnackBar(
-          'Real-time analysis unavailable. Recording will continue without frame analysis.',
-        );
-      }
+      // Analysis may not be available - continue recording silently
+      // Removed warning popup for better UX
       
       // Capture the video start timestamp BEFORE starting the recording
       _videoStartTimeUtc = DateTime.now().toUtc().millisecondsSinceEpoch;
@@ -259,7 +257,7 @@ class _RecordingPageState extends ConsumerState<RecordingPage> {
       });
     } catch (e) {
       print('[RecordingPage] ❌ Recording failed: $e');
-      _showErrorSnackBar('Failed to start recording: $e');
+      // Silently handle recording failure - don't show popup
     }
   }
 
@@ -367,9 +365,8 @@ class _RecordingPageState extends ConsumerState<RecordingPage> {
       // Clean up the temporary image file
       await File(imageFile.path).delete();
       
-      setState(() {
-        _framesCaptured++;
-      });
+      // Update frame count without triggering UI rebuild for each frame
+      _framesCaptured++;
       
       print('[RecordingPage] 📸 Frame $_framesCaptured captured and sent');
       
@@ -482,7 +479,7 @@ class _RecordingPageState extends ConsumerState<RecordingPage> {
         Timer(Duration(milliseconds: _waitingForResultsTimeoutMs), () {
           if (_isWaitingForResults && mounted) {
             print('[RecordingPage] ⚠️ Timeout waiting for results, proceeding to review');
-            _showErrorSnackBar('Some analysis results were not received.');
+            // Silently proceed without showing error popup
             setState(() {
               _isWaitingForResults = false;
             });
