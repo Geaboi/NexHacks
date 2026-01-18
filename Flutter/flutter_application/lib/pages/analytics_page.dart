@@ -164,20 +164,20 @@ class _AnalyticsPageState extends ConsumerState<AnalyticsPage> {
   String _getAngleValue(String angleType) {
     if (_sessionStats == null) return '--°';
     
-    final stat = _sessionStats!.where((s) => s.angleType == angleType).firstOrNull;
+    final stat = _sessionStats!.where((s) => s.angleName == angleType).firstOrNull;
     if (stat == null) return '--°';
     
-    return '${stat.maxValue.toStringAsFixed(1)}°';
+    return '${stat.max?.toStringAsFixed(1) ?? '--'}°';
   }
 
   /// Get the min-avg range for subtitle
   String _getAngleRange(String angleType) {
     if (_sessionStats == null) return '';
     
-    final stat = _sessionStats!.where((s) => s.angleType == angleType).firstOrNull;
+    final stat = _sessionStats!.where((s) => s.angleName == angleType).firstOrNull;
     if (stat == null) return '';
     
-    return 'Min: ${stat.minValue.toStringAsFixed(1)}° • Avg: ${stat.avgValue.toStringAsFixed(1)}°';
+    return 'Min: ${stat.min?.toStringAsFixed(1) ?? '--'}° • Avg: ${stat.avg?.toStringAsFixed(1) ?? '--'}°';
   }
 
   @override
