@@ -5,6 +5,7 @@
 #include "imu_packet.hpp"
 #include "esp_log.h"
 #include "sensor.hpp"
+#include "driver/gpio.h"
 
 static const char* TAG = "IMU_SYSTEM";
 
@@ -78,11 +79,13 @@ NimBLEAdvertising* initBLE() {
 
 void MyServerCallbacks::onConnect(NimBLEServer* pServer, NimBLEConnInfo& connInfo) {
   printf("Client connected\n");
+  gpio_set_level(GPIO_NUM_17, 1);
 };
 
 void MyServerCallbacks::onDisconnect(NimBLEServer* pServer, NimBLEConnInfo& connInfo, int reason) {
   printf("Client disconnected - reason: %d\n", reason);
   xSemaphoreTake(sensor_run_semaphore, pdMS_TO_TICKS(50)); // stop any recording loop.
+  gpio_set_level(GPIO_NUM_17, 0);
 }
 
 void MyCharCallbacks::onRead(NimBLECharacteristic* pChar, NimBLEConnInfo& connInfo) {
