@@ -134,10 +134,10 @@ class _AnalyticsPageState extends ConsumerState<AnalyticsPage> {
 
       // Get sensor data if samples were collected
       // Check if sensor buffer has any samples - this indicates sensors were used
-      Map<String, dynamic>? sensorData;
+      List<Map<String, dynamic>>? sensorSamples;
       if (sensorState.sampleBuffer.isNotEmpty) {
-        sensorData = ref.read(sensorProvider.notifier).getSamplesAsMap();
-        print('[AnalyticsPage] 📡 Sensor data available: ${sensorData['total_samples']} samples');
+        sensorSamples = ref.read(sensorProvider.notifier).getSamplesForBackend();
+        print('[AnalyticsPage] 📡 Sensor data available: ${sensorSamples.length} samples');
       } else {
         print('[AnalyticsPage] 📡 No sensor data available (sensor not used during recording)');
       }
@@ -153,7 +153,7 @@ class _AnalyticsPageState extends ConsumerState<AnalyticsPage> {
         videoStartTimeUtc: videoStartTimeUtc,
         fps: widget.fps,
         videoDurationMs: widget.videoDurationMs,
-        sensorData: sensorData,
+        sensorSamples: sensorSamples,
         datasetName: 'flutter_recording_${DateTime.now().millisecondsSinceEpoch}',
         modelId: '1OZUO0uahYoua8SklFmr',
       );
