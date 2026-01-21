@@ -8,6 +8,8 @@
 #include "esp_log.h"
 #include "BLE.hpp"
 
+#define DUAL_SENSOR 0
+
 static const char* TAG = "IMU_SYSTEM";
 uint64_t session_start;
 
@@ -16,7 +18,9 @@ void sensor_task(void *pvParameters) {
 
   // Wake up sensors
   mpu6050_write_byte(MPU_ADDR_A, REG_PWR_MGMT_1, 0x00);
+  #if DUAL_SENSOR
   mpu6050_write_byte(MPU_ADDR_B, REG_PWR_MGMT_1, 0x00);
+  #endif
   
   // Optional: Configure Range (e.g., +/- 2000 deg/s) here if needed
 
@@ -50,7 +54,11 @@ void sensor_task(void *pvParameters) {
       memcpy(packet_buffer.samples[sample_index].gyro_A, &raw_data[8], 6);
                                           
       // 2. Read Sensor B and copy to packet buffer
+      #if DUAL_SENSOR
       esp_err_t retB = mpu6050_read_burst(MPU_ADDR_B, REG_ACCEL_XOUT_H, raw_data, 14);
+      #else
+      esp_err_t retB = mpu6050_read_burst(MPU_ADDR_A, REG_ACCEL_XOUT_H, raw_data, 14);
+      #endif
 
       memcpy(packet_buffer.samples[sample_index].acc_B, &raw_data[0], 6);
       memcpy(packet_buffer.samples[sample_index].gyro_B, &raw_data[8], 6);

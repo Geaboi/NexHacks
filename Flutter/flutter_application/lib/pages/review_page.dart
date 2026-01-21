@@ -1,9 +1,11 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:video_player/video_player.dart';
 import '../main.dart';
 import '../providers/navigation_provider.dart';
+import '../providers/sensor_provider.dart';
 import 'analytics_page.dart';
 
 class ReviewPage extends ConsumerStatefulWidget {
@@ -88,6 +90,171 @@ class _ReviewPageState extends ConsumerState<ReviewPage> {
     Navigator.pop(context);
   }
 
+  void _showSensorDataDialog(BuildContext context, WidgetRef ref) {
+    print('[SensorDialog] _showSensorDataDialog called');
+    print('[SensorDialog] context.mounted: ${context.mounted}');
+
+    // Capture sensor data BEFORE showing dialog to avoid rebuild issues
+    if (ref.read(sensorProvider).isRecording) {
+      print('[SensorDialog] Stopping recording first');
+      ref.read(sensorProvider.notifier).stopRecording();
+    }
+
+    final sensorState = ref.read(sensorProvider);
+    final samples = List.unmodifiable(sensorState.sampleBuffer);
+    final droppedPackets = sensorState.droppedPackets;
+
+    print('[SensorDialog] Captured ${samples.length} samples, $droppedPackets dropped');
+
+    // Generate CSV content
+    // Header: time_ms, gyroA_x, gyroA_y, gyroA_z, gyroB_x, gyroB_y, gyroB_z
+    final csvBuffer = StringBuffer();
+    csvBuffer.writeln('time_ms,gyroA_x,gyroA_y,gyroA_z,gyroB_x,gyroB_y,gyroB_z');
+
+    for (final sample in samples) {
+      csvBuffer.writeln(
+        '${sample.timeOffset},'
+        '${sample.gyroA[0].toStringAsFixed(2)},'
+        '${sample.gyroA[1].toStringAsFixed(2)},'
+        '${sample.gyroA[2].toStringAsFixed(2)},'
+        '${sample.gyroB[0].toStringAsFixed(2)},'
+        '${sample.gyroB[1].toStringAsFixed(2)},'
+        '${sample.gyroB[2].toStringAsFixed(2)}',
+      );
+    }
+
+    final csvContent = csvBuffer.toString();
+    final sampleCount = samples.length;
+    final duration = samples.isNotEmpty ? samples.last.timeOffset / 1000 : 0.0;
+
+    print('[SensorDialog] About to call showDialog');
+
+    // Use a local context reference to avoid issues with widget rebuilds
+    final navigatorState = Navigator.of(context, rootNavigator: true);
+
+    showDialog<void>(
+      barrierDismissible: false,  // Disable for debugging - prevents accidental dismiss
+      context: context,
+      useRootNavigator: true,
+      builder: (dialogContext) {
+        print('[SensorDialog] Dialog builder called, dialogContext.mounted: ${dialogContext.mounted}');
+        print('[SensorDialog] Navigator canPop: ${Navigator.of(dialogContext).canPop()}');
+        return PopScope(
+          canPop: true,
+          onPopInvokedWithResult: (didPop, result) {
+            print('[SensorDialog] PopScope onPopInvoked: didPop=$didPop, result=$result');
+          },
+          child: AlertDialog(
+          backgroundColor: AppColors.primary,
+          title: Row(
+            children: [
+              const Icon(Icons.sensors, color: Colors.white),
+              const SizedBox(width: 8),
+              Text(
+                'Sensor Data ($sampleCount samples)',
+                style: const TextStyle(color: Colors.white),
+              ),
+            ],
+          ),
+          content: SizedBox(
+            width: double.maxFinite,
+            height: 400,
+            child: sampleCount == 0
+                ? const Center(
+                    child: Text(
+                      'No sensor data recorded.\nConnect IMU device before recording.',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(color: Colors.white70),
+                    ),
+                  )
+                : Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      // Stats row
+                      Container(
+                        padding: const EdgeInsets.all(8),
+                        decoration: BoxDecoration(
+                          color: AppColors.primaryDark,
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceAround,
+                          children: [
+                            _StatChip(label: 'Samples', value: '$sampleCount'),
+                            const _StatChip(label: 'Rate', value: '100Hz'),
+                            _StatChip(
+                              label: 'Duration',
+                              value: '${duration.toStringAsFixed(1)}s',
+                            ),
+                            _StatChip(
+                              label: 'Dropped',
+                              value: '$droppedPackets',
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      // CSV header
+                      const Text(
+                        'CSV Preview (gyro values in °/s):',
+                        style: TextStyle(color: Colors.white70, fontSize: 12),
+                      ),
+                      const SizedBox(height: 4),
+                      // CSV content in scrollable container
+                      Expanded(
+                        child: Container(
+                          padding: const EdgeInsets.all(8),
+                          decoration: BoxDecoration(
+                            color: Colors.black87,
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: SingleChildScrollView(
+                            child: SelectableText(
+                              csvContent,
+                              style: const TextStyle(
+                                fontFamily: 'monospace',
+                                fontSize: 10,
+                                color: Colors.greenAccent,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+          ),
+          actions: [
+            if (sampleCount > 0)
+              TextButton.icon(
+                onPressed: () {
+                  print('[SensorDialog] Copy button pressed');
+                  Clipboard.setData(ClipboardData(text: csvContent));
+                  ScaffoldMessenger.of(dialogContext).showSnackBar(
+                    const SnackBar(
+                      content: Text('CSV copied to clipboard'),
+                      duration: Duration(seconds: 2),
+                    ),
+                  );
+                },
+                icon: const Icon(Icons.copy, color: Colors.white70),
+                label: const Text('Copy CSV', style: TextStyle(color: Colors.white70)),
+              ),
+            TextButton(
+              onPressed: () {
+                print('[SensorDialog] Close button pressed');
+                Navigator.of(dialogContext).pop();
+              },
+              child: const Text('Close', style: TextStyle(color: Colors.white)),
+            ),
+          ],
+        ),
+        );  // closes PopScope
+      },
+    ).then((_) {
+      print('[SensorDialog] Dialog closed (then callback)');
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     final navState = ref.watch(navigationProvider);
@@ -101,6 +268,14 @@ class _ReviewPageState extends ConsumerState<ReviewPage> {
         backgroundColor: AppColors.primaryDark,
         foregroundColor: Colors.white,
         elevation: 0,
+        actions: [
+          // Developer option to view sensor data
+          IconButton(
+            icon: const Icon(Icons.developer_mode),
+            tooltip: 'View Sensor Data (CSV)',
+            onPressed: () => _showSensorDataDialog(context, ref),
+          ),
+        ],
       ),
       body: SafeArea(
         child: Column(
@@ -268,6 +443,37 @@ class _ReviewPageState extends ConsumerState<ReviewPage> {
           Text('(Placeholder - no video recorded yet)', style: TextStyle(color: AppColors.primaryLight.withOpacity(0.6), fontSize: 14)),
         ],
       ),
+    );
+  }
+}
+
+/// Small stat chip widget for sensor data dialog
+class _StatChip extends StatelessWidget {
+  final String label;
+  final String value;
+
+  const _StatChip({required this.label, required this.value});
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      children: [
+        Text(
+          value,
+          style: const TextStyle(
+            color: Colors.white,
+            fontWeight: FontWeight.bold,
+            fontSize: 14,
+          ),
+        ),
+        Text(
+          label,
+          style: const TextStyle(
+            color: Colors.white70,
+            fontSize: 10,
+          ),
+        ),
+      ],
     );
   }
 }
