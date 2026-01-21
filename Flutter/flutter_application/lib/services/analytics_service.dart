@@ -48,8 +48,8 @@ typedef OvershootPoints = List<List<dynamic>>;
 /// Service for sending video and analysis data to backend and receiving analytics
 class AnalyticsService {
   // Backend Configuration - Update with your actual backend URL
-  static const String _defaultBackendUrl = 'http://api.mateotaylortest.org/api/pose/process';
-  static const String _defaultBaseUrl = 'http://api.mateotaylortest.org';
+  static const String _defaultBackendUrl = 'https://api.mateotaylortest.org/api/pose/process';
+  static const String _defaultBaseUrl = 'https://api.mateotaylortest.org';
 
   /// Submit analysis request to backend
   ///
@@ -99,11 +99,7 @@ class AnalyticsService {
       print('[AnalyticsService] 📊 Mapped ${overshootPoints.length} overshoot points to video frames');
 
       // 3. Prepare sensor data (empty list if not available)
-      // Backend expects format: [{'data': {'xA', 'yA', 'zA', 'xB', 'yB', 'zB'}, 'timestamp_ms': int}, ...]
-      // sensorData should come from getSamplesForBackend() which returns this format directly
-      final sensorJson = sensorData != null && sensorData['samples'] != null
-          ? jsonEncode(sensorData['samples'])
-          : '[]';
+      final sensorJson = sensorData != null && sensorData['samples'] != null ? jsonEncode(sensorData['samples']) : '[]';
 
       print(
         '[AnalyticsService] 📡 Sensor data: ${sensorData != null ? '${(sensorData['total_samples'] ?? 0)} samples' : 'not available'}',

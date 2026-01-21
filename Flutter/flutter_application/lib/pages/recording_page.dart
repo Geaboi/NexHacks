@@ -191,7 +191,7 @@ class _RecordingPageState extends ConsumerState<RecordingPage> {
       bool wsConnected = false;
       try {
         wsConnected = await _frameStreamingService.connect(
-          wsUrl: 'ws://api.mateotaylortest.org/api/overshoot/ws/stream',
+          wsUrl: 'wss://api.mateotaylortest.org/api/overshoot/ws/stream',
           config: config,
         );
         
