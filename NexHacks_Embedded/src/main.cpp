@@ -6,11 +6,18 @@
 #include "esp_log.h"
 #include "sensor.hpp"
 #include "BLE.hpp"
+#include "driver/gpio.h"
 
 static const char* TAG = "IMU_SYSTEM";
 
 void mainfunc() {
   // 1. Init I2C
+  gpio_reset_pin(GPIO_NUM_19);
+  gpio_reset_pin(GPIO_NUM_17);
+  gpio_set_direction(GPIO_NUM_17, GPIO_MODE_OUTPUT);
+  gpio_set_direction(GPIO_NUM_19, GPIO_MODE_OUTPUT);
+  gpio_set_level(GPIO_NUM_19, 0);
+  gpio_set_level(GPIO_NUM_17, 0);
   ESP_ERROR_CHECK(i2c_master_init());
   ESP_LOGI(TAG, "I2C Initialized");
 
