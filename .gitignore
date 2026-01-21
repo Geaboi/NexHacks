@@ -1,4 +1,4 @@
-.env
+.env/
 .vscode/
 .claude/
 rtm/
@@ -7,3 +7,6 @@ venv/
 *.DS_Store
 backend/__pycache__/
 backend/.env
+.env
+backend/.env
+.env

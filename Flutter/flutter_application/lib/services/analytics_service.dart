@@ -48,8 +48,8 @@ typedef OvershootPoints = List<List<dynamic>>;
 /// Service for sending video and analysis data to backend and receiving analytics
 class AnalyticsService {
   // Backend Configuration - Update with your actual backend URL
-  static const String _defaultBackendUrl = 'http://api.mateotaylortest.org/api/pose/process';
-  static const String _defaultBaseUrl = 'http://api.mateotaylortest.org';
+  static const String _defaultBackendUrl = 'http://10.0.2.2:8000/api/pose/process';
+  static const String _defaultBaseUrl = 'http://10.0.2.2:8000';
 
   /// Submit analysis request to backend
   ///

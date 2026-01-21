@@ -29,10 +29,10 @@ class StreamConfig {
     this.model = 'gemini-2.0-flash',
     this.backend = 'gemini',
     this.outputSchemaJson,
-    this.samplingRatio = 1.0,
-    this.fps = 30,
-    this.clipLengthSeconds = 3.0,
-    this.delaySeconds = 3.0,
+    this.samplingRatio = 0.8,
+    this.fps = 15,
+    this.clipLengthSeconds = 0.5,
+    this.delaySeconds = 0.5,
     this.width = 640,
     this.height = 480,
   });
@@ -59,7 +59,7 @@ class StreamConfig {
 /// Service for streaming camera frames to a WebSocket server
 class FrameStreamingService {
   // WebSocket Configuration - Update these for your backend
-  static const String _defaultWsUrl = 'wss://api.mateotaylortest.org/api/overshoot/ws/stream';
+  static const String _defaultWsUrl = 'ws://10.0.2.2:8000/api/overshoot/ws/stream';
     
   IOWebSocketChannel? _wsChannel;
   StreamSubscription? _wsSubscription;
@@ -259,8 +259,10 @@ class FrameStreamingService {
       // Send as binary data
       _wsChannel!.sink.add(frameWithTimestamp);
       
-      // Debug: Print frame sent info
-      debugPrint('[FrameStreaming] Frame sent - timestamp: $timestampUtc, pending: ${_pendingFrameTimestamps.length}');
+      // Debug: Print frame sent info (only every 10th frame)
+      if (_pendingFrameTimestamps.length % 10 == 0) {
+        debugPrint('[FrameStreaming] Frames pending: ${_pendingFrameTimestamps.length}');
+      }
       
       // Notify listeners that a frame was sent to WebSocket
       _frameSentController.add(timestampUtc);
@@ -320,13 +322,10 @@ class FrameStreamingService {
       _wsChannel!.sink.add(frameWithTimestamp);
       _frameSentController.add(timestampUtc);
 
-      final expectedSize = _config.width * _config.height * 3 + 8;
-      print('[FrameStreaming] 📤 Frame sent:');
-      print('[FrameStreaming]   - Timestamp (ms): $timestampUtc');
-      print('[FrameStreaming]   - Timestamp (sec): ${timestampUtc / 1000.0}');
-      print('[FrameStreaming]   - Frame size: ${frameWithTimestamp.length} bytes (expected: $expectedSize)');
-      print('[FrameStreaming]   - RGB data size: ${rgb24Bytes.length} bytes');
-      print('[FrameStreaming]   - Pending count: ${_pendingFrameTimestamps.length}');
+      // Only log every 10th frame to reduce spam
+      if (_pendingFrameTimestamps.length % 10 == 0) {
+        print('[FrameStreaming] 📤 Frames sent, pending: ${_pendingFrameTimestamps.length}');
+      }
     } catch (e) {
       print('[FrameStreaming] ❌ Failed to send frame: $e');
     }
@@ -499,8 +498,16 @@ class FrameStreamingService {
           break;
           
         case 'error':
-          final error = data['message'] as String? ?? 'Unknown error';
+          // Backend sends 'error' field, not 'message'
+          final error = data['error'] as String? ?? data['message'] as String? ?? 'Unknown error';
           print('[FrameStreaming] ❌ ERROR from server: $error');
+          // Mark as not ready and clear pending frames so we don't hang
+          _isReady = false;
+          _pendingFrameTimestamps.clear();
+          // Notify that all results are "received" (none coming) so navigation can proceed
+          if (!_isStreaming) {
+            _allResultsReceivedController.add(null);
+          }
           _resultsController.add(InferenceResult(
             timestampUtc: DateTime.now().toUtc().millisecondsSinceEpoch,
             result: 'Error: $error',
@@ -591,6 +598,12 @@ class FrameStreamingService {
     _isStreaming = false;
     _isReady = false;
     _connectionController.add(false);
+    // Clear pending frames and notify so we don't hang waiting for results
+    if (_pendingFrameTimestamps.isNotEmpty) {
+      print('[FrameStreaming] 🧹 Clearing ${_pendingFrameTimestamps.length} pending frames');
+      _pendingFrameTimestamps.clear();
+      _allResultsReceivedController.add(null);
+    }
   }
 
   /// Clean up resources

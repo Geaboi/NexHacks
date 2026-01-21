@@ -930,7 +930,7 @@ class _MetricCard extends StatelessWidget {
   final String? subtitle;
   final Color color;
 
-  const _MetricCard({required this.icon, required this.title, required this.value, this.subtitle, required this.color});
+  const _MetricCard({required this.icon, required this.title, required this.value, required this.color, this.subtitle});
 
   @override
   Widget build(BuildContext context) {

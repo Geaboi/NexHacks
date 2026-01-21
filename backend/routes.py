@@ -4,6 +4,7 @@ import base64
 import json
 import logging
 import struct
+from unittest import result
 import requests
 import dotenv
 from fastapi import APIRouter, HTTPException, UploadFile, File, Query, Form, WebSocket, WebSocketDisconnect
@@ -12,9 +13,6 @@ from fastapi.responses import FileResponse
 # Load environment variables from .env file
 dotenv.load_dotenv()
 
-import aiohttp
-from aiortc import RTCPeerConnection, RTCSessionDescription, VideoStreamTrack, RTCConfiguration, RTCIceServer
-from av import VideoFrame
 import numpy as np
 
 from config import BASE_URL, HEADERS
@@ -29,12 +27,29 @@ from schemas import (
     OvershootFeedbackRequest,
 )
 from RTMpose.rtmpose3d_handler import RTMPose3DHandler
-from overshoot_client import (
+import sys
+from pathlib import Path
+
+# Add OverShoot SDK to path
+sys.path.insert(0, str(Path(__file__).parent.parent / "OverShoot"))
+
+from overshoot import (
+    # Exceptions
     ApiError,
+    # Clients
     OvershootHttpClient,
-    StreamInferenceConfig,
+    OvershootStreamRelay,
+    # Action Detection
+    ActionDetector,
+    ActionDetectorConfig,
+    ActionStore,
+    DetectedAction,
+    # Config types
     StreamProcessingConfig,
-    DEFAULT_ICE_SERVERS,
+    StreamInferenceConfig,
+    StreamInferenceResult,
+    CameraSource,
+    VideoFileSource,
 )
 
 logger = logging.getLogger(__name__)
@@ -378,31 +393,9 @@ async def process_video_to_angles(
             "overlay_video_path": overlay_video_path,
         }
 
-        if upload_to_woodwide:
-            # Step 1: Upload the CSV as a dataset
-            upload_url = f"{BASE_URL}/api/datasets"
-            with open(csv_path, "rb") as f:
-                files = {"file": (f"{dataset_name}.csv", f, "text/csv")}
-                params = {"overwrite": overwrite}
-                data = {"name": dataset_name}
-                upload_response = requests.post(upload_url, headers=HEADERS, files=files, params=params, data=data)
-                upload_response.raise_for_status()
-                dataset_info = upload_response.json()
-                result["dataset"] = dataset_info
+        result["anomaly_detection"] = []
 
-            # Step 2: Run anomaly detection inference using the uploaded dataset
-            infer_url = f"{BASE_URL}/api/models/anomaly/1OZUO0uahYoua8SklFmr/infer"
-            infer_params = {"dataset_name": dataset_name}
-            infer_data = {"coerce_schema": True}
-            infer_response = requests.post(
-                infer_url,
-                headers=HEADERS,
-                params=infer_params,
-                data=infer_data
-            )
-            infer_response.raise_for_status()
-            result["anomaly_detection"] = infer_response.json()
-
+        
         return result
 
     except requests.exceptions.HTTPError as e:
@@ -536,309 +529,105 @@ async def overshoot_close_stream(stream_id: str):
 # WebSocket Video Streaming to Overshoot
 # ============================================================================
 
-class QueuedVideoTrack(VideoStreamTrack):
-    """
-    A video track that receives frames from an asyncio queue.
-    Frames should be numpy arrays in RGB format (H, W, 3).
-    """
-
-    kind = "video"
-
-    def __init__(self, frame_queue: asyncio.Queue, width: int = 640, height: int = 480):
-        super().__init__()
-        self._queue = frame_queue
-        self._width = width
-        self._height = height
-        self._frame_count = 0
-
-    async def recv(self) -> VideoFrame:
-        pts, time_base = await self.next_timestamp()
-
-        # Wait for a frame from the queue (with timeout to avoid blocking forever)
-        try:
-            frame_data = await asyncio.wait_for(self._queue.get(), timeout=1.0)
-        except asyncio.TimeoutError:
-            # Return a black frame if no data received
-            frame_data = np.zeros((self._height, self._width, 3), dtype=np.uint8)
-
-        # Convert numpy array to VideoFrame
-        video_frame = VideoFrame.from_ndarray(frame_data, format="rgb24")
-        video_frame.pts = pts
-        video_frame.time_base = time_base
-
-        self._frame_count += 1
-        return video_frame
-
-
-async def _listen_overshoot_ws(
-    ws_url: str,
-    api_key: str,
-    cookies: dict,
-    client_ws: WebSocket,
-    stop_event: asyncio.Event,
-    timestamp_state: dict,
-):
-    """
-    Connect to Overshoot WebSocket and forward inference results to the client.
-    Includes the latest frame timestamp in all inference responses.
-    """
-    logger.info(f"[Overshoot WS] Connecting to: {ws_url}")
-    headers = {"Authorization": f"Bearer {api_key}"}
-    if cookies:
-        cookie_str = "; ".join(f"{k}={v}" for k, v in cookies.items())
-        headers["Cookie"] = cookie_str
-        logger.debug(f"[Overshoot WS] Using cookies: {list(cookies.keys())}")
-
-    async with aiohttp.ClientSession() as session:
-        try:
-            async with session.ws_connect(ws_url, headers=headers) as ws:
-                # Send authentication message
-                auth_msg = json.dumps({"api_key": api_key})
-                await ws.send_str(auth_msg)
-                logger.info("[Overshoot WS] Sent authentication message")
-
-                # Notify client that we're connected
-                await client_ws.send_json({"type": "connected", "message": "Connected to Overshoot"})
-                logger.info("[Overshoot WS] Connected successfully")
-
-                async for msg in ws:
-                    if stop_event.is_set():
-                        logger.info("[Overshoot WS] Stop event set, exiting")
-                        break
-
-                    if msg.type == aiohttp.WSMsgType.TEXT:
-                        logger.info(f"[Overshoot WS] Raw message received: {msg.data[:500] if len(msg.data) > 500 else msg.data}")
-                        try:
-                            data = json.loads(msg.data)
-                            logger.info(f"[Overshoot WS] Parsed data keys: {list(data.keys()) if isinstance(data, dict) else type(data)}")
-                            # Get current timestamp to include in response
-                            current_ts = timestamp_state.get("latest")
-                            # Forward inference results to client
-                            if data.get("error"):
-                                logger.error(f"[Overshoot WS] Error from Overshoot: {data['error']}")
-                                await client_ws.send_json({"type": "error", "error": data["error"], "timestamp": current_ts})
-                            elif "result" in data:
-                                logger.info(f"[Overshoot WS] Result received: {str(data['result'])[:200]}")
-                                await client_ws.send_json({"type": "inference", "result": data["result"], "timestamp": current_ts})
-                            elif "inference" in data:
-                                result = data["inference"].get("result", data["inference"])
-                                logger.info(f"[Overshoot WS] Inference received: {str(result)[:200]}")
-                                await client_ws.send_json({"type": "inference", "result": result, "timestamp": current_ts})
-                            else:
-                                logger.info(f"[Overshoot WS] Other message type: {data}")
-                                await client_ws.send_json({"type": "message", "data": data, "timestamp": current_ts})
-                        except json.JSONDecodeError as e:
-                            logger.warning(f"[Overshoot WS] JSON decode error: {e}, raw data: {msg.data[:200]}")
-                            await client_ws.send_json({"type": "raw", "data": msg.data})
-                    elif msg.type == aiohttp.WSMsgType.CLOSED:
-                        logger.info("[Overshoot WS] Connection closed by server")
-                        break
-                    elif msg.type == aiohttp.WSMsgType.ERROR:
-                        logger.error(f"[Overshoot WS] WebSocket error: {ws.exception()}")
-                        break
-                    else:
-                        logger.debug(f"[Overshoot WS] Unhandled message type: {msg.type}")
-        except aiohttp.ClientError as e:
-            logger.error(f"[Overshoot WS] Client error: {type(e).__name__}: {e}")
-            try:
-                await client_ws.send_json({"type": "error", "error": f"Connection error: {e}"})
-            except Exception:
-                pass
-        except Exception as e:
-            logger.error(f"[Overshoot WS] Unexpected error: {type(e).__name__}: {e}", exc_info=True)
-            try:
-                await client_ws.send_json({"type": "error", "error": str(e)})
-            except Exception:
-                pass
-
-
-async def _keepalive_loop(client: OvershootHttpClient, stream_id: str, stop_event: asyncio.Event):
-    """Send keepalive requests periodically."""
-    while not stop_event.is_set():
-        try:
-            await asyncio.sleep(30)
-            if stop_event.is_set():
-                break
-            await client.keepalive(stream_id)
-        except asyncio.CancelledError:
-            break
-        except Exception as e:
-            logger.error(f"Keepalive error: {e}")
-
-
 @overshoot_router.websocket("/ws/stream")
 async def overshoot_video_websocket(websocket: WebSocket):
     """
     WebSocket endpoint for streaming video to Overshoot.
 
     Protocol:
-    1. Client connects and sends a JSON config message:
-       {
-         "type": "config",
-         "prompt": "Describe what you see",
-         "model": "gemini-2.0-flash",
-         "backend": "gemini",  // optional, default "gemini"
-         "fps": 30,  // optional
-         "width": 640,  // optional
-         "height": 480  // optional
-       }
-
-    2. Server responds with:
-       {"type": "ready", "stream_id": "..."}
-
-    3. Client sends video frames with timestamps:
-       - Binary format: first 8 bytes = timestamp (float64 little-endian),
-         remaining bytes = RGB24 numpy array
-       - OR JSON format: {"type": "frame", "timestamp": 1234567890.123, "data": "<base64>"}
-
-    4. Server forwards inference results with the latest timestamp:
-       {"type": "inference", "result": "...", "timestamp": 1234567890.123}
-
-    5. Client can send control messages:
-       {"type": "stop"} - Stop the stream
-       {"type": "update_prompt", "prompt": "new prompt"}
+    1. Client sends config: {"type": "config", "prompt": "...", "model": "gemini-2.0-flash", ...}
+    2. Server responds: {"type": "ready", "stream_id": "..."}
+    3. Client sends frames (binary: 8-byte timestamp + RGB24, or JSON with base64)
+    4. Server sends results: {"type": "inference", "result": "...", "timestamp": ...}
+    5. Control: {"type": "stop"} or {"type": "update_prompt", "prompt": "..."}
     """
     await websocket.accept()
-
-    api_key = _overshoot_api_key()
-    api_url = _overshoot_api_url()
-
-    frame_queue: asyncio.Queue = asyncio.Queue(maxsize=30)
-    stop_event = asyncio.Event()
-    timestamp_state: dict = {"latest": None}  # Shared state for tracking latest timestamp
-    pc: RTCPeerConnection | None = None
-    client: OvershootHttpClient | None = None
-    stream_id: str | None = None
-    tasks: list[asyncio.Task] = []
+    relay: OvershootStreamRelay = None
 
     try:
-        # Wait for config message
+        # Wait for config
         config_data = await websocket.receive_json()
-        logger.info(f"[Overshoot WS Stream] Received config: {config_data}")
         if config_data.get("type") != "config":
-            logger.warning("[Overshoot WS Stream] First message was not config type")
             await websocket.send_json({"type": "error", "error": "First message must be config"})
-            await websocket.close()
             return
 
-        prompt = config_data.get("prompt", "Describe what you see")
-        model = config_data.get("model", "gemini-2.0-flash")
-        backend = config_data.get("backend", "gemini")
-        fps = config_data.get("fps", 30)
+        # Parse nested config from Flutter
+        inference_config = config_data.get("inference", {})
+        processing_config = config_data.get("processing", {})
+
+        prompt = inference_config.get("prompt", config_data.get("prompt", "Describe what you see"))
+        model = inference_config.get("model", config_data.get("model", "gemini-2.0-flash"))
+        backend = inference_config.get("backend", config_data.get("backend", "gemini"))
+
+        fps = processing_config.get("fps", config_data.get("fps", 15))
+        sampling_ratio = processing_config.get("sampling_ratio", 0.8)
+        clip_length_seconds = processing_config.get("clip_length_seconds", 0.5)
+        delay_seconds = processing_config.get("delay_seconds", 0.5)
+
         width = config_data.get("width", 640)
         height = config_data.get("height", 480)
 
-        logger.info(f"[Overshoot WS Stream] Config: model={model}, backend={backend}, fps={fps}, size={width}x{height}")
+        print(f"[Overshoot] Config: model={model}, size={width}x{height}, delay={delay_seconds}s, clip={clip_length_seconds}s")
 
-        # Create video track
-        video_track = QueuedVideoTrack(frame_queue, width=width, height=height)
+        # Create relay with callback to forward results to client
+        async def send_result(result: dict):
+            print(f"[Overshoot] 📥 RESULT FROM OVERSHOOT: {result}")
+            try:
+                await websocket.send_json(result)
+            except Exception as e:
+                print(f"[Overshoot] Failed to send result: {e}")
 
-        # Create WebRTC peer connection with ICE servers
-        ice_servers = [
-            RTCIceServer(
-                urls=server["urls"],
-                username=server["username"],
-                credential=server["credential"],
-            )
-            for server in DEFAULT_ICE_SERVERS
-        ]
-        config = RTCConfiguration(iceServers=ice_servers)
-        pc = RTCPeerConnection(configuration=config)
-        pc.addTrack(video_track)
+        def on_relay_error(e: Exception):
+            print(f"[Overshoot] ❌ RELAY ERROR: {e}")
 
-        # Create offer
-        offer = await pc.createOffer()
-        await pc.setLocalDescription(offer)
-        logger.info("[Overshoot WS Stream] WebRTC offer created")
-
-        # Create Overshoot stream
-        client = OvershootHttpClient(api_url, api_key)
-
-        processing = StreamProcessingConfig(
-            sampling_ratio=0.5,
-            fps=fps,
-            clip_length_seconds=2.0,
-            delay_seconds=5.0,
-        )
-        inference = StreamInferenceConfig(
+        relay = OvershootStreamRelay(
+            api_url=_overshoot_api_url(),
+            api_key=_overshoot_api_key(),
             prompt=prompt,
-            backend=backend,
+            on_result=lambda r: asyncio.create_task(send_result(r)),
+            on_error=on_relay_error,
             model=model,
+            backend=backend,
+            width=width,
+            height=height,
+            fps=fps,
+            sampling_ratio=sampling_ratio,
+            clip_length_seconds=clip_length_seconds,
+            delay_seconds=delay_seconds,
         )
 
-        logger.info("[Overshoot WS Stream] Creating Overshoot stream...")
-        response = await client.create_stream(
-            offer_sdp=pc.localDescription.sdp,
-            processing=processing,
-            inference=inference,
-        )
-        logger.info(f"[Overshoot WS Stream] Stream created, response: {response}")
-
-        stream_id = response["stream_id"]
-        answer_sdp = response["webrtc"]["sdp"]
-
-        # Set remote description
-        answer = RTCSessionDescription(sdp=answer_sdp, type="answer")
-        await pc.setRemoteDescription(answer)
-        logger.info(f"[Overshoot WS Stream] WebRTC connection established, stream_id={stream_id}")
-
-        # Store client for session management
-        async with _overshoot_sessions_lock:
-            _overshoot_sessions[stream_id] = client
-
-        # Get WebSocket URL for inference results
-        ws_url = client.get_websocket_url(stream_id)
-        cookies = client.get_cookies()
-        logger.info(f"[Overshoot WS Stream] Inference WS URL: {ws_url}")
-
-        # Start background tasks
-        ws_task = asyncio.create_task(
-            _listen_overshoot_ws(ws_url, api_key, cookies, websocket, stop_event, timestamp_state)
-        )
-        keepalive_task = asyncio.create_task(
-            _keepalive_loop(client, stream_id, stop_event)
-        )
-        tasks = [ws_task, keepalive_task]
-
-        # Send ready message
+        logger.info("[Overshoot] 🚀 Calling relay.start()...")
+        stream_id = await relay.start()
+        logger.info(f"[Overshoot] ✅ Relay started with stream_id: {stream_id}")
         await websocket.send_json({"type": "ready", "stream_id": stream_id})
-        logger.info(f"[Overshoot WS Stream] Ready, stream_id={stream_id}")
+        await websocket.send_json({"type": "connected", "message": "Connected to Overshoot"})
 
         # Main loop: receive frames and control messages
-        while not stop_event.is_set():
+        while relay.is_running:
             message = await websocket.receive()
 
             if message["type"] == "websocket.disconnect":
                 break
 
             if "bytes" in message:
-                # Binary frame data with timestamp
-                # Format: first 8 bytes = timestamp (float64 little-endian), rest = RGB24 frame
+                # Binary frame: optional 8-byte timestamp prefix + RGB24 data
                 frame_bytes = message["bytes"]
-                try:
-                    expected_frame_size = height * width * 3
-                    if len(frame_bytes) == expected_frame_size + 8:
-                        # Extract timestamp (first 8 bytes as float64 little-endian)
-                        timestamp = struct.unpack('<d', frame_bytes[:8])[0]
-                        timestamp_state["latest"] = timestamp
-                        frame_data = frame_bytes[8:]
-                    else:
-                        # Backward compatibility: no timestamp, just frame data
-                        frame_data = frame_bytes
+                expected_size = height * width * 3
 
-                    # Decode frame (expecting RGB24 numpy array)
+                if len(frame_bytes) == expected_size + 8:
+                    timestamp = struct.unpack('<d', frame_bytes[:8])[0]
+                    frame_data = frame_bytes[8:]
+                else:
+                    timestamp = None
+                    frame_data = frame_bytes
+
+                try:
                     frame = np.frombuffer(frame_data, dtype=np.uint8).reshape((height, width, 3))
-                    # Put frame in queue (non-blocking, drop if full)
-                    try:
-                        frame_queue.put_nowait(frame)
-                    except asyncio.QueueFull:
-                        # Drop frame if queue is full
-                        pass
+                    relay.push_frame(frame, timestamp)
                 except (ValueError, struct.error) as e:
-                    logger.warning(f"Invalid frame data: {e}")
+                    print(f"[Backend] ❌ Invalid frame: {e}")
 
             elif "text" in message:
-                # JSON control message
                 try:
                     data = json.loads(message["text"])
                     msg_type = data.get("type")
@@ -847,61 +636,37 @@ async def overshoot_video_websocket(websocket: WebSocket):
                         break
                     elif msg_type == "update_prompt":
                         new_prompt = data.get("prompt")
-                        if new_prompt and stream_id:
-                            await client.update_prompt(stream_id, new_prompt)
+                        if new_prompt:
+                            await relay.update_prompt(new_prompt)
                             await websocket.send_json({"type": "prompt_updated", "prompt": new_prompt})
                     elif msg_type == "frame":
-                        # JSON frame with timestamp and base64-encoded data
+                        # JSON frame with base64 data
                         timestamp = data.get("timestamp")
-                        if timestamp is not None:
-                            timestamp_state["latest"] = timestamp
                         frame_b64 = data.get("data")
                         if frame_b64:
                             frame_data = base64.b64decode(frame_b64)
                             frame = np.frombuffer(frame_data, dtype=np.uint8).reshape((height, width, 3))
-                            try:
-                                frame_queue.put_nowait(frame)
-                            except asyncio.QueueFull:
-                                pass
+                            relay.push_frame(frame, timestamp)
                 except json.JSONDecodeError:
                     pass
 
     except WebSocketDisconnect:
-        logger.info("[Overshoot WS Stream] Client disconnected")
+        logger.info("[Overshoot] Client disconnected")
     except ApiError as e:
-        logger.error(f"[Overshoot WS Stream] API error: {e.status_code} - {e.message}")
+        logger.error(f"[Overshoot] API error: {e.status_code} - {e.message}")
         try:
             await websocket.send_json({"type": "error", "error": e.message})
         except Exception:
             pass
     except Exception as e:
-        logger.exception(f"[Overshoot WS Stream] Unexpected error: {type(e).__name__}: {e}")
+        logger.exception(f"[Overshoot] Error: {e}")
         try:
             await websocket.send_json({"type": "error", "error": str(e)})
         except Exception:
             pass
     finally:
-        # Cleanup
-        logger.info(f"[Overshoot WS Stream] Cleaning up, stream_id={stream_id}")
-        stop_event.set()
-
-        for task in tasks:
-            task.cancel()
-            try:
-                await task
-            except asyncio.CancelledError:
-                pass
-
-        if pc:
-            await pc.close()
-
-        if stream_id:
-            async with _overshoot_sessions_lock:
-                _overshoot_sessions.pop(stream_id, None)
-
-        if client:
-            await client.close()
-
+        if relay:
+            await relay.stop()
         try:
             await websocket.close()
         except Exception:

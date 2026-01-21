@@ -33,8 +33,10 @@ class _RecordingPageState extends ConsumerState<RecordingPage> {
   
   // ==================== FRAME SAMPLING CONFIGURATION ====================
   // Adjust this value to change how many frames per second are captured
-  // 1.0 = 1 frame per second, 0.5 = 1 frame every 2 seconds, 2.0 = 2 frames per second
-  static const double _frameSamplingFps = 1.0;
+  // Higher values = more frames sent to OverShoot for better inference
+  // Note: takePicture() has overhead, so practical max is ~15 fps
+  // For 30fps, would need to use startImageStream() instead of takePicture()
+  static const double _frameSamplingFps = 15.0;
   // ======================================================================
   
   // Frame sampling for hybrid approach
@@ -191,7 +193,7 @@ class _RecordingPageState extends ConsumerState<RecordingPage> {
       bool wsConnected = false;
       try {
         wsConnected = await _frameStreamingService.connect(
-          wsUrl: 'ws://api.mateotaylortest.org/api/overshoot/ws/stream',
+          wsUrl: 'ws://10.0.2.2:8000/api/overshoot/ws/stream',
           config: config,
         );
         
@@ -340,8 +342,11 @@ class _RecordingPageState extends ConsumerState<RecordingPage> {
       
       // Update frame count without triggering UI rebuild for each frame
       _framesCaptured++;
-      
-      print('[RecordingPage] 📸 Frame $_framesCaptured captured and sent');
+
+      // Only log every 10th frame to reduce spam
+      if (_framesCaptured % 10 == 0) {
+        print('[RecordingPage] 📸 Frames captured: $_framesCaptured');
+      }
       
     } catch (e) {
       print('[RecordingPage] ⚠️ Frame capture failed: $e');
