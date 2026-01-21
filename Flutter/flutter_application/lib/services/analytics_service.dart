@@ -200,7 +200,7 @@ class AnalyticsService {
       queryParameters: {
         'dataset_name': datasetName,
         'model_id': modelId,
-        'upload_to_woodwide': 'true',
+        'upload_to_woodwide': 'false',
         'overwrite': 'false',
       },
     );
