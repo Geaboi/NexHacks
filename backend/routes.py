@@ -8,6 +8,7 @@ import requests
 import dotenv
 from fastapi import APIRouter, HTTPException, UploadFile, File, Query, Form, WebSocket, WebSocketDisconnect
 from fastapi.responses import FileResponse
+import cv2
 
 # Load environment variables from .env file
 dotenv.load_dotenv(os.path.join(os.path.dirname(__file__), ".env"), override=True)
@@ -827,7 +828,9 @@ async def overshoot_video_websocket(websocket: WebSocket):
                         frame_data = frame_bytes
 
                     # Decode frame (expecting RGB24 numpy array)
-                    frame = np.frombuffer(frame_data, dtype=np.uint8).reshape((height, width, 3))
+                    frame = np.frombuffer(frame_data, dtype=np.uint8)
+                    frame = cv2.imdecode(frame, cv2.IMREAD_COLOR)
+                    frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
                     # Put frame in queue (non-blocking, drop if full)
                     try:
                         frame_queue.put_nowait(frame)

@@ -114,14 +114,12 @@ class SessionHistoryNotifier extends Notifier<SessionHistoryState> {
       // Convert backend angles to FrameAngle objects
       final frameAngles = <FrameAngle>[];
       for (int i = 0; i < angles.length; i++) {
-        if (angles[i] is List) {
           frameAngles.add(FrameAngle.fromBackendList(
             sessionId: sessionId,
             frameIndex: i,
             angles: angles[i],
             fps: fps,
           ));
-        }
       }
 
       // Batch insert frame angles

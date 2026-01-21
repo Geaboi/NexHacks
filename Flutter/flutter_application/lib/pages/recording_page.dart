@@ -1,11 +1,8 @@
 import 'dart:async';
 import 'dart:io';
-import 'dart:isolate';
-import 'dart:typed_data';
 import 'package:camera/camera.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:image/image.dart' as img;
 import 'package:path_provider/path_provider.dart';
 import '../main.dart';
 import '../providers/navigation_provider.dart';
@@ -30,18 +27,17 @@ class _RecordingPageState extends ConsumerState<RecordingPage> {
   int _recordingSeconds = 0;
   int _selectedCameraIndex = 0;
   List<CameraDescription> _cameras = [];
-  
-  // ==================== FRAME SAMPLING CONFIGURATION ====================
-  // Adjust this value to change how many frames per second are captured
-  // 1.0 = 1 frame per second, 0.5 = 1 frame every 2 seconds, 2.0 = 2 frames per second
-  static const double _frameSamplingFps = 1.0;
-  // ======================================================================
-  
-  // Frame sampling for hybrid approach
-  Timer? _frameSamplingTimer;
-  bool _isCapturingFrame = false;
+
+  // ==================== VIDEO RECORDING TOGGLE ====================
+  // Set to false to disable startVideoRecording and only use startImageStream
+  // WARNING: Disabling video recording may break later processing (review page)
+  static const bool _enableVideoRecording = false;
+  // ================================================================
+
+  // Frame streaming via startImageStream
+  bool _isImageStreamActive = false;
   int _framesCaptured = 0;
-  
+
   // Frame streaming
   final FrameStreamingService _frameStreamingService = FrameStreamingService();
   bool _isStreamingFrames = false;
@@ -52,7 +48,7 @@ class _RecordingPageState extends ConsumerState<RecordingPage> {
   StreamSubscription<bool>? _connectionSubscription;
   String? _latestInferenceResult;
   int? _videoStartTimeUtc; // UTC timestamp when MP4 recording started
-  
+
   // Timeout constants
   static const int _wsReadyTimeoutMs = 5000; // 5 seconds to wait for WS ready
   static const int _waitingForResultsTimeoutMs = 10000; // 10 seconds max wait for results
@@ -66,19 +62,16 @@ class _RecordingPageState extends ConsumerState<RecordingPage> {
 
   void _setupFrameStreamingListeners() {
     // Set up listeners for WebSocket events (without connecting yet)
-    
+
     // Listen for inference results from the server (sparse storage - only store these)
     _resultsSubscription = _frameStreamingService.resultsStream.listen((result) {
       // Add frame with result directly (sparse storage)
-      ref.read(frameAnalysisProvider.notifier).addFrameWithResult(
-        result.timestampUtc,
-        result.result,
-      );
+      ref.read(frameAnalysisProvider.notifier).addFrameWithResult(result.timestampUtc, result.result);
       setState(() {
         _latestInferenceResult = result.result;
       });
     });
-    
+
     // Listen for connection state changes
     _connectionSubscription = _frameStreamingService.connectionStream.listen((connected) {
       if (!connected && _isRecording && _isAnalysisAvailable) {
@@ -88,11 +81,11 @@ class _RecordingPageState extends ConsumerState<RecordingPage> {
           _isAnalysisAvailable = false;
           _isStreamingFrames = false;
         });
-        _stopFrameSampling();
+        _stopImageStream();
         // Removed error popup - recording continues silently
       }
     });
-    
+
     // Listen for all results received
     _allResultsSubscription = _frameStreamingService.allResultsReceivedStream.listen((_) {
       // Mark session complete and navigate
@@ -130,11 +123,7 @@ class _RecordingPageState extends ConsumerState<RecordingPage> {
     // Dispose existing controller
     await _cameraController?.dispose();
 
-    _cameraController = CameraController(
-      _cameras[cameraIndex],
-      ResolutionPreset.high,
-      enableAudio: true,
-    );
+    _cameraController = CameraController(_cameras[cameraIndex], ResolutionPreset.high, enableAudio: true);
 
     try {
       await _cameraController!.initialize();
@@ -176,17 +165,17 @@ class _RecordingPageState extends ConsumerState<RecordingPage> {
 
       // Connect to WebSocket server NOW (when recording starts)
       const config = StreamConfig(
-        prompt: 'Analyze the physical therapy exercise form',
+        prompt: 'Describe what you see',
         model: 'gemini-2.0-flash',
         backend: 'gemini',
-        samplingRatio: 1.0,
-        fps: 30,
-        clipLengthSeconds: 3.0,
-        delaySeconds: 3.0,
+        samplingRatio: 0.1,
+        fps: 10,
+        clipLengthSeconds: 1.0,
+        delaySeconds: 1.0,
         width: 640,
         height: 480,
       );
-      
+
       // Attempt to connect to WebSocket - may fail, that's OK
       bool wsConnected = false;
       try {
@@ -194,7 +183,7 @@ class _RecordingPageState extends ConsumerState<RecordingPage> {
           wsUrl: 'wss://api.mateotaylortest.org/api/overshoot/ws/stream',
           config: config,
         );
-        
+
         // Wait for WebSocket to become ready (receive 'ready' message from server)
         if (wsConnected) {
           wsConnected = await _waitForWebSocketReady();
@@ -203,36 +192,42 @@ class _RecordingPageState extends ConsumerState<RecordingPage> {
         print('[RecordingPage] ⚠️ WebSocket connection failed: $e');
         wsConnected = false;
       }
-      
+
       // Set analysis availability based on connection success
       setState(() {
         _isAnalysisAvailable = wsConnected;
       });
-      
+
       // Analysis may not be available - continue recording silently
       // Removed warning popup for better UX
-      
+
       // Capture the video start timestamp BEFORE starting the recording
       _videoStartTimeUtc = DateTime.now().toUtc().millisecondsSinceEpoch;
-      
+
       // Start a new analysis session in the provider with the video start timestamp
       ref.read(frameAnalysisProvider.notifier).startSession(_videoStartTimeUtc!);
-      
-      // Start video recording (saves to file)
-      await _cameraController!.startVideoRecording();
+
+      // Start video recording (saves to file) - only if enabled
+      if (_enableVideoRecording) {
+        await _cameraController!.startVideoRecording();
+        print('[RecordingPage] 🎥 Video recording started');
+      } else {
+        print('[RecordingPage] 🎥 Video recording DISABLED - only image stream will run');
+      }
+
       if (ref.read(sensorProvider).isConnected) {
         sensorNotifier.startRecording();
       }
-      
+
       // Only start frame streaming if analysis is available
       if (_isAnalysisAvailable) {
         print('[RecordingPage] 🎬 Starting frame streaming service...');
         _frameStreamingService.startStreaming(cameraFps: 30);
-        
-        // Start hybrid frame sampling (takes pictures at configured FPS)
-        _startFrameSampling();
+
+        // Start image stream for frame capture (uses startImageStream instead of takePicture)
+        _startImageStream();
       }
-      
+
       setState(() {
         _isRecording = true;
         _isStreamingFrames = _isAnalysisAvailable;
@@ -256,10 +251,10 @@ class _RecordingPageState extends ConsumerState<RecordingPage> {
   /// Returns true if ready within timeout, false otherwise
   Future<bool> _waitForWebSocketReady() async {
     if (_frameStreamingService.isReady) return true;
-    
+
     final completer = Completer<bool>();
     Timer? timeoutTimer;
-    
+
     // Set up timeout
     timeoutTimer = Timer(Duration(milliseconds: _wsReadyTimeoutMs), () {
       if (!completer.isCompleted) {
@@ -267,13 +262,13 @@ class _RecordingPageState extends ConsumerState<RecordingPage> {
         completer.complete(false);
       }
     });
-    
+
     // Check if already ready
     if (_frameStreamingService.isReady) {
       timeoutTimer.cancel();
       return true;
     }
-    
+
     // Poll for ready state (simpler than adding a ready stream)
     final pollTimer = Timer.periodic(const Duration(milliseconds: 100), (timer) {
       if (_frameStreamingService.isReady) {
@@ -284,130 +279,64 @@ class _RecordingPageState extends ConsumerState<RecordingPage> {
         }
       }
     });
-    
+
     final result = await completer.future;
     pollTimer.cancel();
     return result;
   }
 
-
-  /// Start periodic frame sampling using takePicture()
-  /// This runs in parallel with video recording
-  void _startFrameSampling() {
-    print('[RecordingPage] 📸 Starting frame sampling at $_frameSamplingFps fps...');
-    
-    // Calculate interval in milliseconds from FPS
-    final intervalMs = (1000 / _frameSamplingFps).round();
-    
-    _frameSamplingTimer = Timer.periodic(
-      Duration(milliseconds: intervalMs),
-      (_) => _captureAndSendFrame(),
-    );
-    
-    // Also capture first frame immediately
-    _captureAndSendFrame();
-  }
-  
-  /// Capture a single frame and send it to the WebSocket
-  Future<void> _captureAndSendFrame() async {
-    // Prevent overlapping captures
-    if (_isCapturingFrame || !_isRecording || _cameraController == null) return;
-    
-    _isCapturingFrame = true;
-    
-    try {
-      // Get timestamp BEFORE taking picture for accuracy
-      final timestampUtc = DateTime.now().toUtc().millisecondsSinceEpoch;
-      
-      // Take a picture (this works even during video recording)
-      final XFile imageFile = await _cameraController!.takePicture();
-      
-      // Read the JPEG bytes
-      final Uint8List jpegBytes = await File(imageFile.path).readAsBytes();
-      
-      // Convert JPEG to RGB24 in an isolate to avoid blocking UI
-      final rgb24Bytes = await _decodeJpegToRgb24(
-        jpegBytes,
-        _frameStreamingService.configWidth,
-        _frameStreamingService.configHeight,
-      );
-      
-      // Send to WebSocket with the captured timestamp
-      _frameStreamingService.sendRawFrameWithTimestamp(rgb24Bytes, timestampUtc);
-      
-      // Clean up the temporary image file
-      await File(imageFile.path).delete();
-      
-      // Update frame count without triggering UI rebuild for each frame
-      _framesCaptured++;
-      
-      print('[RecordingPage] 📸 Frame $_framesCaptured captured and sent');
-      
-    } catch (e) {
-      print('[RecordingPage] ⚠️ Frame capture failed: $e');
-    } finally {
-      _isCapturingFrame = false;
-    }
-  }
-  
-  /// Decode JPEG bytes to RGB24 format
-  /// Runs in isolate to avoid blocking the UI thread
-  Future<Uint8List> _decodeJpegToRgb24(
-    Uint8List jpegBytes,
-    int targetWidth,
-    int targetHeight,
-  ) async {
-    return await Isolate.run(() {
-      // Decode JPEG
-      final image = img.decodeJpg(jpegBytes);
-      if (image == null) {
-        return Uint8List(targetWidth * targetHeight * 3);
-      }
-      
-      // Resize to target dimensions
-      final resized = img.copyResize(
-        image,
-        width: targetWidth,
-        height: targetHeight,
-        interpolation: img.Interpolation.linear,
-      );
-      
-      // Convert to RGB24 bytes
-      final rgb24 = Uint8List(targetWidth * targetHeight * 3);
-      int index = 0;
-      
-      for (int y = 0; y < targetHeight; y++) {
-        for (int x = 0; x < targetWidth; x++) {
-          final pixel = resized.getPixel(x, y);
-          rgb24[index++] = pixel.r.toInt();
-          rgb24[index++] = pixel.g.toInt();
-          rgb24[index++] = pixel.b.toInt();
-        }
-      }
-      
-      return rgb24;
-    });
-  }
-  
-  /// Stop frame sampling
-  void _stopFrameSampling() {
-    _frameSamplingTimer?.cancel();
-    _frameSamplingTimer = null;
-    print('[RecordingPage] 📸 Frame sampling stopped. Total frames captured: $_framesCaptured');
-  }
-
-  Future<void> _stopRecording() async {
-    if (_cameraController == null || !_cameraController!.value.isRecordingVideo) {
+  /// Start image stream for frame capture at target FPS
+  /// This uses startImageStream instead of takePicture for better performance
+  void _startImageStream() {
+    if (_cameraController == null || !_cameraController!.value.isInitialized) {
+      print('[RecordingPage] ⚠️ Cannot start image stream - camera not initialized');
       return;
     }
 
-    _recordingTimer?.cancel();
-    
-    // Stop frame sampling first (only if it was running)
-    if (_isAnalysisAvailable) {
-      _stopFrameSampling();
+    _framesCaptured = 0;
+
+    print('[RecordingPage] 📹 Starting image stream (frame skipping handled by FrameStreamingService)...');
+
+    _cameraController!.startImageStream((CameraImage image) {
+      // Process every frame - FrameStreamingService handles frame skipping internally
+      // based on the configured FPS in StreamConfig
+      _frameStreamingService.processFrame(image);
+
+      _framesCaptured++;
+      if (_framesCaptured % 30 == 0) {
+        print('[RecordingPage] 📹 Image stream: $_framesCaptured frames received');
+      }
+    });
+
+    _isImageStreamActive = true;
+  }
+
+  /// Stop image stream
+  Future<void> _stopImageStream() async {
+    if (_cameraController != null && _isImageStreamActive) {
+      try {
+        await _cameraController!.stopImageStream();
+      } catch (e) {
+        print('[RecordingPage] ⚠️ Error stopping image stream: $e');
+      }
     }
-    
+    _isImageStreamActive = false;
+    print('[RecordingPage] 📹 Image stream stopped. Total frames processed: $_framesCaptured');
+  }
+
+  Future<void> _stopRecording() async {
+    // When video recording is disabled, check _isRecording instead of isRecordingVideo
+    if (_cameraController == null) return;
+    if (_enableVideoRecording && !_cameraController!.value.isRecordingVideo) return;
+    if (!_enableVideoRecording && !_isRecording) return;
+
+    _recordingTimer?.cancel();
+
+    // Stop image stream first (only if it was running)
+    if (_isAnalysisAvailable) {
+      await _stopImageStream();
+    }
+
     // Stop BLE sensor recording
     final sensorNotifier = ref.read(sensorProvider.notifier);
     if (ref.read(sensorProvider).isConnected) {
@@ -416,24 +345,32 @@ class _RecordingPageState extends ConsumerState<RecordingPage> {
       final sensorData = sensorNotifier.getSamplesAsMap();
       debugPrint('Collected ${sensorData['total_samples']} IMU samples');
     }
-    
+
     // Stop frame streaming - mark session as stopped in provider
     ref.read(frameAnalysisProvider.notifier).stopRecording();
-    
+
     // Only stop streaming if it was active
     if (_isAnalysisAvailable) {
       _frameStreamingService.stopStreaming();
     }
 
     try {
-      final XFile videoFile = await _cameraController!.stopVideoRecording();
-      
-      // Get temp directory and copy the video
-      final tempDir = await getTemporaryDirectory();
-      _tempVideoPath = '${tempDir.path}/temp_record.mp4';
-      
-      // Copy recorded video to temp path
-      await File(videoFile.path).copy(_tempVideoPath!);
+      // Only stop video recording if it was enabled
+      if (_enableVideoRecording) {
+        final XFile videoFile = await _cameraController!.stopVideoRecording();
+
+        // Get temp directory and copy the video
+        final tempDir = await getTemporaryDirectory();
+        _tempVideoPath = '${tempDir.path}/temp_record.mp4';
+
+        // Copy recorded video to temp path
+        await File(videoFile.path).copy(_tempVideoPath!);
+        print('[RecordingPage] 🎥 Video recording stopped and saved');
+      } else {
+        // No video file when video recording is disabled
+        _tempVideoPath = null;
+        print('[RecordingPage] 🎥 Recording stopped (no video - video recording was disabled)');
+      }
 
       setState(() {
         _isRecording = false;
@@ -447,7 +384,7 @@ class _RecordingPageState extends ConsumerState<RecordingPage> {
         setState(() {
           _isWaitingForResults = true;
         });
-        
+
         // Start a timeout timer - don't wait forever for results
         Timer(Duration(milliseconds: _waitingForResultsTimeoutMs), () {
           if (_isWaitingForResults && mounted) {
@@ -460,7 +397,7 @@ class _RecordingPageState extends ConsumerState<RecordingPage> {
             _navigateToReview();
           }
         });
-        
+
         // Navigation will happen when allResultsReceivedStream fires (or timeout)
       } else {
         // No pending frames or analysis wasn't available, navigate immediately
@@ -499,12 +436,16 @@ class _RecordingPageState extends ConsumerState<RecordingPage> {
   }
 
   void _navigateToReview() {
-    if (mounted && _tempVideoPath != null) {
-      Navigator.push(
-        context,
-        MaterialPageRoute(
-          builder: (_) => ReviewPage(videoPath: _tempVideoPath!),
-        ),
+    if (!mounted) return;
+
+    // When video recording is disabled, we may not have a video path
+    if (_tempVideoPath != null) {
+      Navigator.push(context, MaterialPageRoute(builder: (_) => ReviewPage(videoPath: _tempVideoPath!)));
+    } else if (!_enableVideoRecording) {
+      // Video recording was disabled - show a message instead of navigating
+      print('[RecordingPage] ℹ️ No video to review (video recording was disabled)');
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Image stream test complete. No video recorded.'), duration: Duration(seconds: 3)),
       );
     }
   }
@@ -537,7 +478,10 @@ class _RecordingPageState extends ConsumerState<RecordingPage> {
   @override
   void dispose() {
     _recordingTimer?.cancel();
-    _frameSamplingTimer?.cancel();
+    // Stop image stream if active
+    if (_isImageStreamActive && _cameraController != null) {
+      _cameraController!.stopImageStream().catchError((_) {});
+    }
     _resultsSubscription?.cancel();
     _allResultsSubscription?.cancel();
     _connectionSubscription?.cancel();
@@ -571,17 +515,11 @@ class _RecordingPageState extends ConsumerState<RecordingPage> {
                       width: 8,
                       height: 8,
                       margin: const EdgeInsets.only(right: 6),
-                      decoration: const BoxDecoration(
-                        color: AppColors.success,
-                        shape: BoxShape.circle,
-                      ),
+                      decoration: const BoxDecoration(color: AppColors.success, shape: BoxShape.circle),
                     ),
                   const Text(
                     'Done',
-                    style: TextStyle(
-                      color: AppColors.accent,
-                      fontWeight: FontWeight.bold,
-                    ),
+                    style: TextStyle(color: AppColors.accent, fontWeight: FontWeight.bold),
                   ),
                 ],
               ),
@@ -593,7 +531,7 @@ class _RecordingPageState extends ConsumerState<RecordingPage> {
           children: [
             // Camera Preview or Placeholder
             _buildCameraPreview(),
-            
+
             // Waiting for Results Overlay
             if (_isWaitingForResults)
               Container(
@@ -606,17 +544,12 @@ class _RecordingPageState extends ConsumerState<RecordingPage> {
                       const SizedBox(height: 24),
                       Text(
                         'Processing frames...',
-                        style: theme.textTheme.titleMedium?.copyWith(
-                          color: Colors.white,
-                          fontWeight: FontWeight.w500,
-                        ),
+                        style: theme.textTheme.titleMedium?.copyWith(color: Colors.white, fontWeight: FontWeight.w500),
                       ),
                       const SizedBox(height: 8),
                       Text(
                         '${_frameStreamingService.pendingFrameCount} frames remaining',
-                        style: theme.textTheme.bodyMedium?.copyWith(
-                          color: Colors.white70,
-                        ),
+                        style: theme.textTheme.bodyMedium?.copyWith(color: Colors.white70),
                       ),
                     ],
                   ),
@@ -631,8 +564,7 @@ class _RecordingPageState extends ConsumerState<RecordingPage> {
                 right: 0,
                 child: Center(
                   child: Container(
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                     decoration: BoxDecoration(
                       color: Colors.red.withOpacity(0.8),
                       borderRadius: BorderRadius.circular(20),
@@ -643,18 +575,12 @@ class _RecordingPageState extends ConsumerState<RecordingPage> {
                         Container(
                           width: 12,
                           height: 12,
-                          decoration: const BoxDecoration(
-                            color: Colors.white,
-                            shape: BoxShape.circle,
-                          ),
+                          decoration: const BoxDecoration(color: Colors.white, shape: BoxShape.circle),
                         ),
                         const SizedBox(width: 8),
                         Text(
                           'REC ${_formatDuration(_recordingSeconds)}',
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontWeight: FontWeight.bold,
-                          ),
+                          style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
                         ),
                       ],
                     ),
@@ -671,28 +597,18 @@ class _RecordingPageState extends ConsumerState<RecordingPage> {
                 bottom: 200,
                 child: Container(
                   decoration: BoxDecoration(
-                    border: Border.all(
-                      color: Colors.white.withOpacity(0.3),
-                      width: 2,
-                    ),
+                    border: Border.all(color: Colors.white.withOpacity(0.3), width: 2),
                     borderRadius: BorderRadius.circular(16),
                   ),
                   child: Center(
                     child: Column(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        Icon(
-                          Icons.accessibility_new,
-                          size: 100,
-                          color: Colors.white.withOpacity(0.2),
-                        ),
+                        Icon(Icons.accessibility_new, size: 100, color: Colors.white.withOpacity(0.2)),
                         const SizedBox(height: 16),
                         Text(
                           'Position yourself here',
-                          style: TextStyle(
-                            color: Colors.white.withOpacity(0.5),
-                            fontSize: 16,
-                          ),
+                          style: TextStyle(color: Colors.white.withOpacity(0.5), fontSize: 16),
                         ),
                       ],
                     ),
@@ -709,13 +625,8 @@ class _RecordingPageState extends ConsumerState<RecordingPage> {
                 children: [
                   // Instructions
                   Text(
-                    _isRecording
-                        ? 'Perform your exercise'
-                        : 'Tap to start recording',
-                    style: const TextStyle(
-                      color: Colors.white70,
-                      fontSize: 16,
-                    ),
+                    _isRecording ? 'Perform your exercise' : 'Tap to start recording',
+                    style: const TextStyle(color: Colors.white70, fontSize: 16),
                   ),
                   const SizedBox(height: 24),
 
@@ -749,9 +660,7 @@ class _RecordingPageState extends ConsumerState<RecordingPage> {
                               height: _isRecording ? 32 : 64,
                               decoration: BoxDecoration(
                                 color: Colors.red,
-                                borderRadius: BorderRadius.circular(
-                                  _isRecording ? 8 : 32,
-                                ),
+                                borderRadius: BorderRadius.circular(_isRecording ? 8 : 32),
                               ),
                             ),
                           ),
@@ -781,23 +690,17 @@ class _RecordingPageState extends ConsumerState<RecordingPage> {
     if (!_isCameraInitialized || _cameraController == null) {
       return Container(
         color: AppColors.primaryDark,
-        child: const Center(
-          child: CircularProgressIndicator(color: AppColors.accent),
-        ),
+        child: const Center(child: CircularProgressIndicator(color: AppColors.accent)),
       );
     }
 
     if (_cameraController!.value.isInitialized) {
-      return Center(
-        child: CameraPreview(_cameraController!),
-      );
+      return Center(child: CameraPreview(_cameraController!));
     }
 
     return Container(
       color: AppColors.primaryDark,
-      child: const Center(
-        child: CircularProgressIndicator(color: AppColors.accent),
-      ),
+      child: const Center(child: CircularProgressIndicator(color: AppColors.accent)),
     );
   }
 }
