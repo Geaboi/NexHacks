@@ -10,7 +10,7 @@ from fastapi import APIRouter, HTTPException, UploadFile, File, Query, Form, Web
 from fastapi.responses import FileResponse
 
 # Load environment variables from .env file
-dotenv.load_dotenv(os.path.join(os.path.dirname(__file__), ".env"))
+dotenv.load_dotenv(os.path.join(os.path.dirname(__file__), ".env"), override=True)
 
 import aiohttp
 from aiortc import RTCPeerConnection, RTCSessionDescription, VideoStreamTrack, RTCConfiguration, RTCIceServer

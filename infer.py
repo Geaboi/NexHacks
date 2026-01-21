@@ -2,7 +2,7 @@ import os
 import dotenv
 import requests
 
-dotenv.load_dotenv()
+dotenv.load_dotenv(override=True)
 
 API_KEY = os.environ.get("WOODWIDE_AI_API_KEY")
 BASE_URL = "https://beta.woodwide.ai"
