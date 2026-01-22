@@ -728,8 +728,15 @@ async def overshoot_video_websocket(websocket: WebSocket):
         fps = config_data.get("fps", 30)
         width = config_data.get("width", 640)
         height = config_data.get("height", 480)
+        
+        # Extract processing config from frontend (with defaults for faster inference)
+        processing_config = config_data.get("processing", {})
+        sampling_ratio = processing_config.get("sampling_ratio", 1.0)
+        clip_length_seconds = processing_config.get("clip_length_seconds", 1.0)
+        delay_seconds = processing_config.get("delay_seconds", 1.0)
 
         logger.info(f"[Overshoot WS Stream] Config: model={model}, backend={backend}, fps={fps}, size={width}x{height}")
+        logger.info(f"[Overshoot WS Stream] Processing: sampling={sampling_ratio}, clip={clip_length_seconds}s, delay={delay_seconds}s")
 
         # Create video track
         video_track = QueuedVideoTrack(frame_queue, width=width, height=height)
@@ -755,11 +762,12 @@ async def overshoot_video_websocket(websocket: WebSocket):
         # Create Overshoot stream
         client = OvershootHttpClient(api_url, api_key)
 
+        # Use processing config from frontend
         processing = StreamProcessingConfig(
-            sampling_ratio=0.5,
+            sampling_ratio=sampling_ratio,
             fps=fps,
-            clip_length_seconds=2.0,
-            delay_seconds=5.0,
+            clip_length_seconds=clip_length_seconds,
+            delay_seconds=delay_seconds,
         )
         inference = StreamInferenceConfig(
             prompt=prompt,
