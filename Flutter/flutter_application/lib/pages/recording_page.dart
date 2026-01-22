@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:io';
-import 'package:camera/camera.dart';
+import 'dart:typed_data';
+import 'package:camerawesome/camerawesome_plugin.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path_provider/path_provider.dart';
@@ -19,53 +20,67 @@ class RecordingPage extends ConsumerStatefulWidget {
 }
 
 class _RecordingPageState extends ConsumerState<RecordingPage> {
-  CameraController? _cameraController;
-  bool _isCameraInitialized = false;
-  bool _isRecording = false;
-  String? _tempVideoPath;
-  Timer? _recordingTimer;
-  int _recordingSeconds = 0;
-  int _selectedCameraIndex = 0;
-  List<CameraDescription> _cameras = [];
-
   // ==================== VIDEO RECORDING TOGGLE ====================
-  // Set to false to disable startVideoRecording and only use startImageStream
-  // WARNING: Disabling video recording may break later processing (review page)
+  // Set to false to disable video recording and only stream images
   static const bool _enableVideoRecording = false;
   // ================================================================
 
-  // Frame streaming via startImageStream
-  bool _isImageStreamActive = false;
-  int _framesCaptured = 0;
-
-  // Frame streaming
+  // Frame streaming service
   final FrameStreamingService _frameStreamingService = FrameStreamingService();
+
+  // Recording state
+  bool _isRecording = false;
   bool _isStreamingFrames = false;
+  int _recordingSeconds = 0;
+  Timer? _recordingTimer;
+  String? _tempVideoPath;
+  int? _videoStartTimeUtc;
   bool _isWaitingForResults = false;
-  bool _isAnalysisAvailable = false; // Track if WebSocket/analysis is working
+  bool _isAnalysisAvailable = false;
+  bool _isCameraReady = false;
+
+  // Frame capture stats
+  int _framesReceived = 0;  // Total frames received from camerawesome
+  int _framesSent = 0;      // Frames actually sent to WebSocket
+  bool _isProcessingFrame = false;
+
+  // CamerAwesome state reference
+  CameraState? _cameraState;
+
+  // Stream subscriptions
   StreamSubscription<InferenceResult>? _resultsSubscription;
   StreamSubscription<void>? _allResultsSubscription;
   StreamSubscription<bool>? _connectionSubscription;
   String? _latestInferenceResult;
-  int? _videoStartTimeUtc; // UTC timestamp when MP4 recording started
 
   // Timeout constants
-  static const int _wsReadyTimeoutMs = 5000; // 5 seconds to wait for WS ready
-  static const int _waitingForResultsTimeoutMs = 10000; // 10 seconds max wait for results
+  static const int _wsReadyTimeoutMs = 5000;
+  static const int _waitingForResultsTimeoutMs = 10000;
 
   @override
   void initState() {
     super.initState();
     _setupFrameStreamingListeners();
-    _initializeCamera();
+    _checkDeviceCapabilities();
+  }
+
+  /// Check if device supports video recording + image analysis simultaneously
+  Future<void> _checkDeviceCapabilities() async {
+    try {
+      final supported = await CameraCharacteristics.isVideoRecordingAndImageAnalysisSupported(SensorPosition.back);
+      print('[RecordingPage] 📱 Device supports video+analysis: $supported');
+      if (!supported && _enableVideoRecording) {
+        print('[RecordingPage] ⚠️ WARNING: This device does NOT support video recording + image analysis at the same time!');
+        print('[RecordingPage] ⚠️ Image analysis will be DISABLED during video recording.');
+      }
+    } catch (e) {
+      print('[RecordingPage] ⚠️ Could not check device capabilities: $e');
+    }
   }
 
   void _setupFrameStreamingListeners() {
-    // Set up listeners for WebSocket events (without connecting yet)
-
-    // Listen for inference results from the server (sparse storage - only store these)
+    // Listen for inference results from the server
     _resultsSubscription = _frameStreamingService.resultsStream.listen((result) {
-      // Add frame with result directly (sparse storage)
       ref.read(frameAnalysisProvider.notifier).addFrameWithResult(result.timestampUtc, result.result);
       setState(() {
         _latestInferenceResult = result.result;
@@ -75,20 +90,16 @@ class _RecordingPageState extends ConsumerState<RecordingPage> {
     // Listen for connection state changes
     _connectionSubscription = _frameStreamingService.connectionStream.listen((connected) {
       if (!connected && _isRecording && _isAnalysisAvailable) {
-        // Connection lost during recording - silently continue without analysis
         print('[RecordingPage] ⚠️ WebSocket connection lost during recording');
         setState(() {
           _isAnalysisAvailable = false;
           _isStreamingFrames = false;
         });
-        _stopImageStream();
-        // Removed error popup - recording continues silently
       }
     });
 
     // Listen for all results received
     _allResultsSubscription = _frameStreamingService.allResultsReceivedStream.listen((_) {
-      // Mark session complete and navigate
       ref.read(frameAnalysisProvider.notifier).markSessionComplete();
       setState(() {
         _isWaitingForResults = false;
@@ -97,73 +108,61 @@ class _RecordingPageState extends ConsumerState<RecordingPage> {
     });
   }
 
-  Future<void> _initializeCamera() async {
+  /// Handle analysis image from camerawesome - convert to JPEG and send
+  Future<void> _onImageForAnalysis(AnalysisImage image) async {
+    // UNCONDITIONAL log - if this never prints, camerawesome isn't calling us
+    _framesReceived++;
+    if (_framesReceived == 1 || _framesReceived % 30 == 0) {
+      print('[RecordingPage] 📷 onImageForAnalysis #$_framesReceived - streaming: $_isStreamingFrames, processing: $_isProcessingFrame, format: ${image.format}');
+    }
+
+    // Skip if not streaming or already processing
+    if (!_isStreamingFrames || _isProcessingFrame) return;
+
+    _isProcessingFrame = true;
+
     try {
-      _cameras = await availableCameras();
-      if (_cameras.isEmpty) {
-        if (mounted) {
-          _showErrorSnackBar('No cameras found on this device');
-          Navigator.pop(context);
+      // Convert analysis image to JPEG based on format
+      JpegImage? jpegImage;
+
+      if (image is Nv21Image) {
+        jpegImage = await image.toJpeg(quality: 85);
+      } else if (image is Bgra8888Image) {
+        jpegImage = await image.toJpeg(quality: 85);
+      } else if (image is Yuv420Image) {
+        jpegImage = await image.toJpeg(quality: 85);
+      } else if (image is JpegImage) {
+        jpegImage = image;
+      }
+
+      if (jpegImage != null) {
+        // Send JPEG bytes to WebSocket
+        final sent = _frameStreamingService.sendJpegFrame(jpegImage.bytes);
+
+        _framesSent++;
+        if (_framesSent % 10 == 0) {
+          print(
+            '[RecordingPage] 📹 Sent $_framesSent frames (last: ${jpegImage.bytes.length} bytes, sent: $sent)',
+          );
         }
-        return;
       }
-
-      await _setupCamera(_selectedCameraIndex);
     } catch (e) {
-      if (mounted) {
-        _showErrorSnackBar('Failed to initialize camera: $e');
-        Navigator.pop(context);
+      if (_framesReceived % 30 == 0) {
+        print('[RecordingPage] ⚠️ Frame processing error: $e');
       }
+    } finally {
+      _isProcessingFrame = false;
     }
-  }
-
-  Future<void> _setupCamera(int cameraIndex) async {
-    if (_cameras.isEmpty) return;
-
-    // Dispose existing controller
-    await _cameraController?.dispose();
-
-    _cameraController = CameraController(_cameras[cameraIndex], ResolutionPreset.high, enableAudio: true);
-
-    try {
-      await _cameraController!.initialize();
-
-      // Disable flash to prevent constant flashing during frame capture (if flash is available)
-      try {
-        await _cameraController!.setFlashMode(FlashMode.off);
-      } catch (flashError) {
-        // Flash not supported on this camera - silently ignore
-        print('[RecordingPage] Flash not available on this camera');
-      }
-
-      setState(() {
-        _isCameraInitialized = true;
-        _selectedCameraIndex = cameraIndex;
-      });
-    } catch (e) {
-      if (mounted) {
-        _showErrorSnackBar('Failed to initialize camera: $e');
-        Navigator.pop(context);
-      }
-    }
-  }
-
-  void _flipCamera() {
-    if (_cameras.length < 2) return;
-    final newIndex = (_selectedCameraIndex + 1) % _cameras.length;
-    _setupCamera(newIndex);
   }
 
   Future<void> _startRecording() async {
-    if (_cameraController == null || !_cameraController!.value.isInitialized) {
-      return;
-    }
+    if (_cameraState == null) return;
 
     try {
-      // Start BLE sensor recording (sends "Start" command and calculates RTT)
+      // Start BLE sensor recording
       final sensorNotifier = ref.read(sensorProvider.notifier);
 
-      // Connect to WebSocket server NOW (when recording starts)
+      // Connect to WebSocket server
       const config = StreamConfig(
         prompt: 'Describe what you see',
         model: 'gemini-2.0-flash',
@@ -176,7 +175,6 @@ class _RecordingPageState extends ConsumerState<RecordingPage> {
         height: 480,
       );
 
-      // Attempt to connect to WebSocket - may fail, that's OK
       bool wsConnected = false;
       try {
         wsConnected = await _frameStreamingService.connect(
@@ -184,7 +182,6 @@ class _RecordingPageState extends ConsumerState<RecordingPage> {
           config: config,
         );
 
-        // Wait for WebSocket to become ready (receive 'ready' message from server)
         if (wsConnected) {
           wsConnected = await _waitForWebSocketReady();
         }
@@ -193,24 +190,28 @@ class _RecordingPageState extends ConsumerState<RecordingPage> {
         wsConnected = false;
       }
 
-      // Set analysis availability based on connection success
       setState(() {
         _isAnalysisAvailable = wsConnected;
       });
 
-      // Analysis may not be available - continue recording silently
-      // Removed warning popup for better UX
-
-      // Capture the video start timestamp BEFORE starting the recording
+      // Capture the video start timestamp
       _videoStartTimeUtc = DateTime.now().toUtc().millisecondsSinceEpoch;
 
-      // Start a new analysis session in the provider with the video start timestamp
+      // Start a new analysis session
       ref.read(frameAnalysisProvider.notifier).startSession(_videoStartTimeUtc!);
 
-      // Start video recording (saves to file) - only if enabled
+      // Start video recording if enabled
       if (_enableVideoRecording) {
-        await _cameraController!.startVideoRecording();
-        print('[RecordingPage] 🎥 Video recording started');
+        _cameraState?.when(
+          onVideoMode: (videoState) {
+            videoState.startRecording();
+            print('[RecordingPage] 🎥 Video recording started');
+          },
+          onVideoRecordingMode: (recordingState) {
+            // Already recording
+            print('[RecordingPage] 🎥 Already recording');
+          },
+        );
       } else {
         print('[RecordingPage] 🎥 Video recording DISABLED - only image stream will run');
       }
@@ -219,21 +220,23 @@ class _RecordingPageState extends ConsumerState<RecordingPage> {
         sensorNotifier.startRecording();
       }
 
-      // Only start frame streaming if analysis is available
+      // Start frame streaming if analysis is available
       if (_isAnalysisAvailable) {
         print('[RecordingPage] 🎬 Starting frame streaming service...');
         _frameStreamingService.startStreaming(cameraFps: 30);
-
-        // Start image stream for frame capture (uses startImageStream instead of takePicture)
-        _startImageStream();
+        // Image analysis is handled by camerawesome's onImageForAnalysis callback
+      } else {
+        print('[RecordingPage] ⚠️ Analysis NOT available - WebSocket not connected');
       }
 
       setState(() {
         _isRecording = true;
         _isStreamingFrames = _isAnalysisAvailable;
         _recordingSeconds = 0;
-        _framesCaptured = 0;
+        _framesSent = 0;
       });
+
+      print('[RecordingPage] ✅ Recording started - isStreamingFrames: $_isStreamingFrames, isAnalysisAvailable: $_isAnalysisAvailable, framesReceived so far: $_framesReceived');
 
       // Start timer
       _recordingTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
@@ -243,19 +246,15 @@ class _RecordingPageState extends ConsumerState<RecordingPage> {
       });
     } catch (e) {
       print('[RecordingPage] ❌ Recording failed: $e');
-      // Silently handle recording failure - don't show popup
     }
   }
 
-  /// Wait for WebSocket to receive 'ready' message from server
-  /// Returns true if ready within timeout, false otherwise
   Future<bool> _waitForWebSocketReady() async {
     if (_frameStreamingService.isReady) return true;
 
     final completer = Completer<bool>();
     Timer? timeoutTimer;
 
-    // Set up timeout
     timeoutTimer = Timer(Duration(milliseconds: _wsReadyTimeoutMs), () {
       if (!completer.isCompleted) {
         print('[RecordingPage] ⚠️ WebSocket ready timeout after ${_wsReadyTimeoutMs}ms');
@@ -263,13 +262,11 @@ class _RecordingPageState extends ConsumerState<RecordingPage> {
       }
     });
 
-    // Check if already ready
     if (_frameStreamingService.isReady) {
       timeoutTimer.cancel();
       return true;
     }
 
-    // Poll for ready state (simpler than adding a ready stream)
     final pollTimer = Timer.periodic(const Duration(milliseconds: 100), (timer) {
       if (_frameStreamingService.isReady) {
         timer.cancel();
@@ -285,91 +282,60 @@ class _RecordingPageState extends ConsumerState<RecordingPage> {
     return result;
   }
 
-  /// Start image stream for frame capture at target FPS
-  /// This uses startImageStream instead of takePicture for better performance
-  void _startImageStream() {
-    if (_cameraController == null || !_cameraController!.value.isInitialized) {
-      print('[RecordingPage] ⚠️ Cannot start image stream - camera not initialized');
-      return;
-    }
-
-    _framesCaptured = 0;
-
-    print('[RecordingPage] 📹 Starting image stream (frame skipping handled by FrameStreamingService)...');
-
-    _cameraController!.startImageStream((CameraImage image) {
-      // Process every frame - FrameStreamingService handles frame skipping internally
-      // based on the configured FPS in StreamConfig
-      _frameStreamingService.processFrame(image);
-
-      _framesCaptured++;
-      if (_framesCaptured % 30 == 0) {
-        print('[RecordingPage] 📹 Image stream: $_framesCaptured frames received');
-      }
-    });
-
-    _isImageStreamActive = true;
-  }
-
-  /// Stop image stream
-  Future<void> _stopImageStream() async {
-    if (_cameraController != null && _isImageStreamActive) {
-      try {
-        await _cameraController!.stopImageStream();
-      } catch (e) {
-        print('[RecordingPage] ⚠️ Error stopping image stream: $e');
-      }
-    }
-    _isImageStreamActive = false;
-    print('[RecordingPage] 📹 Image stream stopped. Total frames processed: $_framesCaptured');
-  }
-
   Future<void> _stopRecording() async {
-    // When video recording is disabled, check _isRecording instead of isRecordingVideo
-    if (_cameraController == null) return;
-    if (_enableVideoRecording && !_cameraController!.value.isRecordingVideo) return;
-    if (!_enableVideoRecording && !_isRecording) return;
+    if (!_isRecording) return;
 
     _recordingTimer?.cancel();
-
-    // Stop image stream first (only if it was running)
-    if (_isAnalysisAvailable) {
-      await _stopImageStream();
-    }
 
     // Stop BLE sensor recording
     final sensorNotifier = ref.read(sensorProvider.notifier);
     if (ref.read(sensorProvider).isConnected) {
       await sensorNotifier.stopRecording();
-      // Get sensor data as JSON for later use
       final sensorData = sensorNotifier.getSamplesAsMap();
-      debugPrint('Collected ${sensorData['total_samples']} IMU samples');
+      print('Collected ${sensorData['total_samples']} IMU samples');
     }
 
-    // Stop frame streaming - mark session as stopped in provider
+    // Stop frame streaming
     ref.read(frameAnalysisProvider.notifier).stopRecording();
 
-    // Only stop streaming if it was active
     if (_isAnalysisAvailable) {
       _frameStreamingService.stopStreaming();
     }
 
     try {
-      // Only stop video recording if it was enabled
-      if (_enableVideoRecording) {
-        final XFile videoFile = await _cameraController!.stopVideoRecording();
+      // Stop video recording if enabled
+      if (_enableVideoRecording && _cameraState != null) {
+        final completer = Completer<void>();
 
-        // Get temp directory and copy the video
-        final tempDir = await getTemporaryDirectory();
-        _tempVideoPath = '${tempDir.path}/temp_record.mp4';
+        _cameraState!.when(
+          onVideoRecordingMode: (recordingState) {
+            recordingState.stopRecording(
+              onVideo: (captureRequest) {
+                // Get the video file path from the capture request
+                if (captureRequest is SingleCaptureRequest) {
+                  _tempVideoPath = captureRequest.file?.path;
+                  print('[RecordingPage] 🎥 Video saved: $_tempVideoPath');
+                }
+                if (!completer.isCompleted) completer.complete();
+              },
+              onVideoFailed: (exception) {
+                print('[RecordingPage] ⚠️ Video recording failed: $exception');
+                if (!completer.isCompleted) completer.complete();
+              },
+            );
+          },
+        );
 
-        // Copy recorded video to temp path
-        await File(videoFile.path).copy(_tempVideoPath!);
-        print('[RecordingPage] 🎥 Video recording stopped and saved');
+        // Wait for video to be saved (with timeout)
+        await completer.future.timeout(
+          const Duration(seconds: 5),
+          onTimeout: () {
+            print('[RecordingPage] ⚠️ Timeout waiting for video save');
+          },
+        );
       } else {
-        // No video file when video recording is disabled
         _tempVideoPath = null;
-        print('[RecordingPage] 🎥 Recording stopped (no video - video recording was disabled)');
+        print('[RecordingPage] 🎥 Recording stopped (no video - disabled)');
       }
 
       setState(() {
@@ -377,7 +343,7 @@ class _RecordingPageState extends ConsumerState<RecordingPage> {
         _isStreamingFrames = false;
       });
 
-      // Check if we need to wait for remaining results (only if analysis was available)
+      // Check if we need to wait for remaining results
       final pendingCount = _frameStreamingService.pendingFrameCount;
       if (_isAnalysisAvailable && pendingCount > 0) {
         print('[RecordingPage] ⏳ Waiting for $pendingCount pending results...');
@@ -385,11 +351,9 @@ class _RecordingPageState extends ConsumerState<RecordingPage> {
           _isWaitingForResults = true;
         });
 
-        // Start a timeout timer - don't wait forever for results
         Timer(Duration(milliseconds: _waitingForResultsTimeoutMs), () {
           if (_isWaitingForResults && mounted) {
             print('[RecordingPage] ⚠️ Timeout waiting for results, proceeding to review');
-            // Silently proceed without showing error popup
             setState(() {
               _isWaitingForResults = false;
             });
@@ -397,10 +361,7 @@ class _RecordingPageState extends ConsumerState<RecordingPage> {
             _navigateToReview();
           }
         });
-
-        // Navigation will happen when allResultsReceivedStream fires (or timeout)
       } else {
-        // No pending frames or analysis wasn't available, navigate immediately
         ref.read(frameAnalysisProvider.notifier).markSessionComplete();
         _navigateToReview();
       }
@@ -411,7 +372,6 @@ class _RecordingPageState extends ConsumerState<RecordingPage> {
         _isStreamingFrames = false;
         _isWaitingForResults = false;
       });
-      // Still try to navigate to review if we have a video path
       if (_tempVideoPath != null) {
         ref.read(frameAnalysisProvider.notifier).markSessionComplete();
         _navigateToReview();
@@ -420,17 +380,15 @@ class _RecordingPageState extends ConsumerState<RecordingPage> {
   }
 
   Future<void> _toggleRecording() async {
-    if (_cameraController != null) {
-      if (_isRecording) {
-        await _stopRecording();
-      } else {
-        await _startRecording();
-      }
+    if (_isRecording) {
+      await _stopRecording();
+    } else {
+      await _startRecording();
     }
   }
 
   Future<void> _finishRecording() async {
-    if (_cameraController != null && _isRecording) {
+    if (_isRecording) {
       await _stopRecording();
     }
   }
@@ -438,11 +396,9 @@ class _RecordingPageState extends ConsumerState<RecordingPage> {
   void _navigateToReview() {
     if (!mounted) return;
 
-    // When video recording is disabled, we may not have a video path
     if (_tempVideoPath != null) {
       Navigator.push(context, MaterialPageRoute(builder: (_) => ReviewPage(videoPath: _tempVideoPath!)));
     } else if (!_enableVideoRecording) {
-      // Video recording was disabled - show a message instead of navigating
       print('[RecordingPage] ℹ️ No video to review (video recording was disabled)');
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Image stream test complete. No video recorded.'), duration: Duration(seconds: 3)),
@@ -456,7 +412,6 @@ class _RecordingPageState extends ConsumerState<RecordingPage> {
     return '${minutes.toString().padLeft(2, '0')}:${secs.toString().padLeft(2, '0')}';
   }
 
-  /// Show an error message to the user
   void _showErrorSnackBar(String message) {
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
@@ -478,15 +433,10 @@ class _RecordingPageState extends ConsumerState<RecordingPage> {
   @override
   void dispose() {
     _recordingTimer?.cancel();
-    // Stop image stream if active
-    if (_isImageStreamActive && _cameraController != null) {
-      _cameraController!.stopImageStream().catchError((_) {});
-    }
     _resultsSubscription?.cancel();
     _allResultsSubscription?.cancel();
     _connectionSubscription?.cancel();
     _frameStreamingService.dispose();
-    _cameraController?.dispose();
     super.dispose();
   }
 
@@ -529,8 +479,8 @@ class _RecordingPageState extends ConsumerState<RecordingPage> {
       body: SafeArea(
         child: Stack(
           children: [
-            // Camera Preview or Placeholder
-            _buildCameraPreview(),
+            // CamerAwesome Camera Preview
+            _buildCameraAwesome(),
 
             // Waiting for Results Overlay
             if (_isWaitingForResults)
@@ -589,7 +539,7 @@ class _RecordingPageState extends ConsumerState<RecordingPage> {
               ),
 
             // Pose Guide Overlay (only when not recording)
-            if (!_isRecording)
+            if (!_isRecording && _isCameraReady)
               Positioned(
                 top: 80,
                 left: 40,
@@ -645,7 +595,7 @@ class _RecordingPageState extends ConsumerState<RecordingPage> {
 
                       // Main Record Button
                       GestureDetector(
-                        onTap: _isCameraInitialized ? _toggleRecording : null,
+                        onTap: _isCameraReady ? _toggleRecording : null,
                         child: Container(
                           width: 80,
                           height: 80,
@@ -668,11 +618,13 @@ class _RecordingPageState extends ConsumerState<RecordingPage> {
                       ),
                       const SizedBox(width: 40),
 
-                      // Flip Camera Button
+                      // Flip Camera Button (handled by camerawesome internally)
                       IconButton(
-                        onPressed: _cameras.length > 1 ? _flipCamera : null,
+                        onPressed: () {
+                          _cameraState?.switchCameraSensor();
+                        },
                         icon: const Icon(Icons.flip_camera_ios),
-                        color: _cameras.length > 1 ? Colors.white : Colors.grey,
+                        color: Colors.white,
                         iconSize: 32,
                       ),
                     ],
@@ -686,21 +638,53 @@ class _RecordingPageState extends ConsumerState<RecordingPage> {
     );
   }
 
-  Widget _buildCameraPreview() {
-    if (!_isCameraInitialized || _cameraController == null) {
-      return Container(
-        color: AppColors.primaryDark,
-        child: const Center(child: CircularProgressIndicator(color: AppColors.accent)),
-      );
-    }
+  Widget _buildCameraAwesome() {
+    return CameraAwesomeBuilder.custom(
+      // Use video mode for recording capability
+      saveConfig: _enableVideoRecording ? SaveConfig.video() : SaveConfig.photo(),
+      // Image analysis config - 10 FPS for streaming
+      onImageForAnalysis: _onImageForAnalysis,
+      imageAnalysisConfig: AnalysisConfig(
+        // Android: use nv21 format (recommended by MLKit)
+        androidOptions: const AndroidAnalysisOptions.nv21(width: 640),
+        // Auto-start analysis when camera is ready
+        autoStart: true,
+        // Limit to 10 FPS to match our streaming config
+        maxFramesPerSecond: 10,
+      ),
+      // Sensor config
+      sensorConfig: SensorConfig.single(
+        sensor: Sensor.position(SensorPosition.back),
+        flashMode: FlashMode.none,
+        aspectRatio: CameraAspectRatios.ratio_16_9,
+      ),
+      // Custom UI builder (2 parameters: state, preview)
+      builder: (state, preview) {
+        // Store camera state reference for recording control
+        _cameraState = state;
 
-    if (_cameraController!.value.isInitialized) {
-      return Center(child: CameraPreview(_cameraController!));
-    }
+        // Mark camera as ready when in photo or video mode
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (!_isCameraReady) {
+            state.when(
+              onPhotoMode: (_) {
+                if (mounted) setState(() => _isCameraReady = true);
+              },
+              onVideoMode: (_) {
+                if (mounted) setState(() => _isCameraReady = true);
+              },
+              onVideoRecordingMode: (_) {
+                if (mounted) setState(() => _isCameraReady = true);
+              },
+            );
+          }
+        });
 
-    return Container(
-      color: AppColors.primaryDark,
-      child: const Center(child: CircularProgressIndicator(color: AppColors.accent)),
+        // Return transparent container - our UI is in Stack overlay
+        return const SizedBox.shrink();
+      },
+      // Handle preparation state
+      previewFit: CameraPreviewFit.cover,
     );
   }
 }

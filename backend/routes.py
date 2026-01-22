@@ -817,19 +817,21 @@ async def overshoot_video_websocket(websocket: WebSocket):
                 # Format: first 8 bytes = timestamp (float64 little-endian), rest = RGB24 frame
                 frame_bytes = message["bytes"]
                 try:
-                    expected_frame_size = height * width * 3
-                    if len(frame_bytes) == expected_frame_size + 8:
+                    if len(frame_bytes) > 8:
                         # Extract timestamp (first 8 bytes as float64 little-endian)
                         timestamp = struct.unpack('<d', frame_bytes[:8])[0]
                         timestamp_state["latest"] = timestamp
                         frame_data = frame_bytes[8:]
                     else:
-                        # Backward compatibility: no timestamp, just frame data
-                        frame_data = frame_bytes
+                        print("Frame from frontend too small")
+                        continue
 
                     # Decode frame (expecting RGB24 numpy array)
                     frame = np.frombuffer(frame_data, dtype=np.uint8)
                     frame = cv2.imdecode(frame, cv2.IMREAD_COLOR)
+                    if frame is None:
+                        print("Decode of JPEG from frontend failed - Frame is None")
+                        continue
                     frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
                     # Put frame in queue (non-blocking, drop if full)
                     try:

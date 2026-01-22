@@ -1,10 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
-import 'dart:isolate';
 import 'dart:typed_data';
-import 'package:camera/camera.dart';
 import 'package:flutter/foundation.dart';
-import 'package:image/image.dart' as img;
 import 'package:web_socket_channel/io.dart';
 
 /// Configuration for the frame streaming service
@@ -75,7 +72,6 @@ class FrameStreamingService {
   int _frameSkipCount = 0;
   int _frameSkipRate = 1; // Calculated based on camera fps vs desired fps
   bool _isProcessingFrame = false; // Prevent frame pile-up during async compression
-  static const int _jpegQuality = 75; // JPEG compression quality (1-100)
 
   // Track pending frames by timestamp (frames sent but awaiting response)
   final Set<int> _pendingFrameTimestamps = {};
@@ -223,220 +219,62 @@ class FrameStreamingService {
   /// Check if still waiting for results
   bool get isWaitingForResults => !_isStreaming && _pendingFrameTimestamps.isNotEmpty;
 
-  /// Process and send a camera frame to the WebSocket server
-  /// Call this method from the camera's image stream callback
-  void processFrame(CameraImage image) {
-    // Get UTC timestamp for this frame (for ALL frames)
-    final timestampUtc = DateTime.now().toUtc().millisecondsSinceEpoch;
+  /// Send JPEG bytes to the WebSocket server
+  /// Call this method with pre-encoded JPEG data (e.g., from camerawesome's AnalysisImage.toJpeg())
+  /// Returns true if the frame was sent, false if skipped or not ready
+  bool sendJpegFrame(Uint8List jpegBytes, {int? timestampUtc}) {
+    // Get UTC timestamp for this frame
+    final frameTimestamp = timestampUtc ?? DateTime.now().toUtc().millisecondsSinceEpoch;
 
-    // Notify listeners that a frame was captured (for ALL frames)
-    _frameCapturedController.add(timestampUtc);
+    // Notify listeners that a frame was captured
+    _frameCapturedController.add(frameTimestamp);
 
     // Check if we should send this frame to WebSocket
-    if (!_isConnected || !_isStreaming || !_isReady || _wsChannel == null) return;
+    if (!_isConnected || !_isStreaming || !_isReady || _wsChannel == null) {
+      // Debug: log why frame was skipped (only occasionally to avoid spam)
+      if (frameTimestamp % 1000 < 100) {
+        print('[FrameStreaming] ⏭️ Frame skipped - connected: $_isConnected, streaming: $_isStreaming, ready: $_isReady, channel: ${_wsChannel != null}');
+      }
+      return false;
+    }
 
-    // Skip frames to match desired fps
-    _frameSkipCount++;
-    if (_frameSkipCount % _frameSkipRate != 0) return;
-
-    // Prevent frame pile-up during async JPEG compression
-    if (_isProcessingFrame) return;
+    // Prevent frame pile-up
+    if (_isProcessingFrame) return false;
     _isProcessingFrame = true;
 
-    // Copy plane data synchronously (can't send typed data views to isolate)
-    final planeData = _copyPlaneData(image);
-    final srcWidth = image.width;
-    final srcHeight = image.height;
-    final formatGroup = image.format.group;
-
-    // Process frame asynchronously with JPEG compression
-    _processFrameAsync(planeData, srcWidth, srcHeight, formatGroup, timestampUtc);
-  }
-
-  /// Copy camera plane data for isolate processing
-  List<_PlaneData> _copyPlaneData(CameraImage image) {
-    return image.planes
-        .map(
-          (plane) => _PlaneData(
-            bytes: Uint8List.fromList(plane.bytes),
-            bytesPerRow: plane.bytesPerRow,
-            bytesPerPixel: plane.bytesPerPixel,
-          ),
-        )
-        .toList();
-  }
-
-  /// Process frame asynchronously: convert to RGB, compress to JPEG, and send
-  Future<void> _processFrameAsync(
-    List<_PlaneData> planeData,
-    int srcWidth,
-    int srcHeight,
-    ImageFormatGroup formatGroup,
-    int timestampUtc,
-  ) async {
-    // Extract all values needed by the isolate into local variables
-    // to avoid capturing 'this' (which contains unsendable IOWebSocketChannel)
-    final targetWidth = _config.width;
-    final targetHeight = _config.height;
-    const quality = _jpegQuality;
-    
     try {
-      final jpegBytes = await Isolate.run(() {
-        return _convertAndCompressToJpeg(
-          planeData,
-          srcWidth,
-          srcHeight,
-          formatGroup,
-          targetWidth,
-          targetHeight,
-          quality,
-        );
-      });
-
-      // Check connection is still valid after async operation
-      if (!_isConnected || !_isStreaming || _wsChannel == null) {
-        _isProcessingFrame = false;
-        return;
-      }
-
       // Create frame with timestamp header + JPEG data
-      final frameWithTimestamp = _createFrameWithTimestamp(timestampUtc, jpegBytes);
+      final frameWithTimestamp = _createFrameWithTimestamp(frameTimestamp, jpegBytes);
 
       // Track this frame as pending (awaiting server response)
-      _pendingFrameTimestamps.add(timestampUtc);
+      _pendingFrameTimestamps.add(frameTimestamp);
 
       // Send as binary data
       _wsChannel!.sink.add(frameWithTimestamp);
 
-      // Debug: Print frame sent info with compression ratio
-      final rawSize = _config.width * _config.height * 3;
-      final ratio = (rawSize / jpegBytes.length).toStringAsFixed(1);
-      debugPrint(
-        '[FrameStreaming] Frame sent - timestamp: $timestampUtc, size: ${jpegBytes.length} bytes (${ratio}x compression), pending: ${_pendingFrameTimestamps.length}',
+      // Debug: Print frame sent info
+      print(
+        '[FrameStreaming] 📤 Frame sent - timestamp: $frameTimestamp, size: ${jpegBytes.length} bytes, pending: ${_pendingFrameTimestamps.length}',
       );
 
       // Notify listeners that a frame was sent to WebSocket
-      _frameSentController.add(timestampUtc);
+      _frameSentController.add(frameTimestamp);
+
+      return true;
     } catch (e) {
-      debugPrint('[FrameStreaming] Frame processing failed: $e');
+      print('[FrameStreaming] ❌ Frame send failed: $e');
+      return false;
     } finally {
       _isProcessingFrame = false;
     }
   }
 
-  /// Static method for isolate: convert camera data to JPEG
-  static Uint8List _convertAndCompressToJpeg(
-    List<_PlaneData> planeData,
-    int srcWidth,
-    int srcHeight,
-    ImageFormatGroup formatGroup,
-    int targetWidth,
-    int targetHeight,
-    int quality,
-  ) {
-    // Convert to RGB24 first
-    Uint8List rgb24;
-
-    if (formatGroup == ImageFormatGroup.yuv420) {
-      rgb24 = _yuv420ToRgb24Static(planeData, srcWidth, srcHeight, targetWidth, targetHeight);
-    } else if (formatGroup == ImageFormatGroup.bgra8888) {
-      rgb24 = _bgra8888ToRgb24Static(planeData[0], srcWidth, srcHeight, targetWidth, targetHeight);
-    } else {
-      // Fallback: return minimal valid JPEG
-      final emptyImage = img.Image(width: targetWidth, height: targetHeight);
-      return Uint8List.fromList(img.encodeJpg(emptyImage, quality: quality));
-    }
-
-    // Create image from RGB24 bytes and encode to JPEG
-    final image = img.Image.fromBytes(
-      width: targetWidth,
-      height: targetHeight,
-      bytes: rgb24.buffer,
-      order: img.ChannelOrder.rgb,
-      numChannels: 3,
-    );
-
-    return Uint8List.fromList(img.encodeJpg(image, quality: quality));
-  }
-
-  /// Static YUV420 to RGB24 conversion for isolate
-  static Uint8List _yuv420ToRgb24Static(
-    List<_PlaneData> planes,
-    int srcWidth,
-    int srcHeight,
-    int targetWidth,
-    int targetHeight,
-  ) {
-    final yBuffer = planes[0].bytes;
-    final uBuffer = planes[1].bytes;
-    final vBuffer = planes[2].bytes;
-
-    final yRowStride = planes[0].bytesPerRow;
-    final uvRowStride = planes[1].bytesPerRow;
-    final uvPixelStride = planes[1].bytesPerPixel ?? 1;
-
-    final double scaleX = srcWidth / targetWidth;
-    final double scaleY = srcHeight / targetHeight;
-
-    final rgb24 = Uint8List(targetWidth * targetHeight * 3);
-
-    for (int y = 0; y < targetHeight; y++) {
-      for (int x = 0; x < targetWidth; x++) {
-        final int srcX = (x * scaleX).floor().clamp(0, srcWidth - 1);
-        final int srcY = (y * scaleY).floor().clamp(0, srcHeight - 1);
-
-        final int yIndex = srcY * yRowStride + srcX;
-        final int uvIndex = (srcY ~/ 2) * uvRowStride + (srcX ~/ 2) * uvPixelStride;
-
-        final int yValue = yBuffer[yIndex];
-        final int uValue = uBuffer[uvIndex.clamp(0, uBuffer.length - 1)];
-        final int vValue = vBuffer[uvIndex.clamp(0, vBuffer.length - 1)];
-
-        int r = (yValue + 1.370705 * (vValue - 128)).round().clamp(0, 255);
-        int g = (yValue - 0.337633 * (uValue - 128) - 0.698001 * (vValue - 128)).round().clamp(0, 255);
-        int b = (yValue + 1.732446 * (uValue - 128)).round().clamp(0, 255);
-
-        final int rgbIndex = (y * targetWidth + x) * 3;
-        rgb24[rgbIndex] = r;
-        rgb24[rgbIndex + 1] = g;
-        rgb24[rgbIndex + 2] = b;
-      }
-    }
-
-    return rgb24;
-  }
-
-  /// Static BGRA8888 to RGB24 conversion for isolate
-  static Uint8List _bgra8888ToRgb24Static(
-    _PlaneData plane,
-    int srcWidth,
-    int srcHeight,
-    int targetWidth,
-    int targetHeight,
-  ) {
-    final srcBuffer = plane.bytes;
-    final srcRowStride = plane.bytesPerRow;
-
-    final double scaleX = srcWidth / targetWidth;
-    final double scaleY = srcHeight / targetHeight;
-
-    final rgb24 = Uint8List(targetWidth * targetHeight * 3);
-
-    for (int y = 0; y < targetHeight; y++) {
-      for (int x = 0; x < targetWidth; x++) {
-        final int srcX = (x * scaleX).floor().clamp(0, srcWidth - 1);
-        final int srcY = (y * scaleY).floor().clamp(0, srcHeight - 1);
-
-        final int srcIndex = srcY * srcRowStride + srcX * 4;
-
-        final int rgbIndex = (y * targetWidth + x) * 3;
-        rgb24[rgbIndex] = srcBuffer[srcIndex + 2]; // R
-        rgb24[rgbIndex + 1] = srcBuffer[srcIndex + 1]; // G
-        rgb24[rgbIndex + 2] = srcBuffer[srcIndex]; // B
-      }
-    }
-
-    return rgb24;
+  /// Legacy method for backward compatibility - now just notifies listeners
+  /// Use sendJpegFrame instead for sending pre-encoded JPEG frames
+  @Deprecated('Use sendJpegFrame with pre-encoded JPEG bytes instead')
+  void processFrameNotification() {
+    final timestampUtc = DateTime.now().toUtc().millisecondsSinceEpoch;
+    _frameCapturedController.add(timestampUtc);
   }
 
   /// Create a frame with timestamp header
@@ -507,109 +345,6 @@ class FrameStreamingService {
   /// Get the configured frame dimensions
   int get configWidth => _config.width;
   int get configHeight => _config.height;
-
-  /// Convert CameraImage to RGB24 format (height, width, 3)
-  Uint8List _convertToRgb24(CameraImage image) {
-    final int width = _config.width;
-    final int height = _config.height;
-
-    // For YUV420 format (most common on Android)
-    if (image.format.group == ImageFormatGroup.yuv420) {
-      return _yuv420ToRgb24(image, width, height);
-    }
-
-    // For BGRA8888 format (common on iOS)
-    if (image.format.group == ImageFormatGroup.bgra8888) {
-      return _bgra8888ToRgb24(image, width, height);
-    }
-
-    // Fallback: return empty frame of correct size
-    return Uint8List(width * height * 3);
-  }
-
-  /// Convert YUV420 to RGB24
-  Uint8List _yuv420ToRgb24(CameraImage image, int targetWidth, int targetHeight) {
-    final int srcWidth = image.width;
-    final int srcHeight = image.height;
-
-    final yPlane = image.planes[0];
-    final uPlane = image.planes[1];
-    final vPlane = image.planes[2];
-
-    final yBuffer = yPlane.bytes;
-    final uBuffer = uPlane.bytes;
-    final vBuffer = vPlane.bytes;
-
-    final yRowStride = yPlane.bytesPerRow;
-    final uvRowStride = uPlane.bytesPerRow;
-    final uvPixelStride = uPlane.bytesPerPixel ?? 1;
-
-    // Calculate scaling factors
-    final double scaleX = srcWidth / targetWidth;
-    final double scaleY = srcHeight / targetHeight;
-
-    final rgb24 = Uint8List(targetWidth * targetHeight * 3);
-
-    for (int y = 0; y < targetHeight; y++) {
-      for (int x = 0; x < targetWidth; x++) {
-        // Map to source coordinates
-        final int srcX = (x * scaleX).floor().clamp(0, srcWidth - 1);
-        final int srcY = (y * scaleY).floor().clamp(0, srcHeight - 1);
-
-        final int yIndex = srcY * yRowStride + srcX;
-        final int uvIndex = (srcY ~/ 2) * uvRowStride + (srcX ~/ 2) * uvPixelStride;
-
-        // Get YUV values
-        final int yValue = yBuffer[yIndex];
-        final int uValue = uBuffer[uvIndex.clamp(0, uBuffer.length - 1)];
-        final int vValue = vBuffer[uvIndex.clamp(0, vBuffer.length - 1)];
-
-        // Convert YUV to RGB
-        int r = (yValue + 1.370705 * (vValue - 128)).round().clamp(0, 255);
-        int g = (yValue - 0.337633 * (uValue - 128) - 0.698001 * (vValue - 128)).round().clamp(0, 255);
-        int b = (yValue + 1.732446 * (uValue - 128)).round().clamp(0, 255);
-
-        final int rgbIndex = (y * targetWidth + x) * 3;
-        rgb24[rgbIndex] = r;
-        rgb24[rgbIndex + 1] = g;
-        rgb24[rgbIndex + 2] = b;
-      }
-    }
-
-    return rgb24;
-  }
-
-  /// Convert BGRA8888 to RGB24
-  Uint8List _bgra8888ToRgb24(CameraImage image, int targetWidth, int targetHeight) {
-    final int srcWidth = image.width;
-    final int srcHeight = image.height;
-    final srcBuffer = image.planes[0].bytes;
-    final srcRowStride = image.planes[0].bytesPerRow;
-
-    // Calculate scaling factors
-    final double scaleX = srcWidth / targetWidth;
-    final double scaleY = srcHeight / targetHeight;
-
-    final rgb24 = Uint8List(targetWidth * targetHeight * 3);
-
-    for (int y = 0; y < targetHeight; y++) {
-      for (int x = 0; x < targetWidth; x++) {
-        // Map to source coordinates
-        final int srcX = (x * scaleX).floor().clamp(0, srcWidth - 1);
-        final int srcY = (y * scaleY).floor().clamp(0, srcHeight - 1);
-
-        final int srcIndex = srcY * srcRowStride + srcX * 4;
-
-        // BGRA -> RGB
-        final int rgbIndex = (y * targetWidth + x) * 3;
-        rgb24[rgbIndex] = srcBuffer[srcIndex + 2]; // R
-        rgb24[rgbIndex + 1] = srcBuffer[srcIndex + 1]; // G
-        rgb24[rgbIndex + 2] = srcBuffer[srcIndex]; // B
-      }
-    }
-
-    return rgb24;
-  }
 
   /// Handle incoming WebSocket messages
   ///
@@ -783,13 +518,4 @@ class InferenceResult {
   final String result;
 
   const InferenceResult({required this.timestampUtc, required this.result});
-}
-
-/// Helper class to copy camera plane data for isolate processing
-class _PlaneData {
-  final Uint8List bytes;
-  final int bytesPerRow;
-  final int? bytesPerPixel;
-
-  const _PlaneData({required this.bytes, required this.bytesPerRow, this.bytesPerPixel});
 }
