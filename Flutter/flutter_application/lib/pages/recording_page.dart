@@ -123,14 +123,15 @@ class _RecordingPageState extends ConsumerState<RecordingPage> {
 
     try {
       // Convert analysis image to JPEG based on format
+      // Using 60% quality for lower bandwidth
       JpegImage? jpegImage;
 
       if (image is Nv21Image) {
-        jpegImage = await image.toJpeg(quality: 85);
+        jpegImage = await image.toJpeg(quality: 60);
       } else if (image is Bgra8888Image) {
-        jpegImage = await image.toJpeg(quality: 85);
+        jpegImage = await image.toJpeg(quality: 60);
       } else if (image is Yuv420Image) {
-        jpegImage = await image.toJpeg(quality: 85);
+        jpegImage = await image.toJpeg(quality: 60);
       } else if (image is JpegImage) {
         jpegImage = image;
       }
@@ -645,18 +646,20 @@ class _RecordingPageState extends ConsumerState<RecordingPage> {
       // Image analysis config - 10 FPS for streaming
       onImageForAnalysis: _onImageForAnalysis,
       imageAnalysisConfig: AnalysisConfig(
-        // Android: use nv21 format (recommended by MLKit)
+        // Android: use nv21 format (recommended by MLKit), constrained to 640px width
         androidOptions: const AndroidAnalysisOptions.nv21(width: 640),
+        // iOS: use bgra8888 format
+        cupertinoOptions: const CupertinoAnalysisOptions.bgra8888(),
         // Auto-start analysis when camera is ready
         autoStart: true,
         // Limit to 10 FPS to match our streaming config
         maxFramesPerSecond: 10,
       ),
-      // Sensor config
+      // Sensor config - use 4:3 aspect ratio for 640x480 analysis frames
       sensorConfig: SensorConfig.single(
         sensor: Sensor.position(SensorPosition.back),
         flashMode: FlashMode.none,
-        aspectRatio: CameraAspectRatios.ratio_16_9,
+        aspectRatio: CameraAspectRatios.ratio_4_3,
       ),
       // Custom UI builder (2 parameters: state, preview)
       builder: (state, preview) {
