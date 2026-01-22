@@ -443,8 +443,6 @@ def _overshoot_api_key() -> str:
 
 @overshoot_router.post("/streams")
 async def overshoot_create_stream(body: OvershootCreateStreamRequest):
-    logger.info(f"[Overshoot] Creating stream with model={body.inference.model}, backend={body.inference.backend}")
-    logger.debug(f"[Overshoot] Prompt: {body.inference.prompt[:100]}...")
     client = OvershootHttpClient(_overshoot_api_url(), _overshoot_api_key())
     processing = body.processing or StreamProcessingConfig()
     inference = StreamInferenceConfig(
@@ -461,17 +459,14 @@ async def overshoot_create_stream(body: OvershootCreateStreamRequest):
             request_id=body.request_id,
         )
         stream_id = resp["stream_id"]
-        logger.info(f"[Overshoot] Stream created successfully: {stream_id}")
-        logger.debug(f"[Overshoot] Create stream response: {resp}")
         async with _overshoot_sessions_lock:
             _overshoot_sessions[stream_id] = client
         return resp
     except ApiError as e:
-        logger.error(f"[Overshoot] API error creating stream: {e.status_code} - {e.message}")
         await client.close()
         raise HTTPException(status_code=e.status_code, detail=e.message)
     except Exception as e:
-        logger.error(f"[Overshoot] Unexpected error creating stream: {type(e).__name__}: {e}", exc_info=True)
+        logger.exception("Stream creation failed")
         await client.close()
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -574,19 +569,17 @@ async def overshoot_video_websocket(websocket: WebSocket):
         clip_length_seconds = processing_config.get("clip_length_seconds", 1.0)
         delay_seconds = processing_config.get("delay_seconds", 1.0)
 
-        logger.info(f"[Overshoot WS Stream] Config: model={model}, backend={backend}, fps={fps}, size={width}x{height}")
-        logger.info(f"[Overshoot WS Stream] Processing: sampling={sampling_ratio}, clip={clip_length_seconds}s, delay={delay_seconds}s")
+        logger.debug(f"[Overshoot WS] Config: {model}/{backend} {width}x{height}@{fps}fps")
 
         # Create relay with callback to forward results to client
         async def send_result(result: dict):
-            print(f"[Overshoot] 📥 RESULT FROM OVERSHOOT: {result}")
             try:
                 await websocket.send_json(result)
             except Exception as e:
-                print(f"[Overshoot] Failed to send result: {e}")
+                logger.error(f"Failed to send result: {e}")
 
         def on_relay_error(e: Exception):
-            print(f"[Overshoot] ❌ RELAY ERROR: {e}")
+            logger.error(f"Relay error: {e}")
 
         relay = OvershootStreamRelay(
             api_url=_overshoot_api_url(),
@@ -604,9 +597,8 @@ async def overshoot_video_websocket(websocket: WebSocket):
             delay_seconds=delay_seconds,
         )
 
-        logger.info("[Overshoot] 🚀 Calling relay.start()...")
         stream_id = await relay.start()
-        logger.info(f"[Overshoot] ✅ Relay started with stream_id: {stream_id}")
+        logger.info(f"[Overshoot WS] Stream started: {stream_id}")
         await websocket.send_json({"type": "ready", "stream_id": stream_id})
         await websocket.send_json({"type": "connected", "message": "Connected to Overshoot"})
 
@@ -618,11 +610,12 @@ async def overshoot_video_websocket(websocket: WebSocket):
                 break
 
             if "bytes" in message:
-                # Binary frame: optional 8-byte timestamp prefix + RGB24 data
+                # Binary frame: 8-byte timestamp prefix + frame data (JPEG or RGB24)
                 frame_bytes = message["bytes"]
-                expected_size = height * width * 3
+                expected_rgb_size = height * width * 3
 
-                if len(frame_bytes) == expected_size + 8:
+                # Extract timestamp if present (first 8 bytes)
+                if len(frame_bytes) > 8:
                     timestamp = struct.unpack('<d', frame_bytes[:8])[0]
                     frame_data = frame_bytes[8:]
                 else:
@@ -630,10 +623,24 @@ async def overshoot_video_websocket(websocket: WebSocket):
                     frame_data = frame_bytes
 
                 try:
-                    frame = np.frombuffer(frame_data, dtype=np.uint8).reshape((height, width, 3))
-                    relay.push_frame(frame, timestamp)
-                except (ValueError, struct.error) as e:
-                    print(f"[Backend] ❌ Invalid frame: {e}")
+                    # Check if it's JPEG (starts with FFD8) or raw RGB24
+                    if len(frame_data) >= 2 and frame_data[0] == 0xFF and frame_data[1] == 0xD8:
+                        # JPEG - decode it
+                        nparr = np.frombuffer(frame_data, np.uint8)
+                        frame = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
+                        if frame is not None:
+                            # Convert BGR to RGB
+                            frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+                            # Resize if needed
+                            if frame.shape[0] != height or frame.shape[1] != width:
+                                frame = cv2.resize(frame, (width, height))
+                            relay.push_frame(frame, timestamp)
+                    elif len(frame_data) == expected_rgb_size:
+                        # Raw RGB24
+                        frame = np.frombuffer(frame_data, dtype=np.uint8).reshape((height, width, 3))
+                        relay.push_frame(frame, timestamp)
+                except Exception as e:
+                    logger.warning(f"Frame decode error: {e}")
 
             elif "text" in message:
                 try:
@@ -659,15 +666,14 @@ async def overshoot_video_websocket(websocket: WebSocket):
                     pass
 
     except WebSocketDisconnect:
-        logger.info("[Overshoot] Client disconnected")
+        pass
     except ApiError as e:
-        logger.error(f"[Overshoot] API error: {e.status_code} - {e.message}")
         try:
             await websocket.send_json({"type": "error", "error": e.message})
         except Exception:
             pass
     except Exception as e:
-        logger.exception(f"[Overshoot] Error: {e}")
+        logger.exception("WebSocket error")
         try:
             await websocket.send_json({"type": "error", "error": str(e)})
         except Exception:

@@ -1,10 +1,7 @@
 import 'dart:async';
-import 'dart:io';
-import 'dart:typed_data';
 import 'package:camerawesome/camerawesome_plugin.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:path_provider/path_provider.dart';
 import '../main.dart';
 import '../providers/navigation_provider.dart';
 import '../providers/frame_analysis_provider.dart';
@@ -186,7 +183,7 @@ class _RecordingPageState extends ConsumerState<RecordingPage> {
         model: 'gemini-2.0-flash',
         backend: 'gemini',
         samplingRatio: 1.0,
-        fps: _frameSamplingFps.round(), // Must match actual sampling rate
+        fps: 10, // Must match camerawesome maxFramesPerSecond
         clipLengthSeconds: 0.5,
         delaySeconds: 0.3,
         width: 640,
@@ -196,7 +193,7 @@ class _RecordingPageState extends ConsumerState<RecordingPage> {
       bool wsConnected = false;
       try {
         wsConnected = await _frameStreamingService.connect(
-          wsUrl: 'wss://api.mateotaylortest.org/api/overshoot/ws/stream',
+          wsUrl: 'ws://10.0.2.2:8000/api/overshoot/ws/stream',
           config: config,
         );
 
@@ -245,7 +242,7 @@ class _RecordingPageState extends ConsumerState<RecordingPage> {
       // Start frame streaming if analysis is available
       if (_isAnalysisAvailable) {
         print('[RecordingPage] 🎬 Starting frame streaming service...');
-        _frameStreamingService.startStreaming(cameraFps: 30);
+        _frameStreamingService.startStreaming(cameraFps: 10);
         // Image analysis is handled by camerawesome's onImageForAnalysis callback
       } else {
         print(
@@ -310,128 +307,6 @@ class _RecordingPageState extends ConsumerState<RecordingPage> {
     final result = await completer.future;
     pollTimer.cancel();
     return result;
-  }
-
-  /// Start periodic frame sampling using takePicture()
-  /// This runs in parallel with video recording
-  void _startFrameSampling() {
-    print(
-      '[RecordingPage] 📸 Starting frame sampling at $_frameSamplingFps fps...',
-    );
-
-    // Calculate interval in milliseconds from FPS
-    final intervalMs = (1000 / _frameSamplingFps).round();
-
-    _frameSamplingTimer = Timer.periodic(
-      Duration(milliseconds: intervalMs),
-      (_) => _captureAndSendFrame(),
-    );
-
-    // Also capture first frame immediately
-    _captureAndSendFrame();
-  }
-
-  /// Capture a single frame and send it to the WebSocket
-  Future<void> _captureAndSendFrame() async {
-    // Prevent overlapping captures
-    if (_isCapturingFrame || !_isRecording || _cameraController == null) return;
-
-    _isCapturingFrame = true;
-
-    try {
-      // Get timestamp BEFORE taking picture for accuracy
-      final timestampUtc = DateTime.now().toUtc().millisecondsSinceEpoch;
-
-      // Take a picture (this works even during video recording)
-      final XFile imageFile = await _cameraController!.takePicture();
-
-      // Read the JPEG bytes
-      final Uint8List jpegBytes = await File(imageFile.path).readAsBytes();
-
-      // Convert JPEG to RGB24 in an isolate to avoid blocking UI
-      final rgb24Bytes = await _decodeJpegToRgb24(
-        jpegBytes,
-        _frameStreamingService.configWidth,
-        _frameStreamingService.configHeight,
-      );
-
-      // Clean up the temporary image file
-      await File(imageFile.path).delete();
-
-      // Skip this frame if decoding failed (don't send black frames)
-      if (rgb24Bytes == null) {
-        print('[RecordingPage] ⚠️ Frame decode failed, skipping frame');
-        return;
-      }
-
-      // Send to WebSocket with the captured timestamp
-      _frameStreamingService.sendRawFrameWithTimestamp(
-        rgb24Bytes,
-        timestampUtc,
-      );
-
-      // Update frame count without triggering UI rebuild for each frame
-      _framesCaptured++;
-
-      // Only log every 10th frame to reduce spam
-      if (_framesCaptured % 10 == 0) {
-        print('[RecordingPage] 📸 Frames captured: $_framesCaptured');
-      }
-    } catch (e) {
-      print('[RecordingPage] ⚠️ Frame capture failed: $e');
-    } finally {
-      _isCapturingFrame = false;
-    }
-  }
-
-  /// Decode JPEG bytes to RGB24 format
-  /// Runs in isolate to avoid blocking the UI thread
-  /// Returns null if decoding fails (caller should skip this frame)
-  Future<Uint8List?> _decodeJpegToRgb24(
-    Uint8List jpegBytes,
-    int targetWidth,
-    int targetHeight,
-  ) async {
-    return await Isolate.run(() {
-      // Decode JPEG
-      final image = img.decodeJpg(jpegBytes);
-      if (image == null) {
-        // Return null instead of black frame - caller will skip this frame
-        return null;
-      }
-
-      // Resize to target dimensions
-      final resized = img.copyResize(
-        image,
-        width: targetWidth,
-        height: targetHeight,
-        interpolation: img.Interpolation.linear,
-      );
-
-      // Convert to RGB24 bytes
-      final rgb24 = Uint8List(targetWidth * targetHeight * 3);
-      int index = 0;
-
-      for (int y = 0; y < targetHeight; y++) {
-        for (int x = 0; x < targetWidth; x++) {
-          final pixel = resized.getPixel(x, y);
-          rgb24[index++] = pixel.r.toInt();
-          rgb24[index++] = pixel.g.toInt();
-          rgb24[index++] = pixel.b.toInt();
-        }
-      }
-
-      return rgb24;
-    });
-  }
-
-  /// Stop frame sampling
-  void _stopFrameSampling() {
-    _frameSamplingTimer?.cancel();
-    _frameSamplingTimer = null;
-    print(
-      '[RecordingPage] 📸 Frame sampling stopped. Total frames captured: $_framesCaptured',
-    );
   }
 
   Future<void> _stopRecording() async {

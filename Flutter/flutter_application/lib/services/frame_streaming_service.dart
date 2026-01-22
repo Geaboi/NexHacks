@@ -29,7 +29,7 @@ class StreamConfig {
     this.backend = 'gemini',
     this.outputSchemaJson,
     this.samplingRatio = 1,
-    this.fps = 15,
+    this.fps = 10, // Default to 10 fps to match camerawesome analysis config
     this.clipLengthSeconds = 0.5,
     this.delaySeconds = 0.3,
     this.width = 640,
