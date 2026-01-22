@@ -555,19 +555,21 @@ async def overshoot_video_websocket(websocket: WebSocket):
         model = inference_config.get("model", config_data.get("model", "gemini-2.0-flash"))
         backend = inference_config.get("backend", config_data.get("backend", "gemini"))
 
-        fps = processing_config.get("fps", config_data.get("fps", 15))
-        sampling_ratio = processing_config.get("sampling_ratio", 0.8)
-        clip_length_seconds = processing_config.get("clip_length_seconds", 0.5)
-        delay_seconds = processing_config.get("delay_seconds", 0.5)
+        # Extract processing config - use Flutter's values with sensible defaults
+        # Overshoot constraint: (fps * sampling_ratio * clip_length) / delay <= 30
+        # Default: (10 * 1.0 * 1.5) / 1.0 = 15 frames per clip (good for exercise analysis)
+        fps = processing_config.get("fps", config_data.get("fps", 10))
+        sampling_ratio = processing_config.get("sampling_ratio", config_data.get("sampling_ratio", 1.0))
+        clip_length_seconds = processing_config.get("clip_length_seconds", config_data.get("clip_length_seconds", 1.5))
+        delay_seconds = processing_config.get("delay_seconds", config_data.get("delay_seconds", 1.0))
 
         width = config_data.get("width", 640)
         height = config_data.get("height", 480)
-        
-        # Extract processing config from frontend (with defaults for faster inference)
-        processing_config = config_data.get("processing", {})
-        sampling_ratio = processing_config.get("sampling_ratio", 1.0)
-        clip_length_seconds = processing_config.get("clip_length_seconds", 1.0)
-        delay_seconds = processing_config.get("delay_seconds", 1.0)
+
+        # Log the actual config being used
+        frames_per_clip = fps * sampling_ratio * clip_length_seconds
+        logger.info(f"[Overshoot WS] Processing config: fps={fps}, sampling={sampling_ratio}, clip={clip_length_seconds}s, delay={delay_seconds}s")
+        logger.info(f"[Overshoot WS] Frames per clip: {frames_per_clip:.1f} (constraint: must be <= 30 * delay)")
 
         logger.debug(f"[Overshoot WS] Config: {model}/{backend} {width}x{height}@{fps}fps")
 

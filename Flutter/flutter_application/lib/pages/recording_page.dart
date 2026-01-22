@@ -19,7 +19,7 @@ class RecordingPage extends ConsumerStatefulWidget {
 class _RecordingPageState extends ConsumerState<RecordingPage> {
   // ==================== VIDEO RECORDING TOGGLE ====================
   // Set to false to disable video recording and only stream images
-  static const bool _enableVideoRecording = false;
+  static const bool _enableVideoRecording = true;
   // ================================================================
 
   // Frame streaming service
@@ -177,15 +177,18 @@ class _RecordingPageState extends ConsumerState<RecordingPage> {
       final sensorNotifier = ref.read(sensorProvider.notifier);
 
       // Connect to WebSocket server NOW (when recording starts)
-      // IMPORTANT: fps must match _frameSamplingFps to ensure consistent inference timing
+      // IMPORTANT: fps must match camerawesome maxFramesPerSecond
+      // Overshoot constraint: (fps * samplingRatio * clipLength) / delay <= 30
+      // With fps=10, samplingRatio=1.0, clipLength=1.5, delay=1.0:
+      // (10 * 1.0 * 1.5) / 1.0 = 15 frames per clip (good for exercise analysis)
       final config = StreamConfig(
-        prompt: 'Analyze the physical therapy exercise form',
+        prompt: 'Analyze the physical therapy exercise form. Describe the movement, body position, and any form issues.',
         model: 'gemini-2.0-flash',
         backend: 'gemini',
         samplingRatio: 1.0,
         fps: 10, // Must match camerawesome maxFramesPerSecond
-        clipLengthSeconds: 0.5,
-        delaySeconds: 0.3,
+        clipLengthSeconds: 1.5, // 1.5 seconds = 15 frames for better context
+        delaySeconds: 1.0, // Inference every 1 second
         width: 640,
         height: 480,
       );
@@ -526,7 +529,7 @@ class _RecordingPageState extends ConsumerState<RecordingPage> {
           children: [
             // CamerAwesome Camera Preview
             RotatedBox(
-              quarterTurns: 1,
+              quarterTurns: -1,
               child: _buildCameraAwesome(),
             ),
 
