@@ -47,7 +47,7 @@ from overshoot_client import (
     DEFAULT_ICE_SERVERS,
 )
 
-dotenv.load_dotenv()
+dotenv.load_dotenv(override=True)
 
 import threading
 

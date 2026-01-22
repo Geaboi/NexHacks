@@ -15,11 +15,6 @@ extern "C" {
 #define I2C_MASTER_RX_BUF_DISABLE   0
 #define I2C_MASTER_TIMEOUT_MS       1000
 
-#define MPU_ADDR_A                  0x68
-#define MPU_ADDR_B                  0x69
-#define REG_PWR_MGMT_1              0x6B
-#define REG_ACCEL_XOUT_H            0x3B
-
 esp_err_t i2c_master_init();
 esp_err_t mpu6050_write_byte(uint8_t addr, uint8_t reg, uint8_t data);
 esp_err_t mpu6050_read_burst(uint8_t addr, uint8_t start_reg, uint8_t *buffer, size_t len);

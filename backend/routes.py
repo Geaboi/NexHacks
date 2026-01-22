@@ -9,9 +9,10 @@ import requests
 import dotenv
 from fastapi import APIRouter, HTTPException, UploadFile, File, Query, Form, WebSocket, WebSocketDisconnect
 from fastapi.responses import FileResponse
+import cv2
 
 # Load environment variables from .env file
-dotenv.load_dotenv()
+dotenv.load_dotenv(os.path.join(os.path.dirname(__file__), ".env"), override=True)
 
 import numpy as np
 
@@ -566,8 +567,15 @@ async def overshoot_video_websocket(websocket: WebSocket):
 
         width = config_data.get("width", 640)
         height = config_data.get("height", 480)
+        
+        # Extract processing config from frontend (with defaults for faster inference)
+        processing_config = config_data.get("processing", {})
+        sampling_ratio = processing_config.get("sampling_ratio", 1.0)
+        clip_length_seconds = processing_config.get("clip_length_seconds", 1.0)
+        delay_seconds = processing_config.get("delay_seconds", 1.0)
 
-        print(f"[Overshoot] Config: model={model}, size={width}x{height}, delay={delay_seconds}s, clip={clip_length_seconds}s")
+        logger.info(f"[Overshoot WS Stream] Config: model={model}, backend={backend}, fps={fps}, size={width}x{height}")
+        logger.info(f"[Overshoot WS Stream] Processing: sampling={sampling_ratio}, clip={clip_length_seconds}s, delay={delay_seconds}s")
 
         # Create relay with callback to forward results to client
         async def send_result(result: dict):

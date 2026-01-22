@@ -1,7 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:typed_data';
-import 'package:camera/camera.dart';
 import 'package:flutter/foundation.dart';
 import 'package:web_socket_channel/io.dart';
 
@@ -59,8 +58,7 @@ class StreamConfig {
 /// Service for streaming camera frames to a WebSocket server
 class FrameStreamingService {
   // WebSocket Configuration - Update these for your backend
-  static const String _defaultWsUrl =
-      'ws://10.0.2.2:8000/api/overshoot/ws/stream';
+  static const String _defaultWsUrl = 'wss://api.mateotaylortest.org/api/overshoot/ws/stream';
 
   IOWebSocketChannel? _wsChannel;
   StreamSubscription? _wsSubscription;
@@ -73,6 +71,7 @@ class FrameStreamingService {
   // Frame processing settings
   int _frameSkipCount = 0;
   int _frameSkipRate = 1; // Calculated based on camera fps vs desired fps
+  bool _isProcessingFrame = false; // Prevent frame pile-up during async compression
 
   // Track pending frames by timestamp (frames sent but awaiting response)
   final Set<int> _pendingFrameTimestamps = {};
@@ -230,40 +229,35 @@ class FrameStreamingService {
   bool get isWaitingForResults =>
       !_isStreaming && _pendingFrameTimestamps.isNotEmpty;
 
-  /// Process and send a camera frame to the WebSocket server
-  /// Call this method from the camera's image stream callback
-  void processFrame(CameraImage image) {
-    // Get UTC timestamp for this frame (for ALL frames)
-    final timestampUtc = DateTime.now().toUtc().millisecondsSinceEpoch;
+  /// Send JPEG bytes to the WebSocket server
+  /// Call this method with pre-encoded JPEG data (e.g., from camerawesome's AnalysisImage.toJpeg())
+  /// Returns true if the frame was sent, false if skipped or not ready
+  bool sendJpegFrame(Uint8List jpegBytes, {int? timestampUtc}) {
+    // Get UTC timestamp for this frame
+    final frameTimestamp = timestampUtc ?? DateTime.now().toUtc().millisecondsSinceEpoch;
 
-    // Notify listeners that a frame was captured (for ALL frames)
-    _frameCapturedController.add(timestampUtc);
+    // Notify listeners that a frame was captured
+    _frameCapturedController.add(frameTimestamp);
 
     // Check if we should send this frame to WebSocket
-    if (!_isConnected || !_isStreaming || !_isReady || _wsChannel == null)
-      return;
+    if (!_isConnected || !_isStreaming || !_isReady || _wsChannel == null) {
+      // Debug: log why frame was skipped (only occasionally to avoid spam)
+      if (frameTimestamp % 1000 < 100) {
+        print('[FrameStreaming] ⏭️ Frame skipped - connected: $_isConnected, streaming: $_isStreaming, ready: $_isReady, channel: ${_wsChannel != null}');
+      }
+      return false;
+    }
 
-    // Skip frames to match desired fps
-    _frameSkipCount++;
-    if (_frameSkipCount % _frameSkipRate != 0) return;
+    // Prevent frame pile-up
+    if (_isProcessingFrame) return false;
+    _isProcessingFrame = true;
 
     try {
-      // Convert CameraImage to RGB24 bytes
-      final rgb24Data = _convertToRgb24(image);
-
-      // Skip frame if conversion failed (don't send black frames)
-      if (rgb24Data == null) {
-        return;
-      }
-
-      // Create frame with timestamp header (8 bytes for int64 timestamp + RGB data)
-      final frameWithTimestamp = _createFrameWithTimestamp(
-        timestampUtc,
-        rgb24Data,
-      );
+      // Create frame with timestamp header + JPEG data
+      final frameWithTimestamp = _createFrameWithTimestamp(frameTimestamp, jpegBytes);
 
       // Track this frame as pending (awaiting server response)
-      _pendingFrameTimestamps.add(timestampUtc);
+      _pendingFrameTimestamps.add(frameTimestamp);
 
       // Send as binary data
       _wsChannel!.sink.add(frameWithTimestamp);
@@ -276,17 +270,30 @@ class FrameStreamingService {
       }
 
       // Notify listeners that a frame was sent to WebSocket
-      _frameSentController.add(timestampUtc);
+      _frameSentController.add(frameTimestamp);
+
+      return true;
     } catch (e) {
-      // Frame processing failed silently
+      print('[FrameStreaming] ❌ Frame send failed: $e');
+      return false;
+    } finally {
+      _isProcessingFrame = false;
     }
   }
 
+  /// Legacy method for backward compatibility - now just notifies listeners
+  /// Use sendJpegFrame instead for sending pre-encoded JPEG frames
+  @Deprecated('Use sendJpegFrame with pre-encoded JPEG bytes instead')
+  void processFrameNotification() {
+    final timestampUtc = DateTime.now().toUtc().millisecondsSinceEpoch;
+    _frameCapturedController.add(timestampUtc);
+  }
+
   /// Create a frame with timestamp header
-  /// Format: [8 bytes timestamp (little-endian float64)] + [RGB24 data]
+  /// Format: [8 bytes timestamp (little-endian float64)] + [JPEG data]
   /// Backend expects: struct.unpack('<d', frame_bytes[:8]) - little-endian double
-  Uint8List _createFrameWithTimestamp(int timestampUtc, Uint8List rgb24Data) {
-    final buffer = ByteData(8 + rgb24Data.length);
+  Uint8List _createFrameWithTimestamp(int timestampUtc, Uint8List imageData) {
+    final buffer = ByteData(8 + imageData.length);
 
     // Write timestamp as 64-bit little-endian float (double)
     // Convert milliseconds to seconds for the backend
@@ -294,24 +301,20 @@ class FrameStreamingService {
     buffer.setFloat64(0, timestampSeconds, Endian.little);
 
     // Create result buffer
-    final result = Uint8List(8 + rgb24Data.length);
+    final result = Uint8List(8 + imageData.length);
     result.setRange(0, 8, buffer.buffer.asUint8List());
-    result.setRange(8, result.length, rgb24Data);
+    result.setRange(8, result.length, imageData);
 
     return result;
   }
 
   /// Send raw RGB24 bytes directly with timestamp
   void sendRawFrame(Uint8List rgb24Bytes) {
-    if (!_isConnected || !_isStreaming || !_isReady || _wsChannel == null)
-      return;
+    if (!_isConnected || !_isStreaming || !_isReady || _wsChannel == null) return;
 
     try {
       final timestampUtc = DateTime.now().toUtc().millisecondsSinceEpoch;
-      final frameWithTimestamp = _createFrameWithTimestamp(
-        timestampUtc,
-        rgb24Bytes,
-      );
+      final frameWithTimestamp = _createFrameWithTimestamp(timestampUtc, rgb24Bytes);
 
       _pendingFrameTimestamps.add(timestampUtc);
       _wsChannel!.sink.add(frameWithTimestamp);
@@ -374,124 +377,6 @@ class FrameStreamingService {
   /// Get the configured frame dimensions
   int get configWidth => _config.width;
   int get configHeight => _config.height;
-
-  /// Convert CameraImage to RGB24 format (height, width, 3)
-  /// Returns null if the image format is not supported (caller should skip frame)
-  Uint8List? _convertToRgb24(CameraImage image) {
-    final int width = _config.width;
-    final int height = _config.height;
-
-    // For YUV420 format (most common on Android)
-    if (image.format.group == ImageFormatGroup.yuv420) {
-      return _yuv420ToRgb24(image, width, height);
-    }
-
-    // For BGRA8888 format (common on iOS)
-    if (image.format.group == ImageFormatGroup.bgra8888) {
-      return _bgra8888ToRgb24(image, width, height);
-    }
-
-    // Unsupported format - log warning and return null (don't send black frames)
-    debugPrint(
-      '[FrameStreaming] ⚠️ Unsupported camera format: ${image.format.group}, skipping frame',
-    );
-    return null;
-  }
-
-  /// Convert YUV420 to RGB24
-  Uint8List _yuv420ToRgb24(
-    CameraImage image,
-    int targetWidth,
-    int targetHeight,
-  ) {
-    final int srcWidth = image.width;
-    final int srcHeight = image.height;
-
-    final yPlane = image.planes[0];
-    final uPlane = image.planes[1];
-    final vPlane = image.planes[2];
-
-    final yBuffer = yPlane.bytes;
-    final uBuffer = uPlane.bytes;
-    final vBuffer = vPlane.bytes;
-
-    final yRowStride = yPlane.bytesPerRow;
-    final uvRowStride = uPlane.bytesPerRow;
-    final uvPixelStride = uPlane.bytesPerPixel ?? 1;
-
-    // Calculate scaling factors
-    final double scaleX = srcWidth / targetWidth;
-    final double scaleY = srcHeight / targetHeight;
-
-    final rgb24 = Uint8List(targetWidth * targetHeight * 3);
-
-    for (int y = 0; y < targetHeight; y++) {
-      for (int x = 0; x < targetWidth; x++) {
-        // Map to source coordinates
-        final int srcX = (x * scaleX).floor().clamp(0, srcWidth - 1);
-        final int srcY = (y * scaleY).floor().clamp(0, srcHeight - 1);
-
-        final int yIndex = srcY * yRowStride + srcX;
-        final int uvIndex =
-            (srcY ~/ 2) * uvRowStride + (srcX ~/ 2) * uvPixelStride;
-
-        // Get YUV values
-        final int yValue = yBuffer[yIndex];
-        final int uValue = uBuffer[uvIndex.clamp(0, uBuffer.length - 1)];
-        final int vValue = vBuffer[uvIndex.clamp(0, vBuffer.length - 1)];
-
-        // Convert YUV to RGB
-        int r = (yValue + 1.370705 * (vValue - 128)).round().clamp(0, 255);
-        int g = (yValue - 0.337633 * (uValue - 128) - 0.698001 * (vValue - 128))
-            .round()
-            .clamp(0, 255);
-        int b = (yValue + 1.732446 * (uValue - 128)).round().clamp(0, 255);
-
-        final int rgbIndex = (y * targetWidth + x) * 3;
-        rgb24[rgbIndex] = r;
-        rgb24[rgbIndex + 1] = g;
-        rgb24[rgbIndex + 2] = b;
-      }
-    }
-
-    return rgb24;
-  }
-
-  /// Convert BGRA8888 to RGB24
-  Uint8List _bgra8888ToRgb24(
-    CameraImage image,
-    int targetWidth,
-    int targetHeight,
-  ) {
-    final int srcWidth = image.width;
-    final int srcHeight = image.height;
-    final srcBuffer = image.planes[0].bytes;
-    final srcRowStride = image.planes[0].bytesPerRow;
-
-    // Calculate scaling factors
-    final double scaleX = srcWidth / targetWidth;
-    final double scaleY = srcHeight / targetHeight;
-
-    final rgb24 = Uint8List(targetWidth * targetHeight * 3);
-
-    for (int y = 0; y < targetHeight; y++) {
-      for (int x = 0; x < targetWidth; x++) {
-        // Map to source coordinates
-        final int srcX = (x * scaleX).floor().clamp(0, srcWidth - 1);
-        final int srcY = (y * scaleY).floor().clamp(0, srcHeight - 1);
-
-        final int srcIndex = srcY * srcRowStride + srcX * 4;
-
-        // BGRA -> RGB
-        final int rgbIndex = (y * targetWidth + x) * 3;
-        rgb24[rgbIndex] = srcBuffer[srcIndex + 2]; // R
-        rgb24[rgbIndex + 1] = srcBuffer[srcIndex + 1]; // G
-        rgb24[rgbIndex + 2] = srcBuffer[srcIndex]; // B
-      }
-    }
-
-    return rgb24;
-  }
 
   /// Handle incoming WebSocket messages
   ///
@@ -563,18 +448,8 @@ class FrameStreamingService {
               data['message'] as String? ??
               'Unknown error';
           print('[FrameStreaming] ❌ ERROR from server: $error');
-          // Mark as not ready and clear pending frames so we don't hang
-          _isReady = false;
-          _pendingFrameTimestamps.clear();
-          // Notify that all results are "received" (none coming) so navigation can proceed
-          if (!_isStreaming) {
-            _allResultsReceivedController.add(null);
-          }
           _resultsController.add(
-            InferenceResult(
-              timestampUtc: DateTime.now().toUtc().millisecondsSinceEpoch,
-              result: 'Error: $error',
-            ),
+            InferenceResult(timestampUtc: DateTime.now().toUtc().millisecondsSinceEpoch, result: 'Error: $error'),
           );
           break;
 
@@ -622,6 +497,13 @@ class FrameStreamingService {
     if (result == null) {
       print('[FrameStreaming] ⚠️ Result is NULL - skipping');
       return;
+    }
+    
+    // Calculate and log end-to-end latency
+    if (timestampMs != null) {
+      final now = DateTime.now().toUtc().millisecondsSinceEpoch;
+      final latency = now - timestampMs;
+      print('[FrameStreaming] ⏱️ E2E LATENCY: ${latency}ms (Result: "${result.length > 20 ? result.substring(0, 20) + '...' : result}")');
     }
 
     // Remove from pending if timestamp provided

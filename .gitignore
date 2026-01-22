@@ -1,4 +1,4 @@
-.env/
+*.env*
 .vscode/
 .claude/
 rtm/
@@ -10,3 +10,4 @@ backend/.env
 .env
 backend/.env
 .env
+**/__pycache__/

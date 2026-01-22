@@ -48,8 +48,58 @@ typedef OvershootPoints = List<List<dynamic>>;
 /// Service for sending video and analysis data to backend and receiving analytics
 class AnalyticsService {
   // Backend Configuration - Update with your actual backend URL
-  static const String _defaultBackendUrl = 'http://10.0.2.2:8000/api/pose/process';
-  static const String _defaultBaseUrl = 'http://10.0.2.2:8000';
+  static const String _defaultBackendUrl = 'https://api.mateotaylortest.org/api/pose/process';
+  static const String _defaultBaseUrl = 'https://api.mateotaylortest.org';
+
+  /// Helper to format JSON for debug logging with truncated arrays
+  /// Shows first 5 elements of arrays, then '...'
+  static String _formatJsonForDebug(dynamic data, {int indent = 0}) {
+    final indentStr = '  ' * indent;
+    final nextIndent = '  ' * (indent + 1);
+
+    if (data == null) {
+      return 'null';
+    } else if (data is String) {
+      return '"$data"';
+    } else if (data is num || data is bool) {
+      return data.toString();
+    } else if (data is List) {
+      if (data.isEmpty) {
+        return '[]';
+      }
+      final buffer = StringBuffer('[\n');
+      final itemsToShow = data.length > 5 ? 5 : data.length;
+      for (var i = 0; i < itemsToShow; i++) {
+        buffer.write('$nextIndent${_formatJsonForDebug(data[i], indent: indent + 1)}');
+        if (i < itemsToShow - 1 || data.length > 5) {
+          buffer.write(',');
+        }
+        buffer.write('\n');
+      }
+      if (data.length > 5) {
+        buffer.write('$nextIndent... (${data.length - 5} more items)\n');
+      }
+      buffer.write('$indentStr]');
+      return buffer.toString();
+    } else if (data is Map) {
+      if (data.isEmpty) {
+        return '{}';
+      }
+      final buffer = StringBuffer('{\n');
+      final entries = data.entries.toList();
+      for (var i = 0; i < entries.length; i++) {
+        final entry = entries[i];
+        buffer.write('$nextIndent"${entry.key}": ${_formatJsonForDebug(entry.value, indent: indent + 1)}');
+        if (i < entries.length - 1) {
+          buffer.write(',');
+        }
+        buffer.write('\n');
+      }
+      buffer.write('$indentStr}');
+      return buffer.toString();
+    }
+    return data.toString();
+  }
 
   /// Submit analysis request to backend
   ///
@@ -77,7 +127,7 @@ class AnalyticsService {
     required int videoStartTimeUtc,
     required int fps,
     required int videoDurationMs,
-    Map<String, dynamic>? sensorData,
+    List<Map<String, dynamic>>? sensorSamples,
     String datasetName = 'flutter_recording',
     String modelId = 'default_model',
     String? backendUrl,
@@ -99,14 +149,10 @@ class AnalyticsService {
       print('[AnalyticsService] 📊 Mapped ${overshootPoints.length} overshoot points to video frames');
 
       // 3. Prepare sensor data (empty list if not available)
-      // Backend expects format: [{'data': {'xA', 'yA', 'zA', 'xB', 'yB', 'zB'}, 'timestamp_ms': int}, ...]
-      // sensorData should come from getSamplesForBackend() which returns this format directly
-      final sensorJson = sensorData != null && sensorData['samples'] != null
-          ? jsonEncode(sensorData['samples'])
-          : '[]';
+      final sensorJson = sensorSamples != null ? jsonEncode(sensorSamples) : '[]';
 
       print(
-        '[AnalyticsService] 📡 Sensor data: ${sensorData != null ? '${(sensorData['total_samples'] ?? 0)} samples' : 'not available'}',
+        '[AnalyticsService] 📡 Sensor data: ${sensorSamples != null ? '${sensorSamples.length} samples' : 'not available'}',
       );
 
       // 4. Send data to backend
@@ -204,7 +250,7 @@ class AnalyticsService {
       queryParameters: {
         'dataset_name': datasetName,
         'model_id': modelId,
-        'upload_to_woodwide': 'true',
+        'upload_to_woodwide': 'false',
         'overwrite': 'false',
       },
     );
@@ -227,6 +273,11 @@ class AnalyticsService {
     print(
       '[AnalyticsService] 📤 Request fields: overshoot_data=${overshootPoints.length} points, sensor_data length=${sensorDataJson.length}',
     );
+
+    // Debug log the sensor data JSON with truncated arrays
+    final sensorDataDecoded = jsonDecode(sensorDataJson);
+    print('[AnalyticsService] 📋 sensor_data JSON:');
+    print(_formatJsonForDebug(sensorDataDecoded));
 
     // Send request with timeout (extended for video processing)
     final streamedResponse = await request.send().timeout(

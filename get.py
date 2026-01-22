@@ -2,7 +2,7 @@ import os
 import dotenv
 from woodwide import WoodWide
 
-dotenv.load_dotenv()
+dotenv.load_dotenv(override=True)
 
 print(os.environ.get("WOODWIDE_AI_API_KEY"))
 client = WoodWide(
