@@ -177,14 +177,15 @@ class _RecordingPageState extends ConsumerState<RecordingPage> {
       final sensorNotifier = ref.read(sensorProvider.notifier);
 
       // Connect to WebSocket server NOW (when recording starts)
-      const config = StreamConfig(
+      // IMPORTANT: fps must match _frameSamplingFps to ensure consistent inference timing
+      final config = StreamConfig(
         prompt: 'Analyze the physical therapy exercise form',
         model: 'gemini-2.0-flash',
         backend: 'gemini',
         samplingRatio: 1.0,
-        fps: 30,
-        clipLengthSeconds: 3.0,
-        delaySeconds: 3.0,
+        fps: _frameSamplingFps.round(),  // Must match actual sampling rate
+        clipLengthSeconds: 0.5,
+        delaySeconds: 0.3,
         width: 640,
         height: 480,
       );
@@ -314,32 +315,38 @@ class _RecordingPageState extends ConsumerState<RecordingPage> {
   Future<void> _captureAndSendFrame() async {
     // Prevent overlapping captures
     if (_isCapturingFrame || !_isRecording || _cameraController == null) return;
-    
+
     _isCapturingFrame = true;
-    
+
     try {
       // Get timestamp BEFORE taking picture for accuracy
       final timestampUtc = DateTime.now().toUtc().millisecondsSinceEpoch;
-      
+
       // Take a picture (this works even during video recording)
       final XFile imageFile = await _cameraController!.takePicture();
-      
+
       // Read the JPEG bytes
       final Uint8List jpegBytes = await File(imageFile.path).readAsBytes();
-      
+
       // Convert JPEG to RGB24 in an isolate to avoid blocking UI
       final rgb24Bytes = await _decodeJpegToRgb24(
         jpegBytes,
         _frameStreamingService.configWidth,
         _frameStreamingService.configHeight,
       );
-      
-      // Send to WebSocket with the captured timestamp
-      _frameStreamingService.sendRawFrameWithTimestamp(rgb24Bytes, timestampUtc);
-      
+
       // Clean up the temporary image file
       await File(imageFile.path).delete();
-      
+
+      // Skip this frame if decoding failed (don't send black frames)
+      if (rgb24Bytes == null) {
+        print('[RecordingPage] ⚠️ Frame decode failed, skipping frame');
+        return;
+      }
+
+      // Send to WebSocket with the captured timestamp
+      _frameStreamingService.sendRawFrameWithTimestamp(rgb24Bytes, timestampUtc);
+
       // Update frame count without triggering UI rebuild for each frame
       _framesCaptured++;
 
@@ -347,7 +354,7 @@ class _RecordingPageState extends ConsumerState<RecordingPage> {
       if (_framesCaptured % 10 == 0) {
         print('[RecordingPage] 📸 Frames captured: $_framesCaptured');
       }
-      
+
     } catch (e) {
       print('[RecordingPage] ⚠️ Frame capture failed: $e');
     } finally {
@@ -357,7 +364,8 @@ class _RecordingPageState extends ConsumerState<RecordingPage> {
   
   /// Decode JPEG bytes to RGB24 format
   /// Runs in isolate to avoid blocking the UI thread
-  Future<Uint8List> _decodeJpegToRgb24(
+  /// Returns null if decoding fails (caller should skip this frame)
+  Future<Uint8List?> _decodeJpegToRgb24(
     Uint8List jpegBytes,
     int targetWidth,
     int targetHeight,
@@ -366,7 +374,8 @@ class _RecordingPageState extends ConsumerState<RecordingPage> {
       // Decode JPEG
       final image = img.decodeJpg(jpegBytes);
       if (image == null) {
-        return Uint8List(targetWidth * targetHeight * 3);
+        // Return null instead of black frame - caller will skip this frame
+        return null;
       }
       
       // Resize to target dimensions
