@@ -454,6 +454,13 @@ class FrameStreamingService {
       print('[FrameStreaming] ⚠️ Result is NULL - skipping');
       return;
     }
+    
+    // Calculate and log end-to-end latency
+    if (timestampMs != null) {
+      final now = DateTime.now().toUtc().millisecondsSinceEpoch;
+      final latency = now - timestampMs;
+      print('[FrameStreaming] ⏱️ E2E LATENCY: ${latency}ms (Result: "${result.length > 20 ? result.substring(0, 20) + '...' : result}")');
+    }
 
     // Remove from pending if timestamp provided
     if (timestampMs != null) {

@@ -558,6 +558,10 @@ class QueuedVideoTrack(VideoStreamTrack):
         # Wait for a frame from the queue (with timeout to avoid blocking forever)
         try:
             frame_data = await asyncio.wait_for(self._queue.get(), timeout=1.0)
+            # Log queue exit for debugging
+            # self._frame_count is not incremented yet, so this is for the *next* frame
+            # We can't easily get the timestamp here without unpacking, but we can log that we got *something*
+            # logger.debug(f"[QueuedVideoTrack] Dequeued frame data size: {len(frame_data)}")
         except asyncio.TimeoutError:
             # Return a black frame if no data received
             frame_data = np.zeros((self._height, self._width, 3), dtype=np.uint8)
@@ -585,6 +589,9 @@ async def _listen_overshoot_ws(
     """
     logger.info(f"[Overshoot WS] Connecting to: {ws_url}")
     headers = {"Authorization": f"Bearer {api_key}"}
+    
+    # Import time for latency tracking
+    import time
     if cookies:
         cookie_str = "; ".join(f"{k}={v}" for k, v in cookies.items())
         headers["Cookie"] = cookie_str
@@ -619,7 +626,12 @@ async def _listen_overshoot_ws(
                                 logger.error(f"[Overshoot WS] Error from Overshoot: {data['error']}")
                                 await client_ws.send_json({"type": "error", "error": data["error"], "timestamp": current_ts})
                             elif "result" in data:
-                                logger.info(f"[Overshoot WS] Result received: {str(data['result'])[:200]}")
+                                log_msg = f"[Overshoot WS] Result received: {str(data['result'])[:50]}..."
+                                # Calculate latency if timestamp is available
+                                if current_ts is not None:
+                                    latency_ms = (time.time() * 1000) - current_ts
+                                    log_msg += f" | Latency: {latency_ms:.0f}ms (from frame {current_ts})"
+                                logger.info(log_msg)
                                 await client_ws.send_json({"type": "inference", "result": data["result"], "timestamp": current_ts})
                             elif "inference" in data:
                                 result = data["inference"].get("result", data["inference"])
@@ -840,12 +852,20 @@ async def overshoot_video_websocket(websocket: WebSocket):
                     if frame is None:
                         print("Decode of JPEG from frontend failed - Frame is None")
                         continue
-                    frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+                    # frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+                    
+                    # Log reception with high precision
+                    import time
+                    now_ms = time.time() * 1000
+                    diff = now_ms - timestamp
+                    # logger.debug(f"[Overshoot WS Stream] 📥 Frame decoded. TS: {timestamp:.0f} | Drift: {diff:.1f}ms | Queue size: {frame_queue.qsize()}")
+
                     # Put frame in queue (non-blocking, drop if full)
                     try:
                         frame_queue.put_nowait(frame)
                     except asyncio.QueueFull:
                         # Drop frame if queue is full
+                        logger.warning(f"[Overshoot WS Stream] ⚠️ Queue full, dropped frame {timestamp:.0f}")
                         pass
                 except (ValueError, struct.error) as e:
                     logger.warning(f"Invalid frame data: {e}")
