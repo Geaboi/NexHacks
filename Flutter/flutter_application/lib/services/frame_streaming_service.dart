@@ -28,12 +28,12 @@ class StreamConfig {
     this.model = 'gemini-2.0-flash',
     this.backend = 'gemini',
     this.outputSchemaJson,
-    this.samplingRatio = 1.0,
+    this.samplingRatio = 0.3,
     this.fps = 10, // Default to 10 fps to match camerawesome analysis config
     // Overshoot constraint: (fps * samplingRatio * clipLength) / delay <= 30
-    // With fps=10, samplingRatio=1.0, clipLength=1.5, delay=1.0:
-    // (10 * 1.0 * 1.5) / 1.0 = 15 frames per clip (good for exercise analysis)
-    this.clipLengthSeconds = 1.5, // 1.5 seconds = 15 frames at 10fps
+    // With fps=10, samplingRatio=0.3, clipLength=10.0, delay=1.0:
+    // (10 * 0.3 * 10.0) / 1.0 = 30 frames per clip (max allowed)
+    this.clipLengthSeconds = 10.0, // 10 seconds for full exercise context
     this.delaySeconds = 1.0, // Inference every 1 second
     this.width = 640,
     this.height = 480,

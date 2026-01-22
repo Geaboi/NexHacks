@@ -557,10 +557,10 @@ async def overshoot_video_websocket(websocket: WebSocket):
 
         # Extract processing config - use Flutter's values with sensible defaults
         # Overshoot constraint: (fps * sampling_ratio * clip_length) / delay <= 30
-        # Default: (10 * 1.0 * 1.5) / 1.0 = 15 frames per clip (good for exercise analysis)
+        # Default: (10 * 0.3 * 10.0) / 1.0 = 30 frames per clip (10s window, max allowed)
         fps = processing_config.get("fps", config_data.get("fps", 10))
-        sampling_ratio = processing_config.get("sampling_ratio", config_data.get("sampling_ratio", 1.0))
-        clip_length_seconds = processing_config.get("clip_length_seconds", config_data.get("clip_length_seconds", 1.5))
+        sampling_ratio = processing_config.get("sampling_ratio", config_data.get("sampling_ratio", 0.3))
+        clip_length_seconds = processing_config.get("clip_length_seconds", config_data.get("clip_length_seconds", 5.0))
         delay_seconds = processing_config.get("delay_seconds", config_data.get("delay_seconds", 1.0))
 
         width = config_data.get("width", 640)
