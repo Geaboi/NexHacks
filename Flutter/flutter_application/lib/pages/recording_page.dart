@@ -525,7 +525,10 @@ class _RecordingPageState extends ConsumerState<RecordingPage> {
         child: Stack(
           children: [
             // CamerAwesome Camera Preview
-            _buildCameraAwesome(),
+            RotatedBox(
+              quarterTurns: 1,
+              child: _buildCameraAwesome(),
+            ),
 
             // Waiting for Results Overlay
             if (_isWaitingForResults)
