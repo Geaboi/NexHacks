@@ -59,7 +59,7 @@ class StreamConfig {
 /// Service for streaming camera frames to a WebSocket server
 class FrameStreamingService {
   // WebSocket Configuration - Update these for your backend
-  static const String _defaultWsUrl = 'ws://10.0.2.2:8000/api/overshoot/ws/stream';
+  static const String _defaultWsUrl = 'wss://api.mateotaylortest.org/api/overshoot/ws/stream';
     
   IOWebSocketChannel? _wsChannel;
   StreamSubscription? _wsSubscription;
