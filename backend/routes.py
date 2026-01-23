@@ -440,6 +440,7 @@ async def process_video_to_angles(
                     }
                     for a in actions
                 ]
+                logger.info(f"[Process Video] Including {len(detected_actions_result)} detected actions in response: {detected_actions_result}")
             else:
                  logger.warning(f"No ActionStore found for stream_id: {stream_id}")
         
@@ -672,6 +673,10 @@ async def overshoot_video_websocket(websocket: WebSocket):
                             "detected": True,
                             "confidence": 0.8 # arbitrary high confidence for direct text
                         }]
+                    
+                    if detected_list:
+                        logger.info(f"[Overshoot Relay] Frame {frame_counter}: Received actions: {detected_list}")
+
                     current_time_stream = result.get("timestamp") or time.time()
                     now = time.time()
 
@@ -721,6 +726,7 @@ async def overshoot_video_websocket(websocket: WebSocket):
                                         confidence=confidence,
                                         metadata={"event_type": "started"}
                                     )
+                                    logger.info(f"[Overshoot Relay] Action STARTED: {action_name} at {start_time}")
                                     store.add(action)
                             
                             else:
@@ -760,6 +766,7 @@ async def overshoot_video_websocket(websocket: WebSocket):
                                 "duration": end_time - action_info.get("start_time", end_time)
                             }
                         )
+                        logger.info(f"[Overshoot Relay] Action ENDED: {action_name} at {end_time}")
                         store.add(action)
 
             except Exception as e:

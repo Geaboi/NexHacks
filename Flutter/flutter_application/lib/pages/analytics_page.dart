@@ -122,12 +122,28 @@ class _AnalyticsPageState extends ConsumerState<AnalyticsPage> {
     }
   }
 
-  void _togglePlayPause() {
-    if (_videoController == null) return;
-    if (_videoController!.value.isPlaying) {
-      _videoController!.pause();
-    } else {
-      _videoController!.play();
+  bool _isToggling = false;
+
+  Future<void> _togglePlayPause() async {
+    if (_videoController == null || _isToggling) return;
+
+    _isToggling = true;
+    try {
+      if (_videoController!.value.isPlaying) {
+        await _videoController!.pause();
+      } else {
+        // If satisfied at the end, restart
+        final position = _videoController!.value.position;
+        final duration = _videoController!.value.duration;
+        if (position >= duration) {
+          await _videoController!.seekTo(Duration.zero);
+        }
+        await _videoController!.play();
+      }
+    } finally {
+      // Small delay to prevent rapid spamming
+      await Future.delayed(const Duration(milliseconds: 200));
+      _isToggling = false;
     }
   }
 
@@ -276,11 +292,15 @@ class _AnalyticsPageState extends ConsumerState<AnalyticsPage> {
         // Load detected actions into provider for display and create segments
         List<ActionSegment>? segments;
         if (response.detectedActions.isNotEmpty) {
-          await ref.read(detectedActionsProvider.notifier).loadSessionActions(sessionId);
+          await ref
+              .read(detectedActionsProvider.notifier)
+              .loadSessionActions(sessionId);
           final actionsState = ref.read(detectedActionsProvider);
           if (actionsState.hasActions) {
             segments = ActionSegment.fromDetectedActions(actionsState.actions);
-            print('[AnalyticsPage] 📊 Created ${segments.length} action segments for chart labels');
+            print(
+              '[AnalyticsPage] 📊 Created ${segments.length} action segments for chart labels',
+            );
           }
         }
 
@@ -1464,15 +1484,19 @@ class ActionSegment {
     if (actions.isEmpty) return [];
 
     // Sort by frame number
-    final sorted = List<DetectedAction>.from(actions)..sort((a, b) => a.frameNumber.compareTo(b.frameNumber));
+    final sorted = List<DetectedAction>.from(actions)
+      ..sort((a, b) => a.frameNumber.compareTo(b.frameNumber));
 
     final segments = <ActionSegment>[];
-    
+
     // Track active start events: {action_label: start_action}
     final activeStarts = <String, DetectedAction>{};
 
-    bool hasExplicitEvents = sorted.any((a) => 
-      a.metadata != null && (a.metadata!['event_type'] == 'started' || a.metadata!['event_type'] == 'ended')
+    bool hasExplicitEvents = sorted.any(
+      (a) =>
+          a.metadata != null &&
+          (a.metadata!['event_type'] == 'started' ||
+              a.metadata!['event_type'] == 'ended'),
     );
 
     if (hasExplicitEvents) {
@@ -1487,12 +1511,14 @@ class ActionSegment {
           final startAction = activeStarts.remove(label);
           if (startAction != null) {
             // Found a complete pair
-            segments.add(ActionSegment(
-              startFrame: startAction.frameNumber,
-              endFrame: action.frameNumber,
-              label: label,
-              confidence: (startAction.confidence + action.confidence) / 2,
-            ));
+            segments.add(
+              ActionSegment(
+                startFrame: startAction.frameNumber,
+                endFrame: action.frameNumber,
+                label: label,
+                confidence: (startAction.confidence + action.confidence) / 2,
+              ),
+            );
           }
         }
       }
@@ -1503,7 +1529,8 @@ class ActionSegment {
         final currentAction = sorted[i];
         final currentLabel = currentAction.action;
         int startFrame = currentAction.frameNumber;
-        int endFrame = currentAction.frameNumberEnd ?? currentAction.frameNumber;
+        int endFrame =
+            currentAction.frameNumberEnd ?? currentAction.frameNumber;
         double totalConfidence = currentAction.confidence;
         int count = 1;
 
@@ -1512,14 +1539,14 @@ class ActionSegment {
         while (j < sorted.length) {
           final nextAction = sorted[j];
           if (nextAction.action == currentLabel) {
-             // Check if contiguous or close enough (e.g. < 10 frames gap)
-             if (nextAction.frameNumber - endFrame < 10) {
-                endFrame = nextAction.frameNumberEnd ?? nextAction.frameNumber;
-                totalConfidence += nextAction.confidence;
-                count++;
-                j++;
-                continue;
-             }
+            // Check if contiguous or close enough (e.g. < 10 frames gap)
+            if (nextAction.frameNumber - endFrame < 10) {
+              endFrame = nextAction.frameNumberEnd ?? nextAction.frameNumber;
+              totalConfidence += nextAction.confidence;
+              count++;
+              j++;
+              continue;
+            }
           }
           break;
         }
@@ -1711,16 +1738,21 @@ class _AngleChartCard extends StatelessWidget {
                               // Find if this frame is within an action segment
                               final frameIndex = spot.x.toInt();
                               String? actionLabel;
-                              if (actionSegments != null && actionSegments!.isNotEmpty) {
+                              if (actionSegments != null &&
+                                  actionSegments!.isNotEmpty) {
                                 for (final segment in actionSegments!) {
-                                  if (frameIndex >= segment.startFrame && frameIndex <= segment.endFrame) {
+                                  if (frameIndex >= segment.startFrame &&
+                                      frameIndex <= segment.endFrame) {
                                     actionLabel = segment.label;
                                     break;
                                   }
                                 }
                               }
-                              final baseText = 'Frame ${spot.x.toInt()}\n${spot.y.toStringAsFixed(1)}°';
-                              final displayText = actionLabel != null ? '$baseText\n[$actionLabel]' : baseText;
+                              final baseText =
+                                  'Frame ${spot.x.toInt()}\n${spot.y.toStringAsFixed(1)}°';
+                              final displayText = actionLabel != null
+                                  ? '$baseText\n[$actionLabel]'
+                                  : baseText;
                               return LineTooltipItem(
                                 'Frame ${spot.x.toInt()}\n${spot.y.toStringAsFixed(1)}°',
                                 TextStyle(
@@ -1791,7 +1823,11 @@ class _AngleChartCard extends StatelessWidget {
             show: true,
             alignment: Alignment.topCenter,
             padding: const EdgeInsets.only(left: 4, bottom: 2),
-            style: TextStyle(color: segmentColor, fontSize: 9, fontWeight: FontWeight.w600),
+            style: TextStyle(
+              color: segmentColor,
+              fontSize: 9,
+              fontWeight: FontWeight.w600,
+            ),
             labelResolver: (line) => segment.label,
           ),
         ),
