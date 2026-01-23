@@ -17,7 +17,12 @@ class AnalyticsPage extends ConsumerStatefulWidget {
   final int videoDurationMs;
   final int fps;
 
-  const AnalyticsPage({super.key, required this.videoPath, required this.videoDurationMs, this.fps = 30});
+  const AnalyticsPage({
+    super.key,
+    required this.videoPath,
+    required this.videoDurationMs,
+    this.fps = 30,
+  });
 
   @override
   ConsumerState<AnalyticsPage> createState() => _AnalyticsPageState();
@@ -35,8 +40,9 @@ class _AnalyticsPageState extends ConsumerState<AnalyticsPage> {
   List<FrameAngle>? _sessionAngles;
   List<int> _anomalousFrameIds = [];
   List<List<dynamic>>? _rawAngles;
+  List<List<dynamic>>? _imuAngles;
   int? _usedJointIndex;
-  
+
   int? _savedSessionId;
   DateTime? _sessionTimestamp;
 
@@ -67,7 +73,9 @@ class _AnalyticsPageState extends ConsumerState<AnalyticsPage> {
             backgroundColor: Colors.orange.shade700,
             duration: const Duration(seconds: 3),
             behavior: SnackBarBehavior.floating,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(8),
+            ),
           ),
         );
       }
@@ -130,25 +138,39 @@ class _AnalyticsPageState extends ConsumerState<AnalyticsPage> {
       final sensorState = ref.read(sensorProvider);
 
       // Get video start time from frame analysis state
-      final videoStartTimeUtc = frameAnalysis.videoStartTimeUtc ?? DateTime.now().toUtc().millisecondsSinceEpoch;
+      final videoStartTimeUtc =
+          frameAnalysis.videoStartTimeUtc ??
+          DateTime.now().toUtc().millisecondsSinceEpoch;
 
       // Convert inference points to JSON format
-      final inferencePointsJson = frameAnalysis.inferencePoints.map((p) => p.toJson()).toList();
+      final inferencePointsJson = frameAnalysis.inferencePoints
+          .map((p) => p.toJson())
+          .toList();
 
       // Get sensor data if samples were collected
       // Check if sensor buffer has any samples - this indicates sensors were used
       List<Map<String, dynamic>>? sensorSamples;
       if (sensorState.sampleBuffer.isNotEmpty) {
-        sensorSamples = ref.read(sensorProvider.notifier).getSamplesForBackend();
-        print('[AnalyticsPage] 📡 Sensor data available: ${sensorSamples.length} samples');
+        sensorSamples = ref
+            .read(sensorProvider.notifier)
+            .getSamplesForBackend();
+        print(
+          '[AnalyticsPage] 📡 Sensor data available: ${sensorSamples.length} samples',
+        );
       } else {
-        print('[AnalyticsPage] 📡 No sensor data available (sensor not used during recording)');
+        print(
+          '[AnalyticsPage] 📡 No sensor data available (sensor not used during recording)',
+        );
       }
 
       print('[AnalyticsPage] 🚀 Submitting analysis...');
       print('[AnalyticsPage] 📹 Video: ${widget.videoPath}');
-      print('[AnalyticsPage] 📊 Inference points: ${inferencePointsJson.length}');
-      print('[AnalyticsPage] ⏱️ Video duration: ${widget.videoDurationMs}ms, FPS: ${widget.fps}');
+      print(
+        '[AnalyticsPage] 📊 Inference points: ${inferencePointsJson.length}',
+      );
+      print(
+        '[AnalyticsPage] ⏱️ Video duration: ${widget.videoDurationMs}ms, FPS: ${widget.fps}',
+      );
 
       // Hardcode joint index to 0 (Left Knee) for now as per requirement
       // This will be moved to user selection later
@@ -161,7 +183,8 @@ class _AnalyticsPageState extends ConsumerState<AnalyticsPage> {
         fps: widget.fps,
         videoDurationMs: widget.videoDurationMs,
         sensorSamples: sensorSamples,
-        datasetName: 'flutter_recording_${DateTime.now().millisecondsSinceEpoch}',
+        datasetName:
+            'flutter_recording_${DateTime.now().millisecondsSinceEpoch}',
         modelId: '1OZUO0uahYoua8SklFmr',
         jointIndex: jointIndex,
       );
@@ -175,6 +198,7 @@ class _AnalyticsPageState extends ConsumerState<AnalyticsPage> {
         } else {
           // Store raw angles and joint index
           _rawAngles = response.rawAngles;
+          _imuAngles = response.imuAngles;
           _usedJointIndex = response.jointIndex;
         }
       });
@@ -198,7 +222,10 @@ class _AnalyticsPageState extends ConsumerState<AnalyticsPage> {
   }
 
   /// Save the analysis results to local SQLite database
-  Future<void> _saveToDatabase(AnalyticsResponse response, int videoStartTimeUtc) async {
+  Future<void> _saveToDatabase(
+    AnalyticsResponse response,
+    int videoStartTimeUtc,
+  ) async {
     setState(() {
       _isSavingToDb = true;
     });
@@ -231,7 +258,9 @@ class _AnalyticsPageState extends ConsumerState<AnalyticsPage> {
 
       if (sessionId != null) {
         // Load the stats for display
-        await ref.read(sessionHistoryProvider.notifier).selectSession(sessionId);
+        await ref
+            .read(sessionHistoryProvider.notifier)
+            .selectSession(sessionId);
         final historyState = ref.read(sessionHistoryProvider);
 
         setState(() {
@@ -267,7 +296,9 @@ class _AnalyticsPageState extends ConsumerState<AnalyticsPage> {
   String _getAngleValue(String angleType) {
     if (_sessionStats == null) return '--°';
 
-    final stat = _sessionStats!.where((s) => s.angleName == angleType).firstOrNull;
+    final stat = _sessionStats!
+        .where((s) => s.angleName == angleType)
+        .firstOrNull;
     if (stat == null) return '--°';
 
     return '${stat.max?.toStringAsFixed(1) ?? '--'}°';
@@ -277,7 +308,9 @@ class _AnalyticsPageState extends ConsumerState<AnalyticsPage> {
   String _getAngleRange(String angleType) {
     if (_sessionStats == null) return '';
 
-    final stat = _sessionStats!.where((s) => s.angleName == angleType).firstOrNull;
+    final stat = _sessionStats!
+        .where((s) => s.angleName == angleType)
+        .firstOrNull;
     if (stat == null) return '';
 
     return 'Min: ${stat.min?.toStringAsFixed(1) ?? '--'}° • Avg: ${stat.avg?.toStringAsFixed(1) ?? '--'}°';
@@ -330,12 +363,17 @@ class _AnalyticsPageState extends ConsumerState<AnalyticsPage> {
   (double min, double max) _getAngleBounds(String angleType) {
     if (_sessionStats == null) return (0, 180);
 
-    final stat = _sessionStats!.where((s) => s.angleName == angleType).firstOrNull;
+    final stat = _sessionStats!
+        .where((s) => s.angleName == angleType)
+        .firstOrNull;
     if (stat == null || stat.min == null || stat.max == null) return (0, 180);
 
     // Add some padding to the bounds
     final padding = (stat.max! - stat.min!) * 0.1;
-    return ((stat.min! - padding).clamp(0, 180), (stat.max! + padding).clamp(0, 180));
+    return (
+      (stat.min! - padding).clamp(0, 180),
+      (stat.max! + padding).clamp(0, 180),
+    );
   }
 
   /// Build tips list from overshoot inference results
@@ -345,7 +383,11 @@ class _AnalyticsPageState extends ConsumerState<AnalyticsPage> {
     // If no inference results, show placeholder
     if (inferencePoints.isEmpty) {
       return [
-        _FeedbackItem(icon: Icons.info_outline, text: 'No real-time analysis data available', color: Colors.grey),
+        _FeedbackItem(
+          icon: Icons.info_outline,
+          text: 'No real-time analysis data available',
+          color: Colors.grey,
+        ),
         const SizedBox(height: 8),
         _FeedbackItem(
           icon: Icons.lightbulb_outline,
@@ -377,11 +419,19 @@ class _AnalyticsPageState extends ConsumerState<AnalyticsPage> {
 
     // Build tip widgets (limit to 5 most recent unique tips)
     final tipsList = uniqueTips.toList();
-    final displayTips = tipsList.length > 5 ? tipsList.sublist(tipsList.length - 5) : tipsList;
+    final displayTips = tipsList.length > 5
+        ? tipsList.sublist(tipsList.length - 5)
+        : tipsList;
 
     final widgets = <Widget>[];
     for (int i = 0; i < displayTips.length; i++) {
-      widgets.add(_FeedbackItem(icon: Icons.lightbulb_outline, text: displayTips[i], color: Colors.amber));
+      widgets.add(
+        _FeedbackItem(
+          icon: Icons.lightbulb_outline,
+          text: displayTips[i],
+          color: Colors.amber,
+        ),
+      );
       if (i < displayTips.length - 1) {
         widgets.add(const SizedBox(height: 8));
       }
@@ -391,7 +441,11 @@ class _AnalyticsPageState extends ConsumerState<AnalyticsPage> {
     if (uniqueTips.length > 1) {
       widgets.insert(
         0,
-        _FeedbackItem(icon: Icons.auto_awesome, text: '${uniqueTips.length} tips from AI analysis', color: Colors.teal),
+        _FeedbackItem(
+          icon: Icons.auto_awesome,
+          text: '${uniqueTips.length} tips from AI analysis',
+          color: Colors.teal,
+        ),
       );
       widgets.insert(1, const SizedBox(height: 8));
     }
@@ -409,14 +463,26 @@ class _AnalyticsPageState extends ConsumerState<AnalyticsPage> {
         decoration: BoxDecoration(
           color: AppColors.primaryDark,
           borderRadius: BorderRadius.circular(16),
-          boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.1), blurRadius: 10, offset: const Offset(0, 4))],
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.1),
+              blurRadius: 10,
+              offset: const Offset(0, 4),
+            ),
+          ],
         ),
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             const CircularProgressIndicator(color: Colors.white),
             const SizedBox(height: 16),
-            Text('Processing video...', style: TextStyle(color: Colors.white.withOpacity(0.7), fontSize: 14)),
+            Text(
+              'Processing video...',
+              style: TextStyle(
+                color: Colors.white.withOpacity(0.7),
+                fontSize: 14,
+              ),
+            ),
           ],
         ),
       );
@@ -429,13 +495,22 @@ class _AnalyticsPageState extends ConsumerState<AnalyticsPage> {
         decoration: BoxDecoration(
           color: AppColors.primaryDark,
           borderRadius: BorderRadius.circular(16),
-          boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.1), blurRadius: 10, offset: const Offset(0, 4))],
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.1),
+              blurRadius: 10,
+              offset: const Offset(0, 4),
+            ),
+          ],
         ),
         clipBehavior: Clip.antiAlias,
         child: Column(
           children: [
             // Video player
-            AspectRatio(aspectRatio: _videoController!.value.aspectRatio, child: VideoPlayer(_videoController!)),
+            AspectRatio(
+              aspectRatio: _videoController!.value.aspectRatio,
+              child: VideoPlayer(_videoController!),
+            ),
             // Controls
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
@@ -446,7 +521,9 @@ class _AnalyticsPageState extends ConsumerState<AnalyticsPage> {
                   IconButton(
                     onPressed: _togglePlayPause,
                     icon: Icon(
-                      _isVideoPlaying ? Icons.pause_circle_filled : Icons.play_circle_filled,
+                      _isVideoPlaying
+                          ? Icons.pause_circle_filled
+                          : Icons.play_circle_filled,
                       color: Colors.white,
                       size: 36,
                     ),
@@ -485,20 +562,33 @@ class _AnalyticsPageState extends ConsumerState<AnalyticsPage> {
       decoration: BoxDecoration(
         color: AppColors.primaryDark,
         borderRadius: BorderRadius.circular(16),
-        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.1), blurRadius: 10, offset: const Offset(0, 4))],
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.1),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
+        ],
       ),
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
           Icon(
-            _hasSubmitted && _response?.success == true ? Icons.videocam_off : Icons.play_circle_outline,
+            _hasSubmitted && _response?.success == true
+                ? Icons.videocam_off
+                : Icons.play_circle_outline,
             size: 56,
             color: Colors.white.withOpacity(0.4),
           ),
           const SizedBox(height: 12),
           Text(
-            _hasSubmitted && _response?.success == true ? 'Processed video not available' : 'Video will appear here',
-            style: TextStyle(color: Colors.white.withOpacity(0.5), fontSize: 16),
+            _hasSubmitted && _response?.success == true
+                ? 'Processed video not available'
+                : 'Video will appear here',
+            style: TextStyle(
+              color: Colors.white.withOpacity(0.5),
+              fontSize: 16,
+            ),
           ),
         ],
       ),
@@ -564,7 +654,9 @@ class _AnalyticsPageState extends ConsumerState<AnalyticsPage> {
                 if (_savedSessionId != null)
                   Text(
                     'Session #$_savedSessionId',
-                    style: theme.textTheme.bodySmall?.copyWith(color: AppColors.textLight),
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: AppColors.textLight,
+                    ),
                   ),
                 const SizedBox(height: 16),
               ],
@@ -582,17 +674,26 @@ class _AnalyticsPageState extends ConsumerState<AnalyticsPage> {
               // Flexion Metrics
               Row(
                 children: [
-                  Text('Flexion Analysis', style: theme.textTheme.headlineSmall),
+                  Text(
+                    'Flexion Analysis',
+                    style: theme.textTheme.headlineSmall,
+                  ),
                   const Spacer(),
                   if (_isSavingToDb)
                     const SizedBox(
                       width: 18,
                       height: 18,
-                      child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.primary),
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        color: AppColors.primary,
+                      ),
                     )
                   else if (_sessionStats != null)
                     Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 10,
+                        vertical: 5,
+                      ),
                       decoration: BoxDecoration(
                         color: AppColors.success.withOpacity(0.1),
                         borderRadius: BorderRadius.circular(20),
@@ -600,11 +701,19 @@ class _AnalyticsPageState extends ConsumerState<AnalyticsPage> {
                       child: const Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          Icon(Icons.check_circle, size: 14, color: AppColors.success),
+                          Icon(
+                            Icons.check_circle,
+                            size: 14,
+                            color: AppColors.success,
+                          ),
                           SizedBox(width: 4),
                           Text(
                             'Saved',
-                            style: TextStyle(fontSize: 12, color: AppColors.success, fontWeight: FontWeight.w600),
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: AppColors.success,
+                              fontWeight: FontWeight.w600,
+                            ),
                           ),
                         ],
                       ),
@@ -689,17 +798,31 @@ class _AnalyticsPageState extends ConsumerState<AnalyticsPage> {
                   color: AppColors.cardBackground,
                   borderRadius: BorderRadius.circular(16),
                   boxShadow: [
-                    BoxShadow(color: AppColors.primary.withOpacity(0.06), blurRadius: 16, offset: const Offset(0, 4)),
+                    BoxShadow(
+                      color: AppColors.primary.withOpacity(0.06),
+                      blurRadius: 16,
+                      offset: const Offset(0, 4),
+                    ),
                   ],
                 ),
                 child: Column(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    Icon(Icons.show_chart, size: 48, color: AppColors.textLight),
+                    Icon(
+                      Icons.show_chart,
+                      size: 48,
+                      color: AppColors.textLight,
+                    ),
                     const SizedBox(height: 12),
-                    Text('Chart Placeholder', style: theme.textTheme.bodyMedium),
+                    Text(
+                      'Chart Placeholder',
+                      style: theme.textTheme.bodyMedium,
+                    ),
                     const SizedBox(height: 4),
-                    Text('Progress visualization coming soon', style: theme.textTheme.bodySmall),
+                    Text(
+                      'Progress visualization coming soon',
+                      style: theme.textTheme.bodySmall,
+                    ),
                   ],
                 ),
               ),
@@ -708,7 +831,11 @@ class _AnalyticsPageState extends ConsumerState<AnalyticsPage> {
               // Feedback Section
               Text('Recommendations', style: theme.textTheme.headlineSmall),
               const SizedBox(height: 12),
-              _FeedbackItem(icon: Icons.info_outline, text: 'AI feedback will appear here', color: AppColors.info),
+              _FeedbackItem(
+                icon: Icons.info_outline,
+                text: 'AI feedback will appear here',
+                color: AppColors.info,
+              ),
               const SizedBox(height: 8),
               _FeedbackItem(
                 icon: Icons.lightbulb_outline,
@@ -728,7 +855,9 @@ class _AnalyticsPageState extends ConsumerState<AnalyticsPage> {
                             content: const Text('Share feature - coming soon!'),
                             backgroundColor: AppColors.primary,
                             behavior: SnackBarBehavior.floating,
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(8),
+                            ),
                           ),
                         );
                       },
@@ -769,7 +898,13 @@ class _AnalyticsPageState extends ConsumerState<AnalyticsPage> {
       decoration: BoxDecoration(
         color: AppColors.cardBackground,
         borderRadius: BorderRadius.circular(16),
-        boxShadow: [BoxShadow(color: AppColors.primary.withOpacity(0.06), blurRadius: 16, offset: const Offset(0, 4))],
+        boxShadow: [
+          BoxShadow(
+            color: AppColors.primary.withOpacity(0.06),
+            blurRadius: 16,
+            offset: const Offset(0, 4),
+          ),
+        ],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -819,7 +954,12 @@ class _AnalyticsPageState extends ConsumerState<AnalyticsPage> {
                   ),
                 ),
                 const SizedBox(width: 12),
-                Expanded(child: Text('Uploading video and data for analysis...', style: theme.textTheme.bodyMedium)),
+                Expanded(
+                  child: Text(
+                    'Uploading video and data for analysis...',
+                    style: theme.textTheme.bodyMedium,
+                  ),
+                ),
               ],
             ),
           ] else if (_errorMessage != null) ...[
@@ -835,16 +975,27 @@ class _AnalyticsPageState extends ConsumerState<AnalyticsPage> {
                 children: [
                   Text(
                     'Analysis failed',
-                    style: theme.textTheme.titleMedium?.copyWith(color: AppColors.error, fontWeight: FontWeight.w600),
+                    style: theme.textTheme.titleMedium?.copyWith(
+                      color: AppColors.error,
+                      fontWeight: FontWeight.w600,
+                    ),
                   ),
                   const SizedBox(height: 4),
-                  Text(_errorMessage!, style: theme.textTheme.bodySmall?.copyWith(color: AppColors.error)),
+                  Text(
+                    _errorMessage!,
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: AppColors.error,
+                    ),
+                  ),
                   const SizedBox(height: 10),
                   TextButton.icon(
                     onPressed: _submitAnalysis,
                     icon: const Icon(Icons.refresh, size: 16),
                     label: const Text('Retry'),
-                    style: TextButton.styleFrom(foregroundColor: AppColors.error, padding: EdgeInsets.zero),
+                    style: TextButton.styleFrom(
+                      foregroundColor: AppColors.error,
+                      padding: EdgeInsets.zero,
+                    ),
                   ),
                 ],
               ),
@@ -859,7 +1010,11 @@ class _AnalyticsPageState extends ConsumerState<AnalyticsPage> {
               ),
               child: Row(
                 children: [
-                  const Icon(Icons.check_circle, color: AppColors.success, size: 22),
+                  const Icon(
+                    Icons.check_circle,
+                    color: AppColors.success,
+                    size: 22,
+                  ),
                   const SizedBox(width: 10),
                   Expanded(
                     child: Text(
@@ -880,265 +1035,34 @@ class _AnalyticsPageState extends ConsumerState<AnalyticsPage> {
           // Data summary
           Row(
             children: [
-              _DataChip(icon: Icons.videocam, label: 'Video', isAvailable: true),
+              _DataChip(
+                icon: Icons.videocam,
+                label: 'Video',
+                isAvailable: true,
+              ),
               const SizedBox(width: 8),
               _DataChip(
                 icon: Icons.auto_fix_high,
                 label: 'Overshoot',
-                isAvailable: ref.read(frameAnalysisProvider).inferencePoints.isNotEmpty,
+                isAvailable: ref
+                    .read(frameAnalysisProvider)
+                    .inferencePoints
+                    .isNotEmpty,
               ),
               const SizedBox(width: 8),
-              _DataChip(icon: Icons.sensors, label: 'IMU', isAvailable: hasSensorData),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _DataChip extends StatelessWidget {
-  final IconData icon;
-  final String label;
-  final bool isAvailable;
-
-  const _DataChip({required this.icon, required this.label, required this.isAvailable});
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-      decoration: BoxDecoration(
-        color: isAvailable ? AppColors.primary.withOpacity(0.08) : AppColors.textLight.withOpacity(0.15),
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(
-          color: isAvailable ? AppColors.primary.withOpacity(0.2) : AppColors.textLight.withOpacity(0.3),
-        ),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(icon, size: 14, color: isAvailable ? AppColors.primary : AppColors.textLight),
-          const SizedBox(width: 6),
-          Text(
-            label,
-            style: TextStyle(
-              fontSize: 12,
-              color: isAvailable ? AppColors.primary : AppColors.textLight,
-              fontWeight: FontWeight.w500,
-            ),
-          ),
-          const SizedBox(width: 4),
-          Icon(
-            isAvailable ? Icons.check_circle : Icons.cancel,
-            size: 12,
-            color: isAvailable ? AppColors.success : AppColors.textLight,
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _MetricCard extends StatelessWidget {
-  final IconData icon;
-  final String title;
-  final String value;
-  final String? subtitle;
-  final Color color;
-
-  const _MetricCard({required this.icon, required this.title, required this.value, required this.color, this.subtitle});
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-
-    return Container(
-      padding: const EdgeInsets.all(18),
-      decoration: BoxDecoration(
-        color: AppColors.cardBackground,
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: [BoxShadow(color: color.withOpacity(0.1), blurRadius: 16, offset: const Offset(0, 4))],
-        border: Border.all(color: color.withOpacity(0.15)),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Container(
-            padding: const EdgeInsets.all(8),
-            decoration: BoxDecoration(color: color.withOpacity(0.1), borderRadius: BorderRadius.circular(10)),
-            child: Icon(icon, color: color, size: 24),
-          ),
-          const SizedBox(height: 14),
-          Text(
-            value,
-            style: theme.textTheme.headlineMedium?.copyWith(fontWeight: FontWeight.bold, color: AppColors.textPrimary),
-          ),
-          const SizedBox(height: 4),
-          Text(title, style: theme.textTheme.bodyMedium),
-          if (subtitle != null && subtitle!.isNotEmpty) ...[
-            const SizedBox(height: 4),
-            Text(subtitle!, style: theme.textTheme.bodySmall),
-          ],
-        ],
-      ),
-    );
-  }
-}
-
-/// Chart card widget that displays angle data over frames
-class _AngleChartCard extends StatelessWidget {
-  final IconData icon;
-  final String title;
-  final String value;
-  final String? subtitle;
-  final Color color;
-  final List<FlSpot> chartData;
-  final (double min, double max) yBounds;
-
-  const _AngleChartCard({
-    required this.icon,
-    required this.title,
-    required this.value,
-    this.subtitle,
-    required this.color,
-    required this.chartData,
-    required this.yBounds,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final hasData = chartData.isNotEmpty;
-
-    return Container(
-      padding: const EdgeInsets.all(18),
-      decoration: BoxDecoration(
-        color: AppColors.cardBackground,
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: [BoxShadow(color: color.withOpacity(0.1), blurRadius: 16, offset: const Offset(0, 4))],
-        border: Border.all(color: color.withOpacity(0.15)),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // Header row with icon and stats
-          Row(
-            children: [
-              Container(
-                padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(color: color.withOpacity(0.1), borderRadius: BorderRadius.circular(10)),
-                child: Icon(icon, color: color, size: 24),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(title, style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w600)),
-                    if (subtitle != null && subtitle!.isNotEmpty)
-                      Text(subtitle!, style: theme.textTheme.bodySmall?.copyWith(color: AppColors.textSecondary)),
-                  ],
-                ),
-              ),
-              Text(
-                value,
-                style: theme.textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.bold, color: color),
+              _DataChip(
+                icon: Icons.sensors,
+                label: 'IMU',
+                isAvailable: hasSensorData,
               ),
             ],
           ),
-          const SizedBox(height: 16),
-          // Chart
-          SizedBox(
-            height: 120,
-            child: hasData
-                ? LineChart(
-                    LineChartData(
-                      gridData: FlGridData(
-                        show: true,
-                        drawVerticalLine: false,
-                        horizontalInterval: (yBounds.$2 - yBounds.$1) / 4,
-                        getDrawingHorizontalLine: (value) =>
-                            FlLine(color: AppColors.textLight.withOpacity(0.2), strokeWidth: 1),
-                      ),
-                      titlesData: FlTitlesData(
-                        leftTitles: AxisTitles(
-                          sideTitles: SideTitles(
-                            showTitles: true,
-                            reservedSize: 40,
-                            interval: (yBounds.$2 - yBounds.$1) / 4,
-                            getTitlesWidget: (value, meta) {
-                              return Text(
-                                '${value.toInt()}°',
-                                style: TextStyle(color: AppColors.textLight, fontSize: 10),
-                              );
-                            },
-                          ),
-                        ),
-                        bottomTitles: AxisTitles(
-                          sideTitles: SideTitles(
-                            showTitles: true,
-                            reservedSize: 22,
-                            interval: chartData.length > 10 ? (chartData.last.x / 5).roundToDouble() : null,
-                            getTitlesWidget: (value, meta) {
-                              return Text(
-                                '${value.toInt()}',
-                                style: TextStyle(color: AppColors.textLight, fontSize: 10),
-                              );
-                            },
-                          ),
-                        ),
-                        topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-                        rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-                      ),
-                      borderData: FlBorderData(show: false),
-                      minY: yBounds.$1,
-                      maxY: yBounds.$2,
-                      lineBarsData: [
-                        LineChartBarData(
-                          spots: chartData,
-                          isCurved: true,
-                          curveSmoothness: 0.3,
-                          color: color,
-                          barWidth: 2,
-                          isStrokeCapRound: true,
-                          dotData: const FlDotData(show: false),
-                          belowBarData: BarAreaData(show: true, color: color.withOpacity(0.1)),
-                        ),
-                      ],
-                      lineTouchData: LineTouchData(
-                        touchTooltipData: LineTouchTooltipData(
-                          getTooltipItems: (touchedSpots) {
-                            return touchedSpots.map((spot) {
-                              return LineTooltipItem(
-                                'Frame ${spot.x.toInt()}\n${spot.y.toStringAsFixed(1)}°',
-                                TextStyle(color: color, fontWeight: FontWeight.w600, fontSize: 12),
-                              );
-                            }).toList();
-                          },
-                        ),
-                      ),
-                    ),
-                  )
-                : Center(
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Icon(Icons.show_chart, color: AppColors.textLight, size: 32),
-                        const SizedBox(height: 8),
-                        Text(
-                          'No data available',
-                          style: theme.textTheme.bodySmall?.copyWith(color: AppColors.textLight),
-                        ),
-                      ],
-                    ),
-                  ),
-          ),
         ],
       ),
     );
   }
-    void _showDeveloperInfoDialog(BuildContext context) {
+
+  void _showDeveloperInfoDialog(BuildContext context) {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
@@ -1155,10 +1079,7 @@ class _AngleChartCard extends StatelessWidget {
                   style: TextStyle(fontWeight: FontWeight.bold),
                 ),
                 const SizedBox(height: 16),
-                SizedBox(
-                  height: 300,
-                  child: _buildComparisonChart(),
-                ),
+                SizedBox(height: 300, child: _buildComparisonChart()),
                 const SizedBox(height: 16),
                 const Text(
                   'Legend:',
@@ -1167,11 +1088,20 @@ class _AngleChartCard extends StatelessWidget {
                 const SizedBox(height: 8),
                 Row(
                   children: [
-                    _LegendItem(color: Colors.blue, label: 'Freq Filtered (Final)'),
+                    _LegendItem(
+                      color: Colors.blue,
+                      label: 'Freq Filtered (Final)',
+                    ),
                     const SizedBox(width: 16),
-                    _LegendItem(color: Colors.red.withOpacity(0.5), label: 'Raw CV'),
+                    _LegendItem(
+                      color: Colors.red.withOpacity(0.5),
+                      label: 'Raw CV',
+                    ),
                     const SizedBox(width: 16),
-                    _LegendItem(color: Colors.green.withOpacity(0.5), label: 'Raw IMU'),
+                    _LegendItem(
+                      color: Colors.green.withOpacity(0.5),
+                      label: 'Raw IMU',
+                    ),
                   ],
                 ),
                 if (_usedJointIndex != null) ...[
@@ -1208,14 +1138,19 @@ class _AngleChartCard extends StatelessWidget {
 
     for (int i = 0; i < _sessionAngles!.length; i++) {
       final angle = _sessionAngles![i];
-      
+
       // Get fused value
       double? fusedVal;
       switch (jointIndex) {
-        case 0: fusedVal = angle.leftKneeFlexion; break;
-        case 1: fusedVal = angle.rightKneeFlexion; break;
+        case 0:
+          fusedVal = angle.leftKneeFlexion;
+          break;
+        case 1:
+          fusedVal = angle.rightKneeFlexion;
+          break;
         // Add others if needed
-        default: fusedVal = angle.leftKneeFlexion;
+        default:
+          fusedVal = angle.leftKneeFlexion;
       }
 
       if (fusedVal != null) {
@@ -1250,8 +1185,10 @@ class _AngleChartCard extends StatelessWidget {
         gridData: FlGridData(
           show: true,
           drawVerticalLine: true,
-          getDrawingHorizontalLine: (value) => FlLine(color: Colors.grey.withOpacity(0.2), strokeWidth: 1),
-          getDrawingVerticalLine: (value) => FlLine(color: Colors.grey.withOpacity(0.2), strokeWidth: 1),
+          getDrawingHorizontalLine: (value) =>
+              FlLine(color: Colors.grey.withOpacity(0.2), strokeWidth: 1),
+          getDrawingVerticalLine: (value) =>
+              FlLine(color: Colors.grey.withOpacity(0.2), strokeWidth: 1),
         ),
         titlesData: FlTitlesData(
           show: true,
@@ -1260,7 +1197,11 @@ class _AngleChartCard extends StatelessWidget {
               showTitles: true,
               reservedSize: 22,
               getTitlesWidget: (value, meta) {
-                if (value % 30 == 0) return Text(value.toInt().toString(), style: const TextStyle(fontSize: 10));
+                if (value % 30 == 0)
+                  return Text(
+                    value.toInt().toString(),
+                    style: const TextStyle(fontSize: 10),
+                  );
                 return const SizedBox();
               },
             ),
@@ -1270,14 +1211,24 @@ class _AngleChartCard extends StatelessWidget {
               showTitles: true,
               reservedSize: 30,
               getTitlesWidget: (value, meta) {
-                return Text(value.toInt().toString(), style: const TextStyle(fontSize: 10));
+                return Text(
+                  value.toInt().toString(),
+                  style: const TextStyle(fontSize: 10),
+                );
               },
             ),
           ),
-          topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-          rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+          topTitles: const AxisTitles(
+            sideTitles: SideTitles(showTitles: false),
+          ),
+          rightTitles: const AxisTitles(
+            sideTitles: SideTitles(showTitles: false),
+          ),
         ),
-        borderData: FlBorderData(show: true, border: Border.all(color: const Color(0xff37434d), width: 1)),
+        borderData: FlBorderData(
+          show: true,
+          border: Border.all(color: const Color(0xff37434d), width: 1),
+        ),
         minX: 0,
         maxX: _sessionAngles!.length.toDouble(),
         minY: 0,
@@ -1321,7 +1272,11 @@ class _FeedbackItem extends StatelessWidget {
   final String text;
   final Color color;
 
-  const _FeedbackItem({required this.icon, required this.text, required this.color});
+  const _FeedbackItem({
+    required this.icon,
+    required this.text,
+    required this.color,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -1366,6 +1321,328 @@ class _LegendItem extends StatelessWidget {
           style: const TextStyle(fontWeight: FontWeight.w500, fontSize: 12),
         ),
       ],
+    );
+  }
+}
+
+class _DataChip extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final bool isAvailable;
+
+  const _DataChip({
+    required this.icon,
+    required this.label,
+    required this.isAvailable,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      decoration: BoxDecoration(
+        color: isAvailable
+            ? AppColors.primary.withOpacity(0.08)
+            : AppColors.textLight.withOpacity(0.15),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(
+          color: isAvailable
+              ? AppColors.primary.withOpacity(0.2)
+              : AppColors.textLight.withOpacity(0.3),
+        ),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(
+            icon,
+            size: 14,
+            color: isAvailable ? AppColors.primary : AppColors.textLight,
+          ),
+          const SizedBox(width: 6),
+          Text(
+            label,
+            style: TextStyle(
+              fontSize: 12,
+              color: isAvailable ? AppColors.primary : AppColors.textLight,
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+          const SizedBox(width: 4),
+          Icon(
+            isAvailable ? Icons.check_circle : Icons.cancel,
+            size: 12,
+            color: isAvailable ? AppColors.success : AppColors.textLight,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _MetricCard extends StatelessWidget {
+  final IconData icon;
+  final String title;
+  final String value;
+  final String? subtitle;
+  final Color color;
+
+  const _MetricCard({
+    required this.icon,
+    required this.title,
+    required this.value,
+    this.subtitle,
+    required this.color,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+
+    return Container(
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        color: AppColors.cardBackground,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: color.withOpacity(0.1),
+            blurRadius: 16,
+            offset: const Offset(0, 4),
+          ),
+        ],
+        border: Border.all(color: color.withOpacity(0.15)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            padding: const EdgeInsets.all(8),
+            decoration: BoxDecoration(
+              color: color.withOpacity(0.1),
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: Icon(icon, color: color, size: 24),
+          ),
+          const SizedBox(height: 14),
+          Text(
+            value,
+            style: theme.textTheme.headlineMedium?.copyWith(
+              fontWeight: FontWeight.bold,
+              color: AppColors.textPrimary,
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(title, style: theme.textTheme.bodyMedium),
+          if (subtitle != null && subtitle!.isNotEmpty) ...[
+            const SizedBox(height: 4),
+            Text(subtitle!, style: theme.textTheme.bodySmall),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+/// Chart card widget that displays angle data over frames
+class _AngleChartCard extends StatelessWidget {
+  final IconData icon;
+  final String title;
+  final String value;
+  final String? subtitle;
+  final Color color;
+  final List<FlSpot> chartData;
+  final (double min, double max) yBounds;
+
+  const _AngleChartCard({
+    required this.icon,
+    required this.title,
+    required this.value,
+    this.subtitle,
+    required this.color,
+    required this.chartData,
+    required this.yBounds,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final hasData = chartData.isNotEmpty;
+
+    return Container(
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        color: AppColors.cardBackground,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: color.withOpacity(0.1),
+            blurRadius: 16,
+            offset: const Offset(0, 4),
+          ),
+        ],
+        border: Border.all(color: color.withOpacity(0.15)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Header row with icon and stats
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: color.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Icon(icon, color: color, size: 24),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      title,
+                      style: theme.textTheme.titleMedium?.copyWith(
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    if (subtitle != null && subtitle!.isNotEmpty)
+                      Text(
+                        subtitle!,
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          color: AppColors.textSecondary,
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+              Text(
+                value,
+                style: theme.textTheme.headlineSmall?.copyWith(
+                  fontWeight: FontWeight.bold,
+                  color: color,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          // Chart
+          SizedBox(
+            height: 120,
+            child: hasData
+                ? LineChart(
+                    LineChartData(
+                      gridData: FlGridData(
+                        show: true,
+                        drawVerticalLine: false,
+                        horizontalInterval: (yBounds.$2 - yBounds.$1) / 4,
+                        getDrawingHorizontalLine: (value) => FlLine(
+                          color: AppColors.textLight.withOpacity(0.2),
+                          strokeWidth: 1,
+                        ),
+                      ),
+                      titlesData: FlTitlesData(
+                        leftTitles: AxisTitles(
+                          sideTitles: SideTitles(
+                            showTitles: true,
+                            reservedSize: 40,
+                            interval: (yBounds.$2 - yBounds.$1) / 4,
+                            getTitlesWidget: (value, meta) {
+                              return Text(
+                                '${value.toInt()}°',
+                                style: TextStyle(
+                                  color: AppColors.textLight,
+                                  fontSize: 10,
+                                ),
+                              );
+                            },
+                          ),
+                        ),
+                        bottomTitles: AxisTitles(
+                          sideTitles: SideTitles(
+                            showTitles: true,
+                            reservedSize: 22,
+                            interval: chartData.length > 10
+                                ? (chartData.last.x / 5).roundToDouble()
+                                : null,
+                            getTitlesWidget: (value, meta) {
+                              return Text(
+                                '${value.toInt()}',
+                                style: TextStyle(
+                                  color: AppColors.textLight,
+                                  fontSize: 10,
+                                ),
+                              );
+                            },
+                          ),
+                        ),
+                        topTitles: const AxisTitles(
+                          sideTitles: SideTitles(showTitles: false),
+                        ),
+                        rightTitles: const AxisTitles(
+                          sideTitles: SideTitles(showTitles: false),
+                        ),
+                      ),
+                      borderData: FlBorderData(show: false),
+                      minY: yBounds.$1,
+                      maxY: yBounds.$2,
+                      lineBarsData: [
+                        LineChartBarData(
+                          spots: chartData,
+                          isCurved: true,
+                          curveSmoothness: 0.3,
+                          color: color,
+                          barWidth: 2,
+                          isStrokeCapRound: true,
+                          dotData: const FlDotData(show: false),
+                          belowBarData: BarAreaData(
+                            show: true,
+                            color: color.withOpacity(0.1),
+                          ),
+                        ),
+                      ],
+                      lineTouchData: LineTouchData(
+                        touchTooltipData: LineTouchTooltipData(
+                          getTooltipItems: (touchedSpots) {
+                            return touchedSpots.map((spot) {
+                              return LineTooltipItem(
+                                'Frame ${spot.x.toInt()}\n${spot.y.toStringAsFixed(1)}°',
+                                TextStyle(
+                                  color: color,
+                                  fontWeight: FontWeight.w600,
+                                  fontSize: 12,
+                                ),
+                              );
+                            }).toList();
+                          },
+                        ),
+                      ),
+                    ),
+                  )
+                : Center(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(
+                          Icons.show_chart,
+                          color: AppColors.textLight,
+                          size: 32,
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          'No data available',
+                          style: theme.textTheme.bodySmall?.copyWith(
+                            color: AppColors.textLight,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+          ),
+        ],
+      ),
     );
   }
 }

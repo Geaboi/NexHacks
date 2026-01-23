@@ -61,7 +61,8 @@ class StreamConfig {
 /// Service for streaming camera frames to a WebSocket server
 class FrameStreamingService {
   // WebSocket Configuration - Update these for your backend
-  static const String _defaultWsUrl = 'wss://api.mateotaylortest.org/api/overshoot/ws/stream';
+  static const String _defaultWsUrl =
+      'wss://api.mateotaylortest.org/api/overshoot/ws/stream';
 
   IOWebSocketChannel? _wsChannel;
   StreamSubscription? _wsSubscription;
@@ -74,7 +75,8 @@ class FrameStreamingService {
   // Frame processing settings
   int _frameSkipCount = 0;
   int _frameSkipRate = 1; // Calculated based on camera fps vs desired fps
-  bool _isProcessingFrame = false; // Prevent frame pile-up during async compression
+  bool _isProcessingFrame =
+      false; // Prevent frame pile-up during async compression
 
   // Track pending frames by timestamp (frames sent but awaiting response)
   final Set<int> _pendingFrameTimestamps = {};
@@ -237,7 +239,8 @@ class FrameStreamingService {
   /// Returns true if the frame was sent, false if skipped or not ready
   bool sendJpegFrame(Uint8List jpegBytes, {int? timestampUtc}) {
     // Get UTC timestamp for this frame
-    final frameTimestamp = timestampUtc ?? DateTime.now().toUtc().millisecondsSinceEpoch;
+    final frameTimestamp =
+        timestampUtc ?? DateTime.now().toUtc().millisecondsSinceEpoch;
 
     // Notify listeners that a frame was captured
     _frameCapturedController.add(frameTimestamp);
@@ -246,7 +249,9 @@ class FrameStreamingService {
     if (!_isConnected || !_isStreaming || !_isReady || _wsChannel == null) {
       // Debug: log why frame was skipped (only occasionally to avoid spam)
       if (frameTimestamp % 1000 < 100) {
-        print('[FrameStreaming] ⏭️ Frame skipped - connected: $_isConnected, streaming: $_isStreaming, ready: $_isReady, channel: ${_wsChannel != null}');
+        print(
+          '[FrameStreaming] ⏭️ Frame skipped - connected: $_isConnected, streaming: $_isStreaming, ready: $_isReady, channel: ${_wsChannel != null}',
+        );
       }
       return false;
     }
@@ -257,7 +262,10 @@ class FrameStreamingService {
 
     try {
       // Create frame with timestamp header + JPEG data
-      final frameWithTimestamp = _createFrameWithTimestamp(frameTimestamp, jpegBytes);
+      final frameWithTimestamp = _createFrameWithTimestamp(
+        frameTimestamp,
+        jpegBytes,
+      );
 
       // Track this frame as pending (awaiting server response)
       _pendingFrameTimestamps.add(frameTimestamp);
@@ -313,11 +321,15 @@ class FrameStreamingService {
 
   /// Send raw RGB24 bytes directly with timestamp
   void sendRawFrame(Uint8List rgb24Bytes) {
-    if (!_isConnected || !_isStreaming || !_isReady || _wsChannel == null) return;
+    if (!_isConnected || !_isStreaming || !_isReady || _wsChannel == null)
+      return;
 
     try {
       final timestampUtc = DateTime.now().toUtc().millisecondsSinceEpoch;
-      final frameWithTimestamp = _createFrameWithTimestamp(timestampUtc, rgb24Bytes);
+      final frameWithTimestamp = _createFrameWithTimestamp(
+        timestampUtc,
+        rgb24Bytes,
+      );
 
       _pendingFrameTimestamps.add(timestampUtc);
       _wsChannel!.sink.add(frameWithTimestamp);
@@ -342,10 +354,15 @@ class FrameStreamingService {
 
     // Skip black/empty frames - check if frame has any non-zero pixels
     // Sample a few pixels instead of checking all for performance
-    if (rgb24Bytes.length > 0) {
+    if (rgb24Bytes.isNotEmpty) {
       bool hasContent = false;
-      final step = rgb24Bytes.length ~/ 100; // Check ~100 evenly distributed pixels
-      for (int i = 0; i < rgb24Bytes.length && !hasContent; i += step.clamp(1, 1000)) {
+      final step =
+          rgb24Bytes.length ~/ 100; // Check ~100 evenly distributed pixels
+      for (
+        int i = 0;
+        i < rgb24Bytes.length && !hasContent;
+        i += step.clamp(1, 1000)
+      ) {
         if (rgb24Bytes[i] > 0) {
           hasContent = true;
         }
@@ -452,7 +469,10 @@ class FrameStreamingService {
               'Unknown error';
           print('[FrameStreaming] ❌ ERROR from server: $error');
           _resultsController.add(
-            InferenceResult(timestampUtc: DateTime.now().toUtc().millisecondsSinceEpoch, result: 'Error: $error'),
+            InferenceResult(
+              timestampUtc: DateTime.now().toUtc().millisecondsSinceEpoch,
+              result: 'Error: $error',
+            ),
           );
           break;
 
@@ -501,12 +521,14 @@ class FrameStreamingService {
       print('[FrameStreaming] ⚠️ Result is NULL - skipping');
       return;
     }
-    
+
     // Calculate and log end-to-end latency
     if (timestampMs != null) {
       final now = DateTime.now().toUtc().millisecondsSinceEpoch;
       final latency = now - timestampMs;
-      print('[FrameStreaming] ⏱️ E2E LATENCY: ${latency}ms (Result: "${result.length > 20 ? result.substring(0, 20) + '...' : result}")');
+      print(
+        '[FrameStreaming] ⏱️ E2E LATENCY: ${latency}ms (Result: "${result.length > 20 ? '${result.substring(0, 20)}...' : result}")',
+      );
     }
 
     // Remove from pending if timestamp provided
