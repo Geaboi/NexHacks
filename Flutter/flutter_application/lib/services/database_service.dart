@@ -39,6 +39,7 @@ class DatabaseService {
 
     // Sessions table - stores recording session metadata
     // timestamp_utc is the single source of truth for session time (UTC milliseconds)
+    // created_at is kept for backward compatibility with older iOS databases
     await db.execute('''
       CREATE TABLE sessions (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -48,7 +49,8 @@ class DatabaseService {
         duration_ms INTEGER,
         fps INTEGER,
         total_frames INTEGER,
-        num_angles INTEGER
+        num_angles INTEGER,
+        created_at TEXT
       )
     ''');
 
@@ -162,6 +164,8 @@ class DatabaseService {
   Future<int> insertSession(Session session) async {
     final db = await database;
     final map = session.toMap();
+    // Add created_at for backward compatibility with older iOS databases
+    map['created_at'] = DateTime.now().toIso8601String();
     final id = await db.insert('sessions', map);
     print('[DatabaseService] 📝 Inserted session with ID: $id');
     return id;
