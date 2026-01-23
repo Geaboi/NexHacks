@@ -204,11 +204,17 @@ class RTMPose3DHandler:
             out_angles = []
             out_imu_angles = [] # For storing raw accumulated IMU angles
             
-            # Kalman filtering with sensor data
-            ekf = FusionEKF(initial_angle=pre_sensor_angles[0][joint_index])
-
-            # Raw IMU Accumulator
-            imu_accumulator = pre_sensor_angles[0][joint_index]
+            # Raw IMU Accumulator initialization
+            # Find first non-nan angle to start from, or default to 0.0
+            initial_angle = 0.0
+            for frame in pre_sensor_angles:
+                val = frame[joint_index]
+                if not np.isnan(val):
+                    initial_angle = val
+                    break
+            
+            ekf = FusionEKF(initial_angle=initial_angle)
+            imu_accumulator = initial_angle
 
             cv_idx = 1
                 
