@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:camerawesome/camerawesome_plugin.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../main.dart';
 import '../providers/navigation_provider.dart';
@@ -59,6 +60,11 @@ class _RecordingPageState extends ConsumerState<RecordingPage> {
     super.initState();
     _setupFrameStreamingListeners();
     _checkDeviceCapabilities();
+    // Lock to landscape orientation for video recording
+    SystemChrome.setPreferredOrientations([
+      DeviceOrientation.landscapeLeft,
+      DeviceOrientation.landscapeRight,
+    ]);
   }
 
   /// Check if device supports video recording + image analysis simultaneously
@@ -493,6 +499,13 @@ class _RecordingPageState extends ConsumerState<RecordingPage> {
     _allResultsSubscription?.cancel();
     _connectionSubscription?.cancel();
     _frameStreamingService.dispose();
+    // Restore orientation to allow all orientations
+    SystemChrome.setPreferredOrientations([
+      DeviceOrientation.portraitUp,
+      DeviceOrientation.portraitDown,
+      DeviceOrientation.landscapeLeft,
+      DeviceOrientation.landscapeRight,
+    ]);
     super.dispose();
   }
 
