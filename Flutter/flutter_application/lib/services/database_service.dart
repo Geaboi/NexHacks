@@ -2,11 +2,12 @@ import 'package:path/path.dart';
 import 'package:sqflite/sqflite.dart';
 import '../models/session.dart';
 import '../models/frame_angle.dart';
+import '../models/detected_action.dart';
 
 /// SQLite database service for persistent storage of angle analysis data
 class DatabaseService {
   static const String _databaseName = 'smartpt_angles.db';
-  static const int _databaseVersion = 3;
+  static const int _databaseVersion = 4;
 
   static Database? _database;
 
@@ -75,6 +76,27 @@ class DatabaseService {
       ON sessions(timestamp_utc DESC)
     ''');
 
+    // Detected actions table - stores action segments from Overshoot inference
+    await db.execute('''
+      CREATE TABLE detected_actions (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        session_id INTEGER NOT NULL,
+        action TEXT NOT NULL,
+        timestamp REAL NOT NULL,
+        confidence REAL NOT NULL,
+        frame_number INTEGER NOT NULL,
+        frame_number_end INTEGER,
+        metadata TEXT,
+        FOREIGN KEY (session_id) REFERENCES sessions(id) ON DELETE CASCADE
+      )
+    ''');
+
+    // Index for efficient queries by session
+    await db.execute('''
+      CREATE INDEX idx_detected_actions_session 
+      ON detected_actions(session_id, frame_number)
+    ''');
+
     print('[DatabaseService] ✅ Database tables created');
   }
 
@@ -93,6 +115,29 @@ class DatabaseService {
     // Session.fromMap() handles missing/ignored columns gracefully
     if (oldVersion < 3) {
       print('[DatabaseService] ✅ Migrated to v3 - anomalous_frame_ids and created_at deprecated');
+    }
+
+    // Migration v3 to v4: Add detected_actions table for Overshoot action segments
+    if (oldVersion < 4) {
+      await db.execute('''
+        CREATE TABLE IF NOT EXISTS detected_actions (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          session_id INTEGER NOT NULL,
+          action TEXT NOT NULL,
+          timestamp REAL NOT NULL,
+          confidence REAL NOT NULL,
+          frame_number INTEGER NOT NULL,
+          frame_number_end INTEGER,
+          metadata TEXT,
+          FOREIGN KEY (session_id) REFERENCES sessions(id) ON DELETE CASCADE
+        )
+      ''');
+
+      await db.execute('''
+        CREATE INDEX IF NOT EXISTS idx_detected_actions_session 
+        ON detected_actions(session_id, frame_number)
+      ''');
+      print('[DatabaseService] ✅ Migrated to v4 - added detected_actions table');
     }
   }
 
@@ -173,6 +218,71 @@ class DatabaseService {
       orderBy: 'frame_index ASC',
     );
     return maps.map((map) => FrameAngle.fromMap(map)).toList();
+  }
+
+  // ============================================================================
+  // Detected Actions CRUD Operations
+  // ============================================================================
+
+  /// Insert multiple detected actions in a batch
+  Future<void> insertDetectedActions(List<DetectedAction> actions) async {
+    if (actions.isEmpty) return;
+
+    final db = await database;
+    final batch = db.batch();
+
+    for (final action in actions) {
+      batch.insert('detected_actions', action.toMap());
+    }
+
+    await batch.commit(noResult: true);
+    print('[DatabaseService] 📝 Inserted ${actions.length} detected actions');
+  }
+
+  /// Get all detected actions for a session, ordered by frame number
+  Future<List<DetectedAction>> getSessionDetectedActions(int sessionId) async {
+    final db = await database;
+    final List<Map<String, dynamic>> maps = await db.query(
+      'detected_actions',
+      where: 'session_id = ?',
+      whereArgs: [sessionId],
+      orderBy: 'frame_number ASC',
+    );
+    return maps.map((map) => DetectedAction.fromMap(map)).toList();
+  }
+
+  /// Get detected actions for a specific frame range
+  Future<List<DetectedAction>> getActionsInFrameRange(int sessionId, int startFrame, int endFrame) async {
+    final db = await database;
+    final List<Map<String, dynamic>> maps = await db.query(
+      'detected_actions',
+      where: 'session_id = ? AND frame_number >= ? AND frame_number <= ?',
+      whereArgs: [sessionId, startFrame, endFrame],
+      orderBy: 'frame_number ASC',
+    );
+    return maps.map((map) => DetectedAction.fromMap(map)).toList();
+  }
+
+  /// Get unique action types for a session
+  Future<List<String>> getSessionActionTypes(int sessionId) async {
+    final db = await database;
+    final List<Map<String, dynamic>> maps = await db.rawQuery(
+      'SELECT DISTINCT action FROM detected_actions WHERE session_id = ? ORDER BY action',
+      [sessionId],
+    );
+    return maps.map((m) => m['action'] as String).toList();
+  }
+
+  /// Delete all detected actions for a session
+  Future<int> deleteSessionDetectedActions(int sessionId) async {
+    final db = await database;
+    final count = await db.delete(
+      'detected_actions',
+      where: 'session_id = ?',
+      whereArgs: [sessionId],
+    );
+    print('[DatabaseService] 🗑️ Deleted $count detected actions for session $sessionId');
+    return count;;
   }
 
   // ============================================================================

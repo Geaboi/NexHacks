@@ -12,6 +12,7 @@ class AnalyticsResponse {
   final List<List<dynamic>>? imuAngles; // Raw IMU accumulated angles
   final int? jointIndex; // The joint index used for fusion
   final List<int> anomalousIds; // Frame indices flagged as anomalous by backend
+  final List<Map<String, dynamic>> detectedActions; // Detected action segments from Overshoot
   final bool success;
   final String? errorMessage;
 
@@ -22,6 +23,7 @@ class AnalyticsResponse {
     this.imuAngles,
     this.jointIndex,
     this.anomalousIds = const [],
+    this.detectedActions = const [],
     this.success = true,
     this.errorMessage,
   });
@@ -49,6 +51,16 @@ class AnalyticsResponse {
     // Parse joint_index
     int? jointIndex = json['joint_index'] as int?;
 
+    // Parse detected_actions from Overshoot
+    // Format: [{action, timestamp, confidence, frame_number, metadata}, ...]
+    List<Map<String, dynamic>> detectedActions = [];
+    if (json.containsKey('detected_actions') && json['detected_actions'] != null) {
+      final rawActions = json['detected_actions'] as List<dynamic>;
+      detectedActions = rawActions
+          .map((e) => Map<String, dynamic>.from(e as Map))
+          .toList();
+    }
+
     return AnalyticsResponse(
       processedVideoPath: videoPath,
       analyticsData: json,
@@ -56,6 +68,7 @@ class AnalyticsResponse {
       imuAngles: imuAngles,
       jointIndex: jointIndex,
       anomalousIds: anomalousIds,
+      detectedActions: detectedActions,
       success: true,
     );
   }

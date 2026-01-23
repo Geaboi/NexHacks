@@ -7,7 +7,9 @@ import '../providers/navigation_provider.dart';
 import '../providers/frame_analysis_provider.dart';
 import '../providers/sensor_provider.dart';
 import '../providers/session_history_provider.dart';
+import '../providers/detected_actions_provider.dart';
 import '../models/frame_angle.dart';
+import '../models/detected_action.dart';
 import '../services/analytics_service.dart';
 import '../widgets/progress_chart.dart';
 import '../main.dart';
@@ -40,6 +42,9 @@ class _AnalyticsPageState extends ConsumerState<AnalyticsPage> {
 
   int? _savedSessionId;
   DateTime? _sessionTimestamp;
+
+  // Detected action segments for chart labeling
+  List<ActionSegment>? _actionSegments;
 
   // Video player state
   VideoPlayerController? _videoController;
@@ -218,7 +223,7 @@ class _AnalyticsPageState extends ConsumerState<AnalyticsPage> {
       // Convert to List<List<dynamic>> for the provider
       final anglesList = angles.map((e) => e as List<dynamic>).toList();
 
-      // Save session using the provider
+      // Save session using the provider (includes detected actions)
       final sessionId = await ref
           .read(sessionHistoryProvider.notifier)
           .saveSession(
@@ -228,6 +233,7 @@ class _AnalyticsPageState extends ConsumerState<AnalyticsPage> {
             processedVideoPath: response.processedVideoPath,
             durationMs: widget.videoDurationMs,
             fps: widget.fps,
+            detectedActions: response.detectedActions,
           );
 
       if (sessionId != null) {
@@ -235,10 +241,22 @@ class _AnalyticsPageState extends ConsumerState<AnalyticsPage> {
         await ref.read(sessionHistoryProvider.notifier).selectSession(sessionId);
         final historyState = ref.read(sessionHistoryProvider);
 
+        // Load detected actions into provider for display and create segments
+        List<ActionSegment>? segments;
+        if (response.detectedActions.isNotEmpty) {
+          await ref.read(detectedActionsProvider.notifier).loadSessionActions(sessionId);
+          final actionsState = ref.read(detectedActionsProvider);
+          if (actionsState.hasActions) {
+            segments = ActionSegment.fromDetectedActions(actionsState.actions);
+            print('[AnalyticsPage] 📊 Created ${segments.length} action segments for chart labels');
+          }
+        }
+
         setState(() {
           _savedSessionId = sessionId;
           _sessionStats = historyState.selectedSessionStats;
           _sessionAngles = historyState.selectedSessionAngles;
+          _actionSegments = segments;
           _isSavingToDb = false;
         });
 
@@ -617,6 +635,7 @@ class _AnalyticsPageState extends ConsumerState<AnalyticsPage> {
                 color: AppColors.kneeColor,
                 chartData: _getChartData('left_knee_flexion'),
                 yBounds: _getAngleBounds('left_knee_flexion'),
+                actionSegments: _actionSegments,
               ),
               const SizedBox(height: 12),
               // Right Knee Chart
@@ -628,6 +647,7 @@ class _AnalyticsPageState extends ConsumerState<AnalyticsPage> {
                 color: AppColors.kneeColor,
                 chartData: _getChartData('right_knee_flexion'),
                 yBounds: _getAngleBounds('right_knee_flexion'),
+                actionSegments: _actionSegments,
               ),
               const SizedBox(height: 12),
               // Left Hip Chart
@@ -639,6 +659,7 @@ class _AnalyticsPageState extends ConsumerState<AnalyticsPage> {
                 color: AppColors.hipColor,
                 chartData: _getChartData('left_hip_flexion'),
                 yBounds: _getAngleBounds('left_hip_flexion'),
+                actionSegments: _actionSegments,
               ),
               const SizedBox(height: 12),
               // Right Hip Chart
@@ -650,6 +671,7 @@ class _AnalyticsPageState extends ConsumerState<AnalyticsPage> {
                 color: AppColors.hipColor,
                 chartData: _getChartData('right_hip_flexion'),
                 yBounds: _getAngleBounds('right_hip_flexion'),
+                actionSegments: _actionSegments,
               ),
               const SizedBox(height: 12),
               // Left Ankle Chart
@@ -661,6 +683,7 @@ class _AnalyticsPageState extends ConsumerState<AnalyticsPage> {
                 color: AppColors.ankleColor,
                 chartData: _getChartData('left_ankle_flexion'),
                 yBounds: _getAngleBounds('left_ankle_flexion'),
+                actionSegments: _actionSegments,
               ),
               const SizedBox(height: 12),
               // Right Ankle Chart
@@ -672,6 +695,7 @@ class _AnalyticsPageState extends ConsumerState<AnalyticsPage> {
                 color: AppColors.ankleColor,
                 chartData: _getChartData('right_ankle_flexion'),
                 yBounds: _getAngleBounds('right_ankle_flexion'),
+                actionSegments: _actionSegments,
               ),
               const SizedBox(height: 28),
 
@@ -1186,6 +1210,64 @@ class _MetricCard extends StatelessWidget {
   }
 }
 
+/// Represents a consolidated action segment for chart display
+class ActionSegment {
+  final int startFrame;
+  final int endFrame;
+  final String label;
+  final double confidence;
+
+  const ActionSegment({
+    required this.startFrame,
+    required this.endFrame,
+    required this.label,
+    required this.confidence,
+  });
+
+  /// Consolidate consecutive actions with the same label into segments
+  static List<ActionSegment> fromDetectedActions(List<DetectedAction> actions) {
+    if (actions.isEmpty) return [];
+
+    // Sort by frame number
+    final sorted = List<DetectedAction>.from(actions)..sort((a, b) => a.frameNumber.compareTo(b.frameNumber));
+
+    final segments = <ActionSegment>[];
+    int i = 0;
+
+    while (i < sorted.length) {
+      final currentAction = sorted[i];
+      final currentLabel = currentAction.action;
+      int startFrame = currentAction.frameNumber;
+      int endFrame = currentAction.frameNumberEnd ?? currentAction.frameNumber;
+      double totalConfidence = currentAction.confidence;
+      int count = 1;
+
+      // Look ahead for consecutive same labels
+      int j = i + 1;
+      while (j < sorted.length && sorted[j].action == currentLabel) {
+        final nextAction = sorted[j];
+        endFrame = nextAction.frameNumberEnd ?? nextAction.frameNumber;
+        totalConfidence += nextAction.confidence;
+        count++;
+        j++;
+      }
+
+      segments.add(
+        ActionSegment(
+          startFrame: startFrame,
+          endFrame: endFrame,
+          label: currentLabel,
+          confidence: totalConfidence / count,
+        ),
+      );
+
+      i = j;
+    }
+
+    return segments;
+  }
+}
+
 /// Chart card widget that displays angle data over frames
 class _AngleChartCard extends StatelessWidget {
   final IconData icon;
@@ -1195,6 +1277,7 @@ class _AngleChartCard extends StatelessWidget {
   final Color color;
   final List<FlSpot> chartData;
   final (double min, double max) yBounds;
+  final List<ActionSegment>? actionSegments;
 
   const _AngleChartCard({
     required this.icon,
@@ -1204,6 +1287,7 @@ class _AngleChartCard extends StatelessWidget {
     required this.color,
     required this.chartData,
     required this.yBounds,
+    this.actionSegments,
   });
 
   @override
@@ -1294,6 +1378,8 @@ class _AngleChartCard extends StatelessWidget {
                       borderData: FlBorderData(show: false),
                       minY: yBounds.$1,
                       maxY: yBounds.$2,
+                      // Add vertical lines for action segment boundaries
+                      extraLinesData: _buildActionSegmentLines(),
                       lineBarsData: [
                         LineChartBarData(
                           spots: chartData,
@@ -1310,8 +1396,21 @@ class _AngleChartCard extends StatelessWidget {
                         touchTooltipData: LineTouchTooltipData(
                           getTooltipItems: (touchedSpots) {
                             return touchedSpots.map((spot) {
+                              // Find if this frame is within an action segment
+                              final frameIndex = spot.x.toInt();
+                              String? actionLabel;
+                              if (actionSegments != null && actionSegments!.isNotEmpty) {
+                                for (final segment in actionSegments!) {
+                                  if (frameIndex >= segment.startFrame && frameIndex <= segment.endFrame) {
+                                    actionLabel = segment.label;
+                                    break;
+                                  }
+                                }
+                              }
+                              final baseText = 'Frame ${spot.x.toInt()}\n${spot.y.toStringAsFixed(1)}°';
+                              final displayText = actionLabel != null ? '$baseText\n[$actionLabel]' : baseText;
                               return LineTooltipItem(
-                                'Frame ${spot.x.toInt()}\n${spot.y.toStringAsFixed(1)}°',
+                                displayText,
                                 TextStyle(color: color, fontWeight: FontWeight.w600, fontSize: 12),
                               );
                             }).toList();
@@ -1337,5 +1436,46 @@ class _AngleChartCard extends StatelessWidget {
         ],
       ),
     );
+  }
+
+  /// Build vertical lines for action segment boundaries
+  ExtraLinesData _buildActionSegmentLines() {
+    if (actionSegments == null || actionSegments!.isEmpty) {
+      return const ExtraLinesData(verticalLines: []);
+    }
+
+    final verticalLines = <VerticalLine>[];
+    final segmentColors = [
+      Colors.purple.withOpacity(0.6),
+      Colors.teal.withOpacity(0.6),
+      Colors.orange.withOpacity(0.6),
+      Colors.pink.withOpacity(0.6),
+      Colors.indigo.withOpacity(0.6),
+      Colors.amber.withOpacity(0.6),
+    ];
+
+    for (int i = 0; i < actionSegments!.length; i++) {
+      final segment = actionSegments![i];
+      final segmentColor = segmentColors[i % segmentColors.length];
+
+      // Add a vertical line at the start of each segment
+      verticalLines.add(
+        VerticalLine(
+          x: segment.startFrame.toDouble(),
+          color: segmentColor,
+          strokeWidth: 2,
+          dashArray: [4, 4],
+          label: VerticalLineLabel(
+            show: true,
+            alignment: Alignment.topCenter,
+            padding: const EdgeInsets.only(left: 4, bottom: 2),
+            style: TextStyle(color: segmentColor, fontSize: 9, fontWeight: FontWeight.w600),
+            labelResolver: (line) => segment.label,
+          ),
+        ),
+      );
+    }
+
+    return ExtraLinesData(verticalLines: verticalLines);
   }
 }

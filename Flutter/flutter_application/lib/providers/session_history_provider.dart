@@ -2,6 +2,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../models/session.dart';
 import '../models/frame_angle.dart';
 import '../models/progress_metrics.dart';
+import '../models/detected_action.dart';
 import '../services/database_service.dart';
 
 /// State for session history
@@ -78,6 +79,7 @@ class SessionHistoryNotifier extends Notifier<SessionHistoryState> {
 
   /// Save a new session with its frame angles
   /// Called after receiving backend response in AnalyticsService
+  /// Optionally saves detected actions from Overshoot inference
   Future<int?> saveSession({
     required int timestampUtc,
     required List<List<dynamic>> angles,
@@ -85,6 +87,7 @@ class SessionHistoryNotifier extends Notifier<SessionHistoryState> {
     String? processedVideoPath,
     int? durationMs,
     int? fps,
+    List<Map<String, dynamic>>? detectedActions,
   }) async {
     try {
       print('[SessionHistory] 💾 Saving session with ${angles.length} frames...');
@@ -111,6 +114,15 @@ class SessionHistoryNotifier extends Notifier<SessionHistoryState> {
 
       // Batch insert frame angles
       await _db.insertFrameAngles(frameAngles);
+
+      // Save detected actions if provided
+      if (detectedActions != null && detectedActions.isNotEmpty) {
+        final actions = detectedActions
+            .map((json) => DetectedAction.fromBackendJson(json, sessionId))
+            .toList();
+        await _db.insertDetectedActions(actions);
+        print('[SessionHistory] 📋 Saved ${actions.length} detected actions');
+      }
 
       print('[SessionHistory] ✅ Saved session $sessionId with ${frameAngles.length} frames');
 
