@@ -25,6 +25,7 @@ class InferencePoint {
 class FrameAnalysisState {
   final List<InferencePoint> inferencePoints; // Only frames with inference results
   final int? videoStartTimeUtc; // UTC milliseconds when MP4 recording started
+  final String? streamId; // Overshoot stream ID for retrieving detected actions
   final bool isRecording;
   final bool isWaitingForResults;
   final DateTime? sessionStartTime;
@@ -33,6 +34,7 @@ class FrameAnalysisState {
   const FrameAnalysisState({
     this.inferencePoints = const [],
     this.videoStartTimeUtc,
+    this.streamId,
     this.isRecording = false,
     this.isWaitingForResults = false,
     this.sessionStartTime,
@@ -52,6 +54,7 @@ class FrameAnalysisState {
   FrameAnalysisState copyWith({
     List<InferencePoint>? inferencePoints,
     int? videoStartTimeUtc,
+    String? streamId,
     bool? isRecording,
     bool? isWaitingForResults,
     DateTime? sessionStartTime,
@@ -60,6 +63,7 @@ class FrameAnalysisState {
     return FrameAnalysisState(
       inferencePoints: inferencePoints ?? this.inferencePoints,
       videoStartTimeUtc: videoStartTimeUtc ?? this.videoStartTimeUtc,
+      streamId: streamId ?? this.streamId,
       isRecording: isRecording ?? this.isRecording,
       isWaitingForResults: isWaitingForResults ?? this.isWaitingForResults,
       sessionStartTime: sessionStartTime ?? this.sessionStartTime,
@@ -83,6 +87,12 @@ class FrameAnalysisNotifier extends Notifier<FrameAnalysisState> {
       isRecording: true,
       sessionStartTime: DateTime.now().toUtc(),
     );
+  }
+
+  /// Set the stream ID from Overshoot WebSocket
+  void setStreamId(String streamId) {
+    state = state.copyWith(streamId: streamId);
+    print('[FrameAnalysisProvider] 📋 Stream ID set: $streamId');
   }
 
   /// Add a frame with its inference result (only called when result received)

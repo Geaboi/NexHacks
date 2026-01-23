@@ -181,6 +181,10 @@ class _AnalyticsPageState extends ConsumerState<AnalyticsPage> {
       // This will be moved to user selection later
       const jointIndex = 0;
 
+      // Get stream ID for detected actions retrieval
+      final streamId = frameAnalysis.streamId;
+      print('[AnalyticsPage] 📋 Stream ID for detected actions: $streamId');
+
       final response = await _analyticsService.submitAnalysis(
         videoPath: widget.videoPath,
         inferencePoints: inferencePointsJson,
@@ -192,6 +196,7 @@ class _AnalyticsPageState extends ConsumerState<AnalyticsPage> {
             'flutter_recording_${DateTime.now().millisecondsSinceEpoch}',
         modelId: '1OZUO0uahYoua8SklFmr',
         jointIndex: jointIndex,
+        streamId: streamId,
       );
 
       setState(() {

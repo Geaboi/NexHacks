@@ -188,6 +188,7 @@ class AnalyticsService {
     String modelId = 'default_model',
     String? backendUrl,
     int jointIndex = 0,
+    String? streamId,
   }) async {
     final url = backendUrl ?? _defaultBackendUrl;
 
@@ -226,6 +227,7 @@ class AnalyticsService {
         datasetName: datasetName,
         modelId: modelId,
         jointIndex: jointIndex,
+        streamId: streamId,
       );
 
       // 5. Process response
@@ -308,6 +310,7 @@ class AnalyticsService {
     required String datasetName,
     required String modelId,
     required int jointIndex,
+    String? streamId,
   }) async {
     print('[AnalyticsService] 🚀 Sending data to backend: $url');
 
@@ -358,6 +361,12 @@ class AnalyticsService {
 
     // Add joint index (Form field)
     request.fields['joint_index'] = jointIndex.toString();
+
+    // Add stream ID for detected actions retrieval (Form field)
+    if (streamId != null && streamId.isNotEmpty) {
+      request.fields['stream_id'] = streamId;
+      print('[AnalyticsService] 📋 Including stream_id: $streamId');
+    }
 
     print(
       '[AnalyticsService] 📤 Request fields: overshoot_data=${overshootPoints.length} points, sensor_data length=${sensorDataJson.length}',

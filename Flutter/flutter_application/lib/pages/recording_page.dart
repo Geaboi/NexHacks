@@ -199,6 +199,11 @@ class _RecordingPageState extends ConsumerState<RecordingPage> {
         _isAnalysisAvailable = wsConnected;
       });
 
+      // Store stream ID if available for detected actions retrieval
+      if (wsConnected && _frameStreamingService.streamId != null) {
+        ref.read(frameAnalysisProvider.notifier).setStreamId(_frameStreamingService.streamId!);
+      }
+
       // Capture the video start timestamp
       _videoStartTimeUtc = DateTime.now().toUtc().millisecondsSinceEpoch;
 
