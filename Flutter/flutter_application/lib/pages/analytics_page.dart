@@ -1314,6 +1314,7 @@ class _AngleChartCard extends StatelessWidget {
       ),
     );
   }
+}
 
 class _FeedbackItem extends StatelessWidget {
   final IconData icon;

@@ -1,0 +1,2522 @@
+[{
+	"resource": "/C:/Users/dang1/Documents/GitHub/NexHacks/Flutter/flutter_application/lib/pages/analytics_page.dart",
+	"owner": "_generated_diagnostic_collection_name_#4",
+	"code": {
+		"value": "undefined_method",
+		"target": {
+			"$mid": 1,
+			"path": "/diagnostics/undefined_method",
+			"scheme": "https",
+			"authority": "dart.dev"
+		}
+	},
+	"severity": 8,
+	"message": "The method '_FeedbackItem' isn't defined for the type '_AnalyticsPageState'.\nTry correcting the name to the name of an existing method, or defining a method named '_FeedbackItem'.",
+	"source": "dart",
+	"startLineNumber": 348,
+	"startColumn": 9,
+	"endLineNumber": 348,
+	"endColumn": 22,
+	"modelVersionId": 1,
+	"origin": "extHost1"
+},{
+	"resource": "/C:/Users/dang1/Documents/GitHub/NexHacks/Flutter/flutter_application/lib/pages/analytics_page.dart",
+	"owner": "_generated_diagnostic_collection_name_#4",
+	"code": {
+		"value": "undefined_method",
+		"target": {
+			"$mid": 1,
+			"path": "/diagnostics/undefined_method",
+			"scheme": "https",
+			"authority": "dart.dev"
+		}
+	},
+	"severity": 8,
+	"message": "The method '_FeedbackItem' isn't defined for the type '_AnalyticsPageState'.\nTry correcting the name to the name of an existing method, or defining a method named '_FeedbackItem'.",
+	"source": "dart",
+	"startLineNumber": 350,
+	"startColumn": 9,
+	"endLineNumber": 350,
+	"endColumn": 22,
+	"modelVersionId": 1,
+	"origin": "extHost1"
+},{
+	"resource": "/C:/Users/dang1/Documents/GitHub/NexHacks/Flutter/flutter_application/lib/pages/analytics_page.dart",
+	"owner": "_generated_diagnostic_collection_name_#4",
+	"code": {
+		"value": "undefined_method",
+		"target": {
+			"$mid": 1,
+			"path": "/diagnostics/undefined_method",
+			"scheme": "https",
+			"authority": "dart.dev"
+		}
+	},
+	"severity": 8,
+	"message": "The method '_FeedbackItem' isn't defined for the type '_AnalyticsPageState'.\nTry correcting the name to the name of an existing method, or defining a method named '_FeedbackItem'.",
+	"source": "dart",
+	"startLineNumber": 370,
+	"startColumn": 9,
+	"endLineNumber": 370,
+	"endColumn": 22,
+	"modelVersionId": 1,
+	"origin": "extHost1"
+},{
+	"resource": "/C:/Users/dang1/Documents/GitHub/NexHacks/Flutter/flutter_application/lib/pages/analytics_page.dart",
+	"owner": "_generated_diagnostic_collection_name_#4",
+	"code": {
+		"value": "undefined_method",
+		"target": {
+			"$mid": 1,
+			"path": "/diagnostics/undefined_method",
+			"scheme": "https",
+			"authority": "dart.dev"
+		}
+	},
+	"severity": 8,
+	"message": "The method '_FeedbackItem' isn't defined for the type '_AnalyticsPageState'.\nTry correcting the name to the name of an existing method, or defining a method named '_FeedbackItem'.",
+	"source": "dart",
+	"startLineNumber": 384,
+	"startColumn": 19,
+	"endLineNumber": 384,
+	"endColumn": 32,
+	"modelVersionId": 1,
+	"origin": "extHost1"
+},{
+	"resource": "/C:/Users/dang1/Documents/GitHub/NexHacks/Flutter/flutter_application/lib/pages/analytics_page.dart",
+	"owner": "_generated_diagnostic_collection_name_#4",
+	"code": {
+		"value": "undefined_method",
+		"target": {
+			"$mid": 1,
+			"path": "/diagnostics/undefined_method",
+			"scheme": "https",
+			"authority": "dart.dev"
+		}
+	},
+	"severity": 8,
+	"message": "The method '_FeedbackItem' isn't defined for the type '_AnalyticsPageState'.\nTry correcting the name to the name of an existing method, or defining a method named '_FeedbackItem'.",
+	"source": "dart",
+	"startLineNumber": 394,
+	"startColumn": 9,
+	"endLineNumber": 394,
+	"endColumn": 22,
+	"modelVersionId": 1,
+	"origin": "extHost1"
+},{
+	"resource": "/C:/Users/dang1/Documents/GitHub/NexHacks/Flutter/flutter_application/lib/pages/analytics_page.dart",
+	"owner": "_generated_diagnostic_collection_name_#4",
+	"code": {
+		"value": "undefined_method",
+		"target": {
+			"$mid": 1,
+			"path": "/diagnostics/undefined_method",
+			"scheme": "https",
+			"authority": "dart.dev"
+		}
+	},
+	"severity": 8,
+	"message": "The method '_showDeveloperInfoDialog' isn't defined for the type '_AnalyticsPageState'.\nTry correcting the name to the name of an existing method, or defining a method named '_showDeveloperInfoDialog'.",
+	"source": "dart",
+	"startLineNumber": 534,
+	"startColumn": 32,
+	"endLineNumber": 534,
+	"endColumn": 56,
+	"modelVersionId": 1,
+	"origin": "extHost1"
+},{
+	"resource": "/C:/Users/dang1/Documents/GitHub/NexHacks/Flutter/flutter_application/lib/pages/analytics_page.dart",
+	"owner": "_generated_diagnostic_collection_name_#4",
+	"code": {
+		"value": "undefined_method",
+		"target": {
+			"$mid": 1,
+			"path": "/diagnostics/undefined_method",
+			"scheme": "https",
+			"authority": "dart.dev"
+		}
+	},
+	"severity": 8,
+	"message": "The method '_FeedbackItem' isn't defined for the type '_AnalyticsPageState'.\nTry correcting the name to the name of an existing method, or defining a method named '_FeedbackItem'.",
+	"source": "dart",
+	"startLineNumber": 711,
+	"startColumn": 15,
+	"endLineNumber": 711,
+	"endColumn": 28,
+	"modelVersionId": 1,
+	"origin": "extHost1"
+},{
+	"resource": "/C:/Users/dang1/Documents/GitHub/NexHacks/Flutter/flutter_application/lib/pages/analytics_page.dart",
+	"owner": "_generated_diagnostic_collection_name_#4",
+	"code": {
+		"value": "undefined_method",
+		"target": {
+			"$mid": 1,
+			"path": "/diagnostics/undefined_method",
+			"scheme": "https",
+			"authority": "dart.dev"
+		}
+	},
+	"severity": 8,
+	"message": "The method '_FeedbackItem' isn't defined for the type '_AnalyticsPageState'.\nTry correcting the name to the name of an existing method, or defining a method named '_FeedbackItem'.",
+	"source": "dart",
+	"startLineNumber": 713,
+	"startColumn": 15,
+	"endLineNumber": 713,
+	"endColumn": 28,
+	"modelVersionId": 1,
+	"origin": "extHost1"
+},{
+	"resource": "/C:/Users/dang1/Documents/GitHub/NexHacks/Flutter/flutter_application/lib/pages/analytics_page.dart",
+	"owner": "_generated_diagnostic_collection_name_#4",
+	"code": {
+		"value": "undefined_method",
+		"target": {
+			"$mid": 1,
+			"path": "/diagnostics/undefined_method",
+			"scheme": "https",
+			"authority": "dart.dev"
+		}
+	},
+	"severity": 8,
+	"message": "The method '_LegendItem' isn't defined for the type '_AngleChartCard'.\nTry correcting the name to the name of an existing method, or defining a method named '_LegendItem'.",
+	"source": "dart",
+	"startLineNumber": 1170,
+	"startColumn": 21,
+	"endLineNumber": 1170,
+	"endColumn": 32,
+	"modelVersionId": 1,
+	"origin": "extHost1"
+},{
+	"resource": "/C:/Users/dang1/Documents/GitHub/NexHacks/Flutter/flutter_application/lib/pages/analytics_page.dart",
+	"owner": "_generated_diagnostic_collection_name_#4",
+	"code": {
+		"value": "undefined_method",
+		"target": {
+			"$mid": 1,
+			"path": "/diagnostics/undefined_method",
+			"scheme": "https",
+			"authority": "dart.dev"
+		}
+	},
+	"severity": 8,
+	"message": "The method '_LegendItem' isn't defined for the type '_AngleChartCard'.\nTry correcting the name to the name of an existing method, or defining a method named '_LegendItem'.",
+	"source": "dart",
+	"startLineNumber": 1172,
+	"startColumn": 21,
+	"endLineNumber": 1172,
+	"endColumn": 32,
+	"modelVersionId": 1,
+	"origin": "extHost1"
+},{
+	"resource": "/C:/Users/dang1/Documents/GitHub/NexHacks/Flutter/flutter_application/lib/pages/analytics_page.dart",
+	"owner": "_generated_diagnostic_collection_name_#4",
+	"code": {
+		"value": "undefined_method",
+		"target": {
+			"$mid": 1,
+			"path": "/diagnostics/undefined_method",
+			"scheme": "https",
+			"authority": "dart.dev"
+		}
+	},
+	"severity": 8,
+	"message": "The method '_LegendItem' isn't defined for the type '_AngleChartCard'.\nTry correcting the name to the name of an existing method, or defining a method named '_LegendItem'.",
+	"source": "dart",
+	"startLineNumber": 1174,
+	"startColumn": 21,
+	"endLineNumber": 1174,
+	"endColumn": 32,
+	"modelVersionId": 1,
+	"origin": "extHost1"
+},{
+	"resource": "/C:/Users/dang1/Documents/GitHub/NexHacks/Flutter/flutter_application/lib/pages/analytics_page.dart",
+	"owner": "_generated_diagnostic_collection_name_#4",
+	"code": {
+		"value": "undefined_identifier",
+		"target": {
+			"$mid": 1,
+			"path": "/diagnostics/undefined_identifier",
+			"scheme": "https",
+			"authority": "dart.dev"
+		}
+	},
+	"severity": 8,
+	"message": "Undefined name '_usedJointIndex'.\nTry correcting the name to one that is defined, or defining the name.",
+	"source": "dart",
+	"startLineNumber": 1177,
+	"startColumn": 21,
+	"endLineNumber": 1177,
+	"endColumn": 36,
+	"modelVersionId": 1,
+	"origin": "extHost1"
+},{
+	"resource": "/C:/Users/dang1/Documents/GitHub/NexHacks/Flutter/flutter_application/lib/pages/analytics_page.dart",
+	"owner": "_generated_diagnostic_collection_name_#4",
+	"code": {
+		"value": "undefined_identifier",
+		"target": {
+			"$mid": 1,
+			"path": "/diagnostics/undefined_identifier",
+			"scheme": "https",
+			"authority": "dart.dev"
+		}
+	},
+	"severity": 8,
+	"message": "Undefined name '_usedJointIndex'.\nTry correcting the name to one that is defined, or defining the name.",
+	"source": "dart",
+	"startLineNumber": 1179,
+	"startColumn": 44,
+	"endLineNumber": 1179,
+	"endColumn": 59,
+	"modelVersionId": 1,
+	"origin": "extHost1"
+},{
+	"resource": "/C:/Users/dang1/Documents/GitHub/NexHacks/Flutter/flutter_application/lib/pages/analytics_page.dart",
+	"owner": "_generated_diagnostic_collection_name_#4",
+	"code": {
+		"value": "undefined_identifier",
+		"target": {
+			"$mid": 1,
+			"path": "/diagnostics/undefined_identifier",
+			"scheme": "https",
+			"authority": "dart.dev"
+		}
+	},
+	"severity": 8,
+	"message": "Undefined name '_sessionAngles'.\nTry correcting the name to one that is defined, or defining the name.",
+	"source": "dart",
+	"startLineNumber": 1196,
+	"startColumn": 9,
+	"endLineNumber": 1196,
+	"endColumn": 23,
+	"modelVersionId": 1,
+	"origin": "extHost1"
+},{
+	"resource": "/C:/Users/dang1/Documents/GitHub/NexHacks/Flutter/flutter_application/lib/pages/analytics_page.dart",
+	"owner": "_generated_diagnostic_collection_name_#4",
+	"code": {
+		"value": "undefined_identifier",
+		"target": {
+			"$mid": 1,
+			"path": "/diagnostics/undefined_identifier",
+			"scheme": "https",
+			"authority": "dart.dev"
+		}
+	},
+	"severity": 8,
+	"message": "Undefined name '_sessionAngles'.\nTry correcting the name to one that is defined, or defining the name.",
+	"source": "dart",
+	"startLineNumber": 1196,
+	"startColumn": 35,
+	"endLineNumber": 1196,
+	"endColumn": 49,
+	"modelVersionId": 1,
+	"origin": "extHost1"
+},{
+	"resource": "/C:/Users/dang1/Documents/GitHub/NexHacks/Flutter/flutter_application/lib/pages/analytics_page.dart",
+	"owner": "_generated_diagnostic_collection_name_#4",
+	"code": {
+		"value": "undefined_identifier",
+		"target": {
+			"$mid": 1,
+			"path": "/diagnostics/undefined_identifier",
+			"scheme": "https",
+			"authority": "dart.dev"
+		}
+	},
+	"severity": 8,
+	"message": "Undefined name '_usedJointIndex'.\nTry correcting the name to one that is defined, or defining the name.",
+	"source": "dart",
+	"startLineNumber": 1207,
+	"startColumn": 24,
+	"endLineNumber": 1207,
+	"endColumn": 39,
+	"modelVersionId": 1,
+	"origin": "extHost1"
+},{
+	"resource": "/C:/Users/dang1/Documents/GitHub/NexHacks/Flutter/flutter_application/lib/pages/analytics_page.dart",
+	"owner": "_generated_diagnostic_collection_name_#4",
+	"code": {
+		"value": "undefined_identifier",
+		"target": {
+			"$mid": 1,
+			"path": "/diagnostics/undefined_identifier",
+			"scheme": "https",
+			"authority": "dart.dev"
+		}
+	},
+	"severity": 8,
+	"message": "Undefined name '_sessionAngles'.\nTry correcting the name to one that is defined, or defining the name.",
+	"source": "dart",
+	"startLineNumber": 1209,
+	"startColumn": 25,
+	"endLineNumber": 1209,
+	"endColumn": 39,
+	"modelVersionId": 1,
+	"origin": "extHost1"
+},{
+	"resource": "/C:/Users/dang1/Documents/GitHub/NexHacks/Flutter/flutter_application/lib/pages/analytics_page.dart",
+	"owner": "_generated_diagnostic_collection_name_#4",
+	"code": {
+		"value": "undefined_identifier",
+		"target": {
+			"$mid": 1,
+			"path": "/diagnostics/undefined_identifier",
+			"scheme": "https",
+			"authority": "dart.dev"
+		}
+	},
+	"severity": 8,
+	"message": "Undefined name '_sessionAngles'.\nTry correcting the name to one that is defined, or defining the name.",
+	"source": "dart",
+	"startLineNumber": 1210,
+	"startColumn": 21,
+	"endLineNumber": 1210,
+	"endColumn": 35,
+	"modelVersionId": 1,
+	"origin": "extHost1"
+},{
+	"resource": "/C:/Users/dang1/Documents/GitHub/NexHacks/Flutter/flutter_application/lib/pages/analytics_page.dart",
+	"owner": "_generated_diagnostic_collection_name_#4",
+	"code": {
+		"value": "undefined_identifier",
+		"target": {
+			"$mid": 1,
+			"path": "/diagnostics/undefined_identifier",
+			"scheme": "https",
+			"authority": "dart.dev"
+		}
+	},
+	"severity": 8,
+	"message": "Undefined name '_rawAngles'.\nTry correcting the name to one that is defined, or defining the name.",
+	"source": "dart",
+	"startLineNumber": 1226,
+	"startColumn": 11,
+	"endLineNumber": 1226,
+	"endColumn": 21,
+	"modelVersionId": 1,
+	"origin": "extHost1"
+},{
+	"resource": "/C:/Users/dang1/Documents/GitHub/NexHacks/Flutter/flutter_application/lib/pages/analytics_page.dart",
+	"owner": "_generated_diagnostic_collection_name_#4",
+	"code": {
+		"value": "undefined_identifier",
+		"target": {
+			"$mid": 1,
+			"path": "/diagnostics/undefined_identifier",
+			"scheme": "https",
+			"authority": "dart.dev"
+		}
+	},
+	"severity": 8,
+	"message": "Undefined name '_rawAngles'.\nTry correcting the name to one that is defined, or defining the name.",
+	"source": "dart",
+	"startLineNumber": 1226,
+	"startColumn": 37,
+	"endLineNumber": 1226,
+	"endColumn": 47,
+	"modelVersionId": 1,
+	"origin": "extHost1"
+},{
+	"resource": "/C:/Users/dang1/Documents/GitHub/NexHacks/Flutter/flutter_application/lib/pages/analytics_page.dart",
+	"owner": "_generated_diagnostic_collection_name_#4",
+	"code": {
+		"value": "undefined_identifier",
+		"target": {
+			"$mid": 1,
+			"path": "/diagnostics/undefined_identifier",
+			"scheme": "https",
+			"authority": "dart.dev"
+		}
+	},
+	"severity": 8,
+	"message": "Undefined name '_rawAngles'.\nTry correcting the name to one that is defined, or defining the name.",
+	"source": "dart",
+	"startLineNumber": 1227,
+	"startColumn": 26,
+	"endLineNumber": 1227,
+	"endColumn": 36,
+	"modelVersionId": 1,
+	"origin": "extHost1"
+},{
+	"resource": "/C:/Users/dang1/Documents/GitHub/NexHacks/Flutter/flutter_application/lib/pages/analytics_page.dart",
+	"owner": "_generated_diagnostic_collection_name_#4",
+	"code": {
+		"value": "undefined_identifier",
+		"target": {
+			"$mid": 1,
+			"path": "/diagnostics/undefined_identifier",
+			"scheme": "https",
+			"authority": "dart.dev"
+		}
+	},
+	"severity": 8,
+	"message": "Undefined name '_imuAngles'.\nTry correcting the name to one that is defined, or defining the name.",
+	"source": "dart",
+	"startLineNumber": 1237,
+	"startColumn": 11,
+	"endLineNumber": 1237,
+	"endColumn": 21,
+	"modelVersionId": 1,
+	"origin": "extHost1"
+},{
+	"resource": "/C:/Users/dang1/Documents/GitHub/NexHacks/Flutter/flutter_application/lib/pages/analytics_page.dart",
+	"owner": "_generated_diagnostic_collection_name_#4",
+	"code": {
+		"value": "undefined_identifier",
+		"target": {
+			"$mid": 1,
+			"path": "/diagnostics/undefined_identifier",
+			"scheme": "https",
+			"authority": "dart.dev"
+		}
+	},
+	"severity": 8,
+	"message": "Undefined name '_imuAngles'.\nTry correcting the name to one that is defined, or defining the name.",
+	"source": "dart",
+	"startLineNumber": 1237,
+	"startColumn": 37,
+	"endLineNumber": 1237,
+	"endColumn": 47,
+	"modelVersionId": 1,
+	"origin": "extHost1"
+},{
+	"resource": "/C:/Users/dang1/Documents/GitHub/NexHacks/Flutter/flutter_application/lib/pages/analytics_page.dart",
+	"owner": "_generated_diagnostic_collection_name_#4",
+	"code": {
+		"value": "undefined_identifier",
+		"target": {
+			"$mid": 1,
+			"path": "/diagnostics/undefined_identifier",
+			"scheme": "https",
+			"authority": "dart.dev"
+		}
+	},
+	"severity": 8,
+	"message": "Undefined name '_imuAngles'.\nTry correcting the name to one that is defined, or defining the name.",
+	"source": "dart",
+	"startLineNumber": 1238,
+	"startColumn": 26,
+	"endLineNumber": 1238,
+	"endColumn": 36,
+	"modelVersionId": 1,
+	"origin": "extHost1"
+},{
+	"resource": "/C:/Users/dang1/Documents/GitHub/NexHacks/Flutter/flutter_application/lib/pages/analytics_page.dart",
+	"owner": "_generated_diagnostic_collection_name_#4",
+	"code": {
+		"value": "undefined_identifier",
+		"target": {
+			"$mid": 1,
+			"path": "/diagnostics/undefined_identifier",
+			"scheme": "https",
+			"authority": "dart.dev"
+		}
+	},
+	"severity": 8,
+	"message": "Undefined name '_sessionAngles'.\nTry correcting the name to one that is defined, or defining the name.",
+	"source": "dart",
+	"startLineNumber": 1282,
+	"startColumn": 15,
+	"endLineNumber": 1282,
+	"endColumn": 29,
+	"modelVersionId": 1,
+	"origin": "extHost1"
+},{
+	"resource": "/C:/Users/dang1/Documents/GitHub/NexHacks/Flutter/flutter_application/lib/pages/analytics_page.dart",
+	"owner": "_generated_diagnostic_collection_name_#4",
+	"code": "class_in_class",
+	"severity": 8,
+	"message": "Classes can't be declared inside other classes.\nTry moving the class to the top-level.",
+	"source": "dart",
+	"startLineNumber": 1318,
+	"startColumn": 1,
+	"endLineNumber": 1318,
+	"endColumn": 6,
+	"modelVersionId": 1,
+	"origin": "extHost1"
+},{
+	"resource": "/C:/Users/dang1/Documents/GitHub/NexHacks/Flutter/flutter_application/lib/pages/analytics_page.dart",
+	"owner": "_generated_diagnostic_collection_name_#4",
+	"code": "expected_class_member",
+	"severity": 8,
+	"message": "Expected a class member.\nTry placing this code inside a class member.",
+	"source": "dart",
+	"startLineNumber": 1318,
+	"startColumn": 21,
+	"endLineNumber": 1318,
+	"endColumn": 28,
+	"modelVersionId": 1,
+	"origin": "extHost1"
+},{
+	"resource": "/C:/Users/dang1/Documents/GitHub/NexHacks/Flutter/flutter_application/lib/pages/analytics_page.dart",
+	"owner": "_generated_diagnostic_collection_name_#4",
+	"code": "missing_method_parameters",
+	"severity": 8,
+	"message": "Methods must have an explicit list of parameters.\nTry adding a parameter list.",
+	"source": "dart",
+	"startLineNumber": 1318,
+	"startColumn": 29,
+	"endLineNumber": 1318,
+	"endColumn": 44,
+	"modelVersionId": 1,
+	"origin": "extHost1"
+},{
+	"resource": "/C:/Users/dang1/Documents/GitHub/NexHacks/Flutter/flutter_application/lib/pages/analytics_page.dart",
+	"owner": "_generated_diagnostic_collection_name_#4",
+	"code": {
+		"value": "creation_with_non_type",
+		"target": {
+			"$mid": 1,
+			"path": "/diagnostics/creation_with_non_type",
+			"scheme": "https",
+			"authority": "dart.dev"
+		}
+	},
+	"severity": 8,
+	"message": "The name '_FeedbackItem' isn't a class.\nTry correcting the name to match an existing class.",
+	"source": "dart",
+	"startLineNumber": 1323,
+	"startColumn": 9,
+	"endLineNumber": 1323,
+	"endColumn": 22,
+	"modelVersionId": 1,
+	"origin": "extHost1"
+},{
+	"resource": "/C:/Users/dang1/Documents/GitHub/NexHacks/Flutter/flutter_application/lib/pages/analytics_page.dart",
+	"owner": "_generated_diagnostic_collection_name_#4",
+	"code": "expected_token",
+	"severity": 8,
+	"message": "Expected to find ','.",
+	"source": "dart",
+	"startLineNumber": 1323,
+	"startColumn": 33,
+	"endLineNumber": 1323,
+	"endColumn": 37,
+	"modelVersionId": 1,
+	"origin": "extHost1"
+},{
+	"resource": "/C:/Users/dang1/Documents/GitHub/NexHacks/Flutter/flutter_application/lib/pages/analytics_page.dart",
+	"owner": "_generated_diagnostic_collection_name_#4",
+	"code": "expected_token",
+	"severity": 8,
+	"message": "Expected to find ','.",
+	"source": "dart",
+	"startLineNumber": 1323,
+	"startColumn": 53,
+	"endLineNumber": 1323,
+	"endColumn": 57,
+	"modelVersionId": 1,
+	"origin": "extHost1"
+},{
+	"resource": "/C:/Users/dang1/Documents/GitHub/NexHacks/Flutter/flutter_application/lib/pages/analytics_page.dart",
+	"owner": "_generated_diagnostic_collection_name_#4",
+	"code": {
+		"value": "undefined_getter",
+		"target": {
+			"$mid": 1,
+			"path": "/diagnostics/undefined_getter",
+			"scheme": "https",
+			"authority": "dart.dev"
+		}
+	},
+	"severity": 8,
+	"message": "The getter 'text' isn't defined for the type '_AngleChartCard'.\nTry importing the library that defines 'text', correcting the name to the name of an existing getter, or defining a getter or field named 'text'.",
+	"source": "dart",
+	"startLineNumber": 1323,
+	"startColumn": 58,
+	"endLineNumber": 1323,
+	"endColumn": 62,
+	"modelVersionId": 1,
+	"origin": "extHost1"
+},{
+	"resource": "/C:/Users/dang1/Documents/GitHub/NexHacks/Flutter/flutter_application/lib/pages/analytics_page.dart",
+	"owner": "_generated_diagnostic_collection_name_#4",
+	"code": "expected_token",
+	"severity": 8,
+	"message": "Expected to find ','.",
+	"source": "dart",
+	"startLineNumber": 1323,
+	"startColumn": 73,
+	"endLineNumber": 1323,
+	"endColumn": 77,
+	"modelVersionId": 1,
+	"origin": "extHost1"
+},{
+	"resource": "/C:/Users/dang1/Documents/GitHub/NexHacks/Flutter/flutter_application/lib/pages/analytics_page.dart",
+	"owner": "_generated_diagnostic_collection_name_#4",
+	"code": {
+		"value": "read_potentially_unassigned_final",
+		"target": {
+			"$mid": 1,
+			"path": "/diagnostics/read_potentially_unassigned_final",
+			"scheme": "https",
+			"authority": "dart.dev"
+		}
+	},
+	"severity": 8,
+	"message": "The final variable 'color' can't be read because it's potentially unassigned at this point.\nEnsure that it is assigned on necessary execution paths.",
+	"source": "dart",
+	"startLineNumber": 1332,
+	"startColumn": 16,
+	"endLineNumber": 1332,
+	"endColumn": 21,
+	"modelVersionId": 1,
+	"origin": "extHost1"
+},{
+	"resource": "/C:/Users/dang1/Documents/GitHub/NexHacks/Flutter/flutter_application/lib/pages/analytics_page.dart",
+	"owner": "_generated_diagnostic_collection_name_#4",
+	"code": {
+		"value": "read_potentially_unassigned_final",
+		"target": {
+			"$mid": 1,
+			"path": "/diagnostics/read_potentially_unassigned_final",
+			"scheme": "https",
+			"authority": "dart.dev"
+		}
+	},
+	"severity": 8,
+	"message": "The final variable 'color' can't be read because it's potentially unassigned at this point.\nEnsure that it is assigned on necessary execution paths.",
+	"source": "dart",
+	"startLineNumber": 1334,
+	"startColumn": 35,
+	"endLineNumber": 1334,
+	"endColumn": 40,
+	"modelVersionId": 1,
+	"origin": "extHost1"
+},{
+	"resource": "/C:/Users/dang1/Documents/GitHub/NexHacks/Flutter/flutter_application/lib/pages/analytics_page.dart",
+	"owner": "_generated_diagnostic_collection_name_#4",
+	"code": {
+		"value": "read_potentially_unassigned_final",
+		"target": {
+			"$mid": 1,
+			"path": "/diagnostics/read_potentially_unassigned_final",
+			"scheme": "https",
+			"authority": "dart.dev"
+		}
+	},
+	"severity": 8,
+	"message": "The final variable 'icon' can't be read because it's potentially unassigned at this point.\nEnsure that it is assigned on necessary execution paths.",
+	"source": "dart",
+	"startLineNumber": 1338,
+	"startColumn": 16,
+	"endLineNumber": 1338,
+	"endColumn": 20,
+	"modelVersionId": 1,
+	"origin": "extHost1"
+},{
+	"resource": "/C:/Users/dang1/Documents/GitHub/NexHacks/Flutter/flutter_application/lib/pages/analytics_page.dart",
+	"owner": "_generated_diagnostic_collection_name_#4",
+	"code": {
+		"value": "read_potentially_unassigned_final",
+		"target": {
+			"$mid": 1,
+			"path": "/diagnostics/read_potentially_unassigned_final",
+			"scheme": "https",
+			"authority": "dart.dev"
+		}
+	},
+	"severity": 8,
+	"message": "The final variable 'color' can't be read because it's potentially unassigned at this point.\nEnsure that it is assigned on necessary execution paths.",
+	"source": "dart",
+	"startLineNumber": 1338,
+	"startColumn": 29,
+	"endLineNumber": 1338,
+	"endColumn": 34,
+	"modelVersionId": 1,
+	"origin": "extHost1"
+},{
+	"resource": "/C:/Users/dang1/Documents/GitHub/NexHacks/Flutter/flutter_application/lib/pages/analytics_page.dart",
+	"owner": "_generated_diagnostic_collection_name_#4",
+	"code": {
+		"value": "read_potentially_unassigned_final",
+		"target": {
+			"$mid": 1,
+			"path": "/diagnostics/read_potentially_unassigned_final",
+			"scheme": "https",
+			"authority": "dart.dev"
+		}
+	},
+	"severity": 8,
+	"message": "The final variable 'text' can't be read because it's potentially unassigned at this point.\nEnsure that it is assigned on necessary execution paths.",
+	"source": "dart",
+	"startLineNumber": 1340,
+	"startColumn": 32,
+	"endLineNumber": 1340,
+	"endColumn": 36,
+	"modelVersionId": 1,
+	"origin": "extHost1"
+},{
+	"resource": "/C:/Users/dang1/Documents/GitHub/NexHacks/Flutter/flutter_application/lib/pages/analytics_page.dart",
+	"owner": "_generated_diagnostic_collection_name_#4",
+	"code": "class_in_class",
+	"severity": 8,
+	"message": "Classes can't be declared inside other classes.\nTry moving the class to the top-level.",
+	"source": "dart",
+	"startLineNumber": 1347,
+	"startColumn": 1,
+	"endLineNumber": 1347,
+	"endColumn": 6,
+	"modelVersionId": 1,
+	"origin": "extHost1"
+},{
+	"resource": "/C:/Users/dang1/Documents/GitHub/NexHacks/Flutter/flutter_application/lib/pages/analytics_page.dart",
+	"owner": "_generated_diagnostic_collection_name_#4",
+	"code": "expected_class_member",
+	"severity": 8,
+	"message": "Expected a class member.\nTry placing this code inside a class member.",
+	"source": "dart",
+	"startLineNumber": 1347,
+	"startColumn": 19,
+	"endLineNumber": 1347,
+	"endColumn": 26,
+	"modelVersionId": 1,
+	"origin": "extHost1"
+},{
+	"resource": "/C:/Users/dang1/Documents/GitHub/NexHacks/Flutter/flutter_application/lib/pages/analytics_page.dart",
+	"owner": "_generated_diagnostic_collection_name_#4",
+	"code": "missing_method_parameters",
+	"severity": 8,
+	"message": "Methods must have an explicit list of parameters.\nTry adding a parameter list.",
+	"source": "dart",
+	"startLineNumber": 1347,
+	"startColumn": 27,
+	"endLineNumber": 1347,
+	"endColumn": 42,
+	"modelVersionId": 1,
+	"origin": "extHost1"
+},{
+	"resource": "/C:/Users/dang1/Documents/GitHub/NexHacks/Flutter/flutter_application/lib/pages/analytics_page.dart",
+	"owner": "_generated_diagnostic_collection_name_#4",
+	"code": {
+		"value": "duplicate_definition",
+		"target": {
+			"$mid": 1,
+			"path": "/diagnostics/duplicate_definition",
+			"scheme": "https",
+			"authority": "dart.dev"
+		}
+	},
+	"severity": 8,
+	"message": "The name 'StatelessWidget' is already defined.\nTry renaming one of the declarations.",
+	"source": "dart",
+	"startLineNumber": 1347,
+	"startColumn": 27,
+	"endLineNumber": 1347,
+	"endColumn": 42,
+	"relatedInformation": [
+		{
+			"startLineNumber": 1318,
+			"startColumn": 29,
+			"endLineNumber": 1318,
+			"endColumn": 44,
+			"message": "The first definition of this name.",
+			"resource": "/C:/Users/dang1/Documents/GitHub/NexHacks/Flutter/flutter_application/lib/pages/analytics_page.dart"
+		}
+	],
+	"modelVersionId": 1,
+	"origin": "extHost1"
+},{
+	"resource": "/C:/Users/dang1/Documents/GitHub/NexHacks/Flutter/flutter_application/lib/pages/analytics_page.dart",
+	"owner": "_generated_diagnostic_collection_name_#4",
+	"code": {
+		"value": "creation_with_non_type",
+		"target": {
+			"$mid": 1,
+			"path": "/diagnostics/creation_with_non_type",
+			"scheme": "https",
+			"authority": "dart.dev"
+		}
+	},
+	"severity": 8,
+	"message": "The name '_LegendItem' isn't a class.\nTry correcting the name to match an existing class.",
+	"source": "dart",
+	"startLineNumber": 1351,
+	"startColumn": 9,
+	"endLineNumber": 1351,
+	"endColumn": 20,
+	"modelVersionId": 1,
+	"origin": "extHost1"
+},{
+	"resource": "/C:/Users/dang1/Documents/GitHub/NexHacks/Flutter/flutter_application/lib/pages/analytics_page.dart",
+	"owner": "_generated_diagnostic_collection_name_#4",
+	"code": "expected_token",
+	"severity": 8,
+	"message": "Expected to find ','.",
+	"source": "dart",
+	"startLineNumber": 1351,
+	"startColumn": 31,
+	"endLineNumber": 1351,
+	"endColumn": 35,
+	"modelVersionId": 1,
+	"origin": "extHost1"
+},{
+	"resource": "/C:/Users/dang1/Documents/GitHub/NexHacks/Flutter/flutter_application/lib/pages/analytics_page.dart",
+	"owner": "_generated_diagnostic_collection_name_#4",
+	"code": "expected_token",
+	"severity": 8,
+	"message": "Expected to find ','.",
+	"source": "dart",
+	"startLineNumber": 1351,
+	"startColumn": 52,
+	"endLineNumber": 1351,
+	"endColumn": 56,
+	"modelVersionId": 1,
+	"origin": "extHost1"
+},{
+	"resource": "/C:/Users/dang1/Documents/GitHub/NexHacks/Flutter/flutter_application/lib/pages/analytics_page.dart",
+	"owner": "_generated_diagnostic_collection_name_#4",
+	"code": {
+		"value": "undefined_getter",
+		"target": {
+			"$mid": 1,
+			"path": "/diagnostics/undefined_getter",
+			"scheme": "https",
+			"authority": "dart.dev"
+		}
+	},
+	"severity": 8,
+	"message": "The getter 'label' isn't defined for the type '_AngleChartCard'.\nTry importing the library that defines 'label', correcting the name to the name of an existing getter, or defining a getter or field named 'label'.",
+	"source": "dart",
+	"startLineNumber": 1351,
+	"startColumn": 57,
+	"endLineNumber": 1351,
+	"endColumn": 62,
+	"modelVersionId": 1,
+	"origin": "extHost1"
+},{
+	"resource": "/C:/Users/dang1/Documents/GitHub/NexHacks/Flutter/flutter_application/lib/pages/analytics_page.dart",
+	"owner": "_generated_diagnostic_collection_name_#4",
+	"code": {
+		"value": "read_potentially_unassigned_final",
+		"target": {
+			"$mid": 1,
+			"path": "/diagnostics/read_potentially_unassigned_final",
+			"scheme": "https",
+			"authority": "dart.dev"
+		}
+	},
+	"severity": 8,
+	"message": "The final variable 'color' can't be read because it's potentially unassigned at this point.\nEnsure that it is assigned on necessary execution paths.",
+	"source": "dart",
+	"startLineNumber": 1360,
+	"startColumn": 44,
+	"endLineNumber": 1360,
+	"endColumn": 49,
+	"modelVersionId": 1,
+	"origin": "extHost1"
+},{
+	"resource": "/C:/Users/dang1/Documents/GitHub/NexHacks/Flutter/flutter_application/lib/pages/analytics_page.dart",
+	"owner": "_generated_diagnostic_collection_name_#4",
+	"code": {
+		"value": "read_potentially_unassigned_final",
+		"target": {
+			"$mid": 1,
+			"path": "/diagnostics/read_potentially_unassigned_final",
+			"scheme": "https",
+			"authority": "dart.dev"
+		}
+	},
+	"severity": 8,
+	"message": "The final variable 'label' can't be read because it's potentially unassigned at this point.\nEnsure that it is assigned on necessary execution paths.",
+	"source": "dart",
+	"startLineNumber": 1364,
+	"startColumn": 11,
+	"endLineNumber": 1364,
+	"endColumn": 16,
+	"modelVersionId": 1,
+	"origin": "extHost1"
+},{
+	"resource": "/C:/Users/dang1/Documents/GitHub/NexHacks/Flutter/flutter_application/lib/pages/analytics_page.dart",
+	"owner": "_generated_diagnostic_collection_name_#4",
+	"code": "expected_token",
+	"severity": 8,
+	"message": "Expected to find '}'.",
+	"source": "dart",
+	"startLineNumber": 1371,
+	"startColumn": 1,
+	"endLineNumber": 1371,
+	"endColumn": 2,
+	"modelVersionId": 1,
+	"origin": "extHost1"
+},{
+	"resource": "/C:/Users/dang1/Documents/GitHub/NexHacks/Flutter/flutter_application/lib/pages/analytics_page.dart",
+	"owner": "_generated_diagnostic_collection_name_#4",
+	"code": {
+		"value": "unused_element",
+		"target": {
+			"$mid": 1,
+			"path": "/diagnostics/unused_element",
+			"scheme": "https",
+			"authority": "dart.dev"
+		}
+	},
+	"severity": 4,
+	"message": "The declaration '_buildTipsFromOvershoot' isn't referenced.\nTry removing the declaration of '_buildTipsFromOvershoot'.",
+	"source": "dart",
+	"startLineNumber": 342,
+	"startColumn": 16,
+	"endLineNumber": 342,
+	"endColumn": 39,
+	"modelVersionId": 1,
+	"origin": "extHost1"
+},{
+	"resource": "/C:/Users/dang1/Documents/GitHub/NexHacks/Flutter/flutter_application/lib/pages/analytics_page.dart",
+	"owner": "_generated_diagnostic_collection_name_#4",
+	"code": {
+		"value": "unused_local_variable",
+		"target": {
+			"$mid": 1,
+			"path": "/diagnostics/unused_local_variable",
+			"scheme": "https",
+			"authority": "dart.dev"
+		}
+	},
+	"severity": 4,
+	"message": "The value of the local variable 'projectName' isn't used.\nTry removing the variable or using it.",
+	"source": "dart",
+	"startLineNumber": 517,
+	"startColumn": 11,
+	"endLineNumber": 517,
+	"endColumn": 22,
+	"modelVersionId": 1,
+	"origin": "extHost1"
+},{
+	"resource": "/C:/Users/dang1/Documents/GitHub/NexHacks/Flutter/flutter_application/lib/pages/analytics_page.dart",
+	"owner": "_generated_diagnostic_collection_name_#4",
+	"code": {
+		"value": "unused_local_variable",
+		"target": {
+			"$mid": 1,
+			"path": "/diagnostics/unused_local_variable",
+			"scheme": "https",
+			"authority": "dart.dev"
+		}
+	},
+	"severity": 4,
+	"message": "The value of the local variable 'hasAnalysisData' isn't used.\nTry removing the variable or using it.",
+	"source": "dart",
+	"startLineNumber": 520,
+	"startColumn": 11,
+	"endLineNumber": 520,
+	"endColumn": 26,
+	"modelVersionId": 1,
+	"origin": "extHost1"
+},{
+	"resource": "/C:/Users/dang1/Documents/GitHub/NexHacks/Flutter/flutter_application/lib/pages/analytics_page.dart",
+	"owner": "_generated_diagnostic_collection_name_#4",
+	"code": {
+		"value": "unused_element",
+		"target": {
+			"$mid": 1,
+			"path": "/diagnostics/unused_element",
+			"scheme": "https",
+			"authority": "dart.dev"
+		}
+	},
+	"severity": 4,
+	"message": "The declaration '_MetricCard' isn't referenced.\nTry removing the declaration of '_MetricCard'.",
+	"source": "dart",
+	"startLineNumber": 943,
+	"startColumn": 7,
+	"endLineNumber": 943,
+	"endColumn": 18,
+	"modelVersionId": 1,
+	"origin": "extHost1"
+},{
+	"resource": "/C:/Users/dang1/Documents/GitHub/NexHacks/Flutter/flutter_application/lib/pages/analytics_page.dart",
+	"owner": "_generated_diagnostic_collection_name_#4",
+	"code": {
+		"value": "unused_element_parameter",
+		"target": {
+			"$mid": 1,
+			"path": "/diagnostics/unused_element_parameter",
+			"scheme": "https",
+			"authority": "dart.dev"
+		}
+	},
+	"severity": 4,
+	"message": "A value for optional parameter 'subtitle' isn't ever given.\nTry removing the unused parameter.",
+	"source": "dart",
+	"startLineNumber": 950,
+	"startColumn": 110,
+	"endLineNumber": 950,
+	"endColumn": 118,
+	"modelVersionId": 1,
+	"origin": "extHost1"
+},{
+	"resource": "/C:/Users/dang1/Documents/GitHub/NexHacks/Flutter/flutter_application/lib/pages/analytics_page.dart",
+	"owner": "_generated_diagnostic_collection_name_#4",
+	"code": {
+		"value": "unused_element",
+		"target": {
+			"$mid": 1,
+			"path": "/diagnostics/unused_element",
+			"scheme": "https",
+			"authority": "dart.dev"
+		}
+	},
+	"severity": 4,
+	"message": "The declaration '_showDeveloperInfoDialog' isn't referenced.\nTry removing the declaration of '_showDeveloperInfoDialog'.",
+	"source": "dart",
+	"startLineNumber": 1141,
+	"startColumn": 10,
+	"endLineNumber": 1141,
+	"endColumn": 34,
+	"modelVersionId": 1,
+	"origin": "extHost1"
+},{
+	"resource": "/C:/Users/dang1/Documents/GitHub/NexHacks/Flutter/flutter_application/lib/pages/analytics_page.dart",
+	"owner": "_generated_diagnostic_collection_name_#4",
+	"code": {
+		"value": "unused_element",
+		"target": {
+			"$mid": 1,
+			"path": "/diagnostics/unused_element",
+			"scheme": "https",
+			"authority": "dart.dev"
+		}
+	},
+	"severity": 4,
+	"message": "The declaration 'build' isn't referenced.\nTry removing the declaration of 'build'.",
+	"source": "dart",
+	"startLineNumber": 1326,
+	"startColumn": 10,
+	"endLineNumber": 1326,
+	"endColumn": 15,
+	"modelVersionId": 1,
+	"origin": "extHost1"
+},{
+	"resource": "/C:/Users/dang1/Documents/GitHub/NexHacks/Flutter/flutter_application/lib/pages/analytics_page.dart",
+	"owner": "_generated_diagnostic_collection_name_#4",
+	"code": {
+		"value": "unused_element",
+		"target": {
+			"$mid": 1,
+			"path": "/diagnostics/unused_element",
+			"scheme": "https",
+			"authority": "dart.dev"
+		}
+	},
+	"severity": 4,
+	"message": "The declaration 'build' isn't referenced.\nTry removing the declaration of 'build'.",
+	"source": "dart",
+	"startLineNumber": 1354,
+	"startColumn": 10,
+	"endLineNumber": 1354,
+	"endColumn": 15,
+	"modelVersionId": 1,
+	"origin": "extHost1"
+},{
+	"resource": "/C:/Users/dang1/Documents/GitHub/NexHacks/Flutter/flutter_application/lib/pages/analytics_page.dart",
+	"owner": "_generated_diagnostic_collection_name_#4",
+	"code": {
+		"value": "avoid_print",
+		"target": {
+			"$mid": 1,
+			"path": "/diagnostics/avoid_print",
+			"scheme": "https",
+			"authority": "dart.dev"
+		}
+	},
+	"severity": 2,
+	"message": "Don't invoke 'print' in production code.\nTry using a logging framework.",
+	"source": "dart",
+	"startLineNumber": 106,
+	"startColumn": 7,
+	"endLineNumber": 106,
+	"endColumn": 12,
+	"modelVersionId": 1,
+	"origin": "extHost1"
+},{
+	"resource": "/C:/Users/dang1/Documents/GitHub/NexHacks/Flutter/flutter_application/lib/pages/analytics_page.dart",
+	"owner": "_generated_diagnostic_collection_name_#4",
+	"code": {
+		"value": "avoid_print",
+		"target": {
+			"$mid": 1,
+			"path": "/diagnostics/avoid_print",
+			"scheme": "https",
+			"authority": "dart.dev"
+		}
+	},
+	"severity": 2,
+	"message": "Don't invoke 'print' in production code.\nTry using a logging framework.",
+	"source": "dart",
+	"startLineNumber": 108,
+	"startColumn": 7,
+	"endLineNumber": 108,
+	"endColumn": 12,
+	"modelVersionId": 1,
+	"origin": "extHost1"
+},{
+	"resource": "/C:/Users/dang1/Documents/GitHub/NexHacks/Flutter/flutter_application/lib/pages/analytics_page.dart",
+	"owner": "_generated_diagnostic_collection_name_#4",
+	"code": {
+		"value": "avoid_print",
+		"target": {
+			"$mid": 1,
+			"path": "/diagnostics/avoid_print",
+			"scheme": "https",
+			"authority": "dart.dev"
+		}
+	},
+	"severity": 2,
+	"message": "Don't invoke 'print' in production code.\nTry using a logging framework.",
+	"source": "dart",
+	"startLineNumber": 143,
+	"startColumn": 9,
+	"endLineNumber": 143,
+	"endColumn": 14,
+	"modelVersionId": 1,
+	"origin": "extHost1"
+},{
+	"resource": "/C:/Users/dang1/Documents/GitHub/NexHacks/Flutter/flutter_application/lib/pages/analytics_page.dart",
+	"owner": "_generated_diagnostic_collection_name_#4",
+	"code": {
+		"value": "avoid_print",
+		"target": {
+			"$mid": 1,
+			"path": "/diagnostics/avoid_print",
+			"scheme": "https",
+			"authority": "dart.dev"
+		}
+	},
+	"severity": 2,
+	"message": "Don't invoke 'print' in production code.\nTry using a logging framework.",
+	"source": "dart",
+	"startLineNumber": 145,
+	"startColumn": 9,
+	"endLineNumber": 145,
+	"endColumn": 14,
+	"modelVersionId": 1,
+	"origin": "extHost1"
+},{
+	"resource": "/C:/Users/dang1/Documents/GitHub/NexHacks/Flutter/flutter_application/lib/pages/analytics_page.dart",
+	"owner": "_generated_diagnostic_collection_name_#4",
+	"code": {
+		"value": "avoid_print",
+		"target": {
+			"$mid": 1,
+			"path": "/diagnostics/avoid_print",
+			"scheme": "https",
+			"authority": "dart.dev"
+		}
+	},
+	"severity": 2,
+	"message": "Don't invoke 'print' in production code.\nTry using a logging framework.",
+	"source": "dart",
+	"startLineNumber": 148,
+	"startColumn": 7,
+	"endLineNumber": 148,
+	"endColumn": 12,
+	"modelVersionId": 1,
+	"origin": "extHost1"
+},{
+	"resource": "/C:/Users/dang1/Documents/GitHub/NexHacks/Flutter/flutter_application/lib/pages/analytics_page.dart",
+	"owner": "_generated_diagnostic_collection_name_#4",
+	"code": {
+		"value": "avoid_print",
+		"target": {
+			"$mid": 1,
+			"path": "/diagnostics/avoid_print",
+			"scheme": "https",
+			"authority": "dart.dev"
+		}
+	},
+	"severity": 2,
+	"message": "Don't invoke 'print' in production code.\nTry using a logging framework.",
+	"source": "dart",
+	"startLineNumber": 149,
+	"startColumn": 7,
+	"endLineNumber": 149,
+	"endColumn": 12,
+	"modelVersionId": 1,
+	"origin": "extHost1"
+},{
+	"resource": "/C:/Users/dang1/Documents/GitHub/NexHacks/Flutter/flutter_application/lib/pages/analytics_page.dart",
+	"owner": "_generated_diagnostic_collection_name_#4",
+	"code": {
+		"value": "avoid_print",
+		"target": {
+			"$mid": 1,
+			"path": "/diagnostics/avoid_print",
+			"scheme": "https",
+			"authority": "dart.dev"
+		}
+	},
+	"severity": 2,
+	"message": "Don't invoke 'print' in production code.\nTry using a logging framework.",
+	"source": "dart",
+	"startLineNumber": 150,
+	"startColumn": 7,
+	"endLineNumber": 150,
+	"endColumn": 12,
+	"modelVersionId": 1,
+	"origin": "extHost1"
+},{
+	"resource": "/C:/Users/dang1/Documents/GitHub/NexHacks/Flutter/flutter_application/lib/pages/analytics_page.dart",
+	"owner": "_generated_diagnostic_collection_name_#4",
+	"code": {
+		"value": "avoid_print",
+		"target": {
+			"$mid": 1,
+			"path": "/diagnostics/avoid_print",
+			"scheme": "https",
+			"authority": "dart.dev"
+		}
+	},
+	"severity": 2,
+	"message": "Don't invoke 'print' in production code.\nTry using a logging framework.",
+	"source": "dart",
+	"startLineNumber": 151,
+	"startColumn": 7,
+	"endLineNumber": 151,
+	"endColumn": 12,
+	"modelVersionId": 1,
+	"origin": "extHost1"
+},{
+	"resource": "/C:/Users/dang1/Documents/GitHub/NexHacks/Flutter/flutter_application/lib/pages/analytics_page.dart",
+	"owner": "_generated_diagnostic_collection_name_#4",
+	"code": {
+		"value": "avoid_print",
+		"target": {
+			"$mid": 1,
+			"path": "/diagnostics/avoid_print",
+			"scheme": "https",
+			"authority": "dart.dev"
+		}
+	},
+	"severity": 2,
+	"message": "Don't invoke 'print' in production code.\nTry using a logging framework.",
+	"source": "dart",
+	"startLineNumber": 183,
+	"startColumn": 9,
+	"endLineNumber": 183,
+	"endColumn": 14,
+	"modelVersionId": 1,
+	"origin": "extHost1"
+},{
+	"resource": "/C:/Users/dang1/Documents/GitHub/NexHacks/Flutter/flutter_application/lib/pages/analytics_page.dart",
+	"owner": "_generated_diagnostic_collection_name_#4",
+	"code": {
+		"value": "avoid_print",
+		"target": {
+			"$mid": 1,
+			"path": "/diagnostics/avoid_print",
+			"scheme": "https",
+			"authority": "dart.dev"
+		}
+	},
+	"severity": 2,
+	"message": "Don't invoke 'print' in production code.\nTry using a logging framework.",
+	"source": "dart",
+	"startLineNumber": 188,
+	"startColumn": 9,
+	"endLineNumber": 188,
+	"endColumn": 14,
+	"modelVersionId": 1,
+	"origin": "extHost1"
+},{
+	"resource": "/C:/Users/dang1/Documents/GitHub/NexHacks/Flutter/flutter_application/lib/pages/analytics_page.dart",
+	"owner": "_generated_diagnostic_collection_name_#4",
+	"code": {
+		"value": "avoid_print",
+		"target": {
+			"$mid": 1,
+			"path": "/diagnostics/avoid_print",
+			"scheme": "https",
+			"authority": "dart.dev"
+		}
+	},
+	"severity": 2,
+	"message": "Don't invoke 'print' in production code.\nTry using a logging framework.",
+	"source": "dart",
+	"startLineNumber": 191,
+	"startColumn": 7,
+	"endLineNumber": 191,
+	"endColumn": 12,
+	"modelVersionId": 1,
+	"origin": "extHost1"
+},{
+	"resource": "/C:/Users/dang1/Documents/GitHub/NexHacks/Flutter/flutter_application/lib/pages/analytics_page.dart",
+	"owner": "_generated_diagnostic_collection_name_#4",
+	"code": {
+		"value": "avoid_print",
+		"target": {
+			"$mid": 1,
+			"path": "/diagnostics/avoid_print",
+			"scheme": "https",
+			"authority": "dart.dev"
+		}
+	},
+	"severity": 2,
+	"message": "Don't invoke 'print' in production code.\nTry using a logging framework.",
+	"source": "dart",
+	"startLineNumber": 209,
+	"startColumn": 9,
+	"endLineNumber": 209,
+	"endColumn": 14,
+	"modelVersionId": 1,
+	"origin": "extHost1"
+},{
+	"resource": "/C:/Users/dang1/Documents/GitHub/NexHacks/Flutter/flutter_application/lib/pages/analytics_page.dart",
+	"owner": "_generated_diagnostic_collection_name_#4",
+	"code": {
+		"value": "avoid_print",
+		"target": {
+			"$mid": 1,
+			"path": "/diagnostics/avoid_print",
+			"scheme": "https",
+			"authority": "dart.dev"
+		}
+	},
+	"severity": 2,
+	"message": "Don't invoke 'print' in production code.\nTry using a logging framework.",
+	"source": "dart",
+	"startLineNumber": 250,
+	"startColumn": 9,
+	"endLineNumber": 250,
+	"endColumn": 14,
+	"modelVersionId": 1,
+	"origin": "extHost1"
+},{
+	"resource": "/C:/Users/dang1/Documents/GitHub/NexHacks/Flutter/flutter_application/lib/pages/analytics_page.dart",
+	"owner": "_generated_diagnostic_collection_name_#4",
+	"code": {
+		"value": "avoid_print",
+		"target": {
+			"$mid": 1,
+			"path": "/diagnostics/avoid_print",
+			"scheme": "https",
+			"authority": "dart.dev"
+		}
+	},
+	"severity": 2,
+	"message": "Don't invoke 'print' in production code.\nTry using a logging framework.",
+	"source": "dart",
+	"startLineNumber": 259,
+	"startColumn": 7,
+	"endLineNumber": 259,
+	"endColumn": 12,
+	"modelVersionId": 1,
+	"origin": "extHost1"
+},{
+	"resource": "/C:/Users/dang1/Documents/GitHub/NexHacks/Flutter/flutter_application/lib/pages/analytics_page.dart",
+	"owner": "_generated_diagnostic_collection_name_#4",
+	"code": {
+		"value": "deprecated_member_use",
+		"target": {
+			"$mid": 1,
+			"path": "/diagnostics/deprecated_member_use",
+			"scheme": "https",
+			"authority": "dart.dev"
+		}
+	},
+	"severity": 2,
+	"message": "'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss.\nTry replacing the use of the deprecated member with the replacement.",
+	"source": "dart",
+	"startLineNumber": 412,
+	"startColumn": 53,
+	"endLineNumber": 412,
+	"endColumn": 64,
+	"modelVersionId": 1,
+	"tags": [
+		2
+	],
+	"origin": "extHost1"
+},{
+	"resource": "/C:/Users/dang1/Documents/GitHub/NexHacks/Flutter/flutter_application/lib/pages/analytics_page.dart",
+	"owner": "_generated_diagnostic_collection_name_#4",
+	"code": {
+		"value": "deprecated_member_use",
+		"target": {
+			"$mid": 1,
+			"path": "/diagnostics/deprecated_member_use",
+			"scheme": "https",
+			"authority": "dart.dev"
+		}
+	},
+	"severity": 2,
+	"message": "'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss.\nTry replacing the use of the deprecated member with the replacement.",
+	"source": "dart",
+	"startLineNumber": 419,
+	"startColumn": 78,
+	"endLineNumber": 419,
+	"endColumn": 89,
+	"modelVersionId": 1,
+	"tags": [
+		2
+	],
+	"origin": "extHost1"
+},{
+	"resource": "/C:/Users/dang1/Documents/GitHub/NexHacks/Flutter/flutter_application/lib/pages/analytics_page.dart",
+	"owner": "_generated_diagnostic_collection_name_#4",
+	"code": {
+		"value": "deprecated_member_use",
+		"target": {
+			"$mid": 1,
+			"path": "/diagnostics/deprecated_member_use",
+			"scheme": "https",
+			"authority": "dart.dev"
+		}
+	},
+	"severity": 2,
+	"message": "'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss.\nTry replacing the use of the deprecated member with the replacement.",
+	"source": "dart",
+	"startLineNumber": 432,
+	"startColumn": 53,
+	"endLineNumber": 432,
+	"endColumn": 64,
+	"modelVersionId": 1,
+	"tags": [
+		2
+	],
+	"origin": "extHost1"
+},{
+	"resource": "/C:/Users/dang1/Documents/GitHub/NexHacks/Flutter/flutter_application/lib/pages/analytics_page.dart",
+	"owner": "_generated_diagnostic_collection_name_#4",
+	"code": {
+		"value": "deprecated_member_use",
+		"target": {
+			"$mid": 1,
+			"path": "/diagnostics/deprecated_member_use",
+			"scheme": "https",
+			"authority": "dart.dev"
+		}
+	},
+	"severity": 2,
+	"message": "'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss.\nTry replacing the use of the deprecated member with the replacement.",
+	"source": "dart",
+	"startLineNumber": 462,
+	"startColumn": 53,
+	"endLineNumber": 462,
+	"endColumn": 64,
+	"modelVersionId": 1,
+	"tags": [
+		2
+	],
+	"origin": "extHost1"
+},{
+	"resource": "/C:/Users/dang1/Documents/GitHub/NexHacks/Flutter/flutter_application/lib/pages/analytics_page.dart",
+	"owner": "_generated_diagnostic_collection_name_#4",
+	"code": {
+		"value": "deprecated_member_use",
+		"target": {
+			"$mid": 1,
+			"path": "/diagnostics/deprecated_member_use",
+			"scheme": "https",
+			"authority": "dart.dev"
+		}
+	},
+	"severity": 2,
+	"message": "'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss.\nTry replacing the use of the deprecated member with the replacement.",
+	"source": "dart",
+	"startLineNumber": 463,
+	"startColumn": 55,
+	"endLineNumber": 463,
+	"endColumn": 66,
+	"modelVersionId": 1,
+	"tags": [
+		2
+	],
+	"origin": "extHost1"
+},{
+	"resource": "/C:/Users/dang1/Documents/GitHub/NexHacks/Flutter/flutter_application/lib/pages/analytics_page.dart",
+	"owner": "_generated_diagnostic_collection_name_#4",
+	"code": {
+		"value": "deprecated_member_use",
+		"target": {
+			"$mid": 1,
+			"path": "/diagnostics/deprecated_member_use",
+			"scheme": "https",
+			"authority": "dart.dev"
+		}
+	},
+	"severity": 2,
+	"message": "'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss.\nTry replacing the use of the deprecated member with the replacement.",
+	"source": "dart",
+	"startLineNumber": 488,
+	"startColumn": 51,
+	"endLineNumber": 488,
+	"endColumn": 62,
+	"modelVersionId": 1,
+	"tags": [
+		2
+	],
+	"origin": "extHost1"
+},{
+	"resource": "/C:/Users/dang1/Documents/GitHub/NexHacks/Flutter/flutter_application/lib/pages/analytics_page.dart",
+	"owner": "_generated_diagnostic_collection_name_#4",
+	"code": {
+		"value": "deprecated_member_use",
+		"target": {
+			"$mid": 1,
+			"path": "/diagnostics/deprecated_member_use",
+			"scheme": "https",
+			"authority": "dart.dev"
+		}
+	},
+	"severity": 2,
+	"message": "'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss.\nTry replacing the use of the deprecated member with the replacement.",
+	"source": "dart",
+	"startLineNumber": 496,
+	"startColumn": 33,
+	"endLineNumber": 496,
+	"endColumn": 44,
+	"modelVersionId": 1,
+	"tags": [
+		2
+	],
+	"origin": "extHost1"
+},{
+	"resource": "/C:/Users/dang1/Documents/GitHub/NexHacks/Flutter/flutter_application/lib/pages/analytics_page.dart",
+	"owner": "_generated_diagnostic_collection_name_#4",
+	"code": {
+		"value": "deprecated_member_use",
+		"target": {
+			"$mid": 1,
+			"path": "/diagnostics/deprecated_member_use",
+			"scheme": "https",
+			"authority": "dart.dev"
+		}
+	},
+	"severity": 2,
+	"message": "'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss.\nTry replacing the use of the deprecated member with the replacement.",
+	"source": "dart",
+	"startLineNumber": 501,
+	"startColumn": 50,
+	"endLineNumber": 501,
+	"endColumn": 61,
+	"modelVersionId": 1,
+	"tags": [
+		2
+	],
+	"origin": "extHost1"
+},{
+	"resource": "/C:/Users/dang1/Documents/GitHub/NexHacks/Flutter/flutter_application/lib/pages/analytics_page.dart",
+	"owner": "_generated_diagnostic_collection_name_#4",
+	"code": {
+		"value": "deprecated_member_use",
+		"target": {
+			"$mid": 1,
+			"path": "/diagnostics/deprecated_member_use",
+			"scheme": "https",
+			"authority": "dart.dev"
+		}
+	},
+	"severity": 2,
+	"message": "'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss.\nTry replacing the use of the deprecated member with the replacement.",
+	"source": "dart",
+	"startLineNumber": 597,
+	"startColumn": 50,
+	"endLineNumber": 597,
+	"endColumn": 61,
+	"modelVersionId": 1,
+	"tags": [
+		2
+	],
+	"origin": "extHost1"
+},{
+	"resource": "/C:/Users/dang1/Documents/GitHub/NexHacks/Flutter/flutter_application/lib/pages/analytics_page.dart",
+	"owner": "_generated_diagnostic_collection_name_#4",
+	"code": {
+		"value": "deprecated_member_use",
+		"target": {
+			"$mid": 1,
+			"path": "/diagnostics/deprecated_member_use",
+			"scheme": "https",
+			"authority": "dart.dev"
+		}
+	},
+	"severity": 2,
+	"message": "'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss.\nTry replacing the use of the deprecated member with the replacement.",
+	"source": "dart",
+	"startLineNumber": 692,
+	"startColumn": 56,
+	"endLineNumber": 692,
+	"endColumn": 67,
+	"modelVersionId": 1,
+	"tags": [
+		2
+	],
+	"origin": "extHost1"
+},{
+	"resource": "/C:/Users/dang1/Documents/GitHub/NexHacks/Flutter/flutter_application/lib/pages/analytics_page.dart",
+	"owner": "_generated_diagnostic_collection_name_#4",
+	"code": {
+		"value": "deprecated_member_use",
+		"target": {
+			"$mid": 1,
+			"path": "/diagnostics/deprecated_member_use",
+			"scheme": "https",
+			"authority": "dart.dev"
+		}
+	},
+	"severity": 2,
+	"message": "'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss.\nTry replacing the use of the deprecated member with the replacement.",
+	"source": "dart",
+	"startLineNumber": 772,
+	"startColumn": 56,
+	"endLineNumber": 772,
+	"endColumn": 67,
+	"modelVersionId": 1,
+	"tags": [
+		2
+	],
+	"origin": "extHost1"
+},{
+	"resource": "/C:/Users/dang1/Documents/GitHub/NexHacks/Flutter/flutter_application/lib/pages/analytics_page.dart",
+	"owner": "_generated_diagnostic_collection_name_#4",
+	"code": {
+		"value": "deprecated_member_use",
+		"target": {
+			"$mid": 1,
+			"path": "/diagnostics/deprecated_member_use",
+			"scheme": "https",
+			"authority": "dart.dev"
+		}
+	},
+	"severity": 2,
+	"message": "'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss.\nTry replacing the use of the deprecated member with the replacement.",
+	"source": "dart",
+	"startLineNumber": 783,
+	"startColumn": 40,
+	"endLineNumber": 783,
+	"endColumn": 51,
+	"modelVersionId": 1,
+	"tags": [
+		2
+	],
+	"origin": "extHost1"
+},{
+	"resource": "/C:/Users/dang1/Documents/GitHub/NexHacks/Flutter/flutter_application/lib/pages/analytics_page.dart",
+	"owner": "_generated_diagnostic_collection_name_#4",
+	"code": {
+		"value": "deprecated_member_use",
+		"target": {
+			"$mid": 1,
+			"path": "/diagnostics/deprecated_member_use",
+			"scheme": "https",
+			"authority": "dart.dev"
+		}
+	},
+	"severity": 2,
+	"message": "'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss.\nTry replacing the use of the deprecated member with the replacement.",
+	"source": "dart",
+	"startLineNumber": 785,
+	"startColumn": 41,
+	"endLineNumber": 785,
+	"endColumn": 52,
+	"modelVersionId": 1,
+	"tags": [
+		2
+	],
+	"origin": "extHost1"
+},{
+	"resource": "/C:/Users/dang1/Documents/GitHub/NexHacks/Flutter/flutter_application/lib/pages/analytics_page.dart",
+	"owner": "_generated_diagnostic_collection_name_#4",
+	"code": {
+		"value": "deprecated_member_use",
+		"target": {
+			"$mid": 1,
+			"path": "/diagnostics/deprecated_member_use",
+			"scheme": "https",
+			"authority": "dart.dev"
+		}
+	},
+	"severity": 2,
+	"message": "'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss.\nTry replacing the use of the deprecated member with the replacement.",
+	"source": "dart",
+	"startLineNumber": 786,
+	"startColumn": 43,
+	"endLineNumber": 786,
+	"endColumn": 54,
+	"modelVersionId": 1,
+	"tags": [
+		2
+	],
+	"origin": "extHost1"
+},{
+	"resource": "/C:/Users/dang1/Documents/GitHub/NexHacks/Flutter/flutter_application/lib/pages/analytics_page.dart",
+	"owner": "_generated_diagnostic_collection_name_#4",
+	"code": {
+		"value": "deprecated_member_use",
+		"target": {
+			"$mid": 1,
+			"path": "/diagnostics/deprecated_member_use",
+			"scheme": "https",
+			"authority": "dart.dev"
+		}
+	},
+	"severity": 2,
+	"message": "'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss.\nTry replacing the use of the deprecated member with the replacement.",
+	"source": "dart",
+	"startLineNumber": 829,
+	"startColumn": 40,
+	"endLineNumber": 829,
+	"endColumn": 51,
+	"modelVersionId": 1,
+	"tags": [
+		2
+	],
+	"origin": "extHost1"
+},{
+	"resource": "/C:/Users/dang1/Documents/GitHub/NexHacks/Flutter/flutter_application/lib/pages/analytics_page.dart",
+	"owner": "_generated_diagnostic_collection_name_#4",
+	"code": {
+		"value": "deprecated_member_use",
+		"target": {
+			"$mid": 1,
+			"path": "/diagnostics/deprecated_member_use",
+			"scheme": "https",
+			"authority": "dart.dev"
+		}
+	},
+	"severity": 2,
+	"message": "'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss.\nTry replacing the use of the deprecated member with the replacement.",
+	"source": "dart",
+	"startLineNumber": 831,
+	"startColumn": 59,
+	"endLineNumber": 831,
+	"endColumn": 70,
+	"modelVersionId": 1,
+	"tags": [
+		2
+	],
+	"origin": "extHost1"
+},{
+	"resource": "/C:/Users/dang1/Documents/GitHub/NexHacks/Flutter/flutter_application/lib/pages/analytics_page.dart",
+	"owner": "_generated_diagnostic_collection_name_#4",
+	"code": {
+		"value": "deprecated_member_use",
+		"target": {
+			"$mid": 1,
+			"path": "/diagnostics/deprecated_member_use",
+			"scheme": "https",
+			"authority": "dart.dev"
+		}
+	},
+	"severity": 2,
+	"message": "'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss.\nTry replacing the use of the deprecated member with the replacement.",
+	"source": "dart",
+	"startLineNumber": 856,
+	"startColumn": 42,
+	"endLineNumber": 856,
+	"endColumn": 53,
+	"modelVersionId": 1,
+	"tags": [
+		2
+	],
+	"origin": "extHost1"
+},{
+	"resource": "/C:/Users/dang1/Documents/GitHub/NexHacks/Flutter/flutter_application/lib/pages/analytics_page.dart",
+	"owner": "_generated_diagnostic_collection_name_#4",
+	"code": {
+		"value": "deprecated_member_use",
+		"target": {
+			"$mid": 1,
+			"path": "/diagnostics/deprecated_member_use",
+			"scheme": "https",
+			"authority": "dart.dev"
+		}
+	},
+	"severity": 2,
+	"message": "'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss.\nTry replacing the use of the deprecated member with the replacement.",
+	"source": "dart",
+	"startLineNumber": 858,
+	"startColumn": 61,
+	"endLineNumber": 858,
+	"endColumn": 72,
+	"modelVersionId": 1,
+	"tags": [
+		2
+	],
+	"origin": "extHost1"
+},{
+	"resource": "/C:/Users/dang1/Documents/GitHub/NexHacks/Flutter/flutter_application/lib/pages/analytics_page.dart",
+	"owner": "_generated_diagnostic_collection_name_#4",
+	"code": {
+		"value": "deprecated_member_use",
+		"target": {
+			"$mid": 1,
+			"path": "/diagnostics/deprecated_member_use",
+			"scheme": "https",
+			"authority": "dart.dev"
+		}
+	},
+	"severity": 2,
+	"message": "'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss.\nTry replacing the use of the deprecated member with the replacement.",
+	"source": "dart",
+	"startLineNumber": 912,
+	"startColumn": 48,
+	"endLineNumber": 912,
+	"endColumn": 59,
+	"modelVersionId": 1,
+	"tags": [
+		2
+	],
+	"origin": "extHost1"
+},{
+	"resource": "/C:/Users/dang1/Documents/GitHub/NexHacks/Flutter/flutter_application/lib/pages/analytics_page.dart",
+	"owner": "_generated_diagnostic_collection_name_#4",
+	"code": {
+		"value": "deprecated_member_use",
+		"target": {
+			"$mid": 1,
+			"path": "/diagnostics/deprecated_member_use",
+			"scheme": "https",
+			"authority": "dart.dev"
+		}
+	},
+	"severity": 2,
+	"message": "'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss.\nTry replacing the use of the deprecated member with the replacement.",
+	"source": "dart",
+	"startLineNumber": 912,
+	"startColumn": 88,
+	"endLineNumber": 912,
+	"endColumn": 99,
+	"modelVersionId": 1,
+	"tags": [
+		2
+	],
+	"origin": "extHost1"
+},{
+	"resource": "/C:/Users/dang1/Documents/GitHub/NexHacks/Flutter/flutter_application/lib/pages/analytics_page.dart",
+	"owner": "_generated_diagnostic_collection_name_#4",
+	"code": {
+		"value": "deprecated_member_use",
+		"target": {
+			"$mid": 1,
+			"path": "/diagnostics/deprecated_member_use",
+			"scheme": "https",
+			"authority": "dart.dev"
+		}
+	},
+	"severity": 2,
+	"message": "'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss.\nTry replacing the use of the deprecated member with the replacement.",
+	"source": "dart",
+	"startLineNumber": 915,
+	"startColumn": 50,
+	"endLineNumber": 915,
+	"endColumn": 61,
+	"modelVersionId": 1,
+	"tags": [
+		2
+	],
+	"origin": "extHost1"
+},{
+	"resource": "/C:/Users/dang1/Documents/GitHub/NexHacks/Flutter/flutter_application/lib/pages/analytics_page.dart",
+	"owner": "_generated_diagnostic_collection_name_#4",
+	"code": {
+		"value": "deprecated_member_use",
+		"target": {
+			"$mid": 1,
+			"path": "/diagnostics/deprecated_member_use",
+			"scheme": "https",
+			"authority": "dart.dev"
+		}
+	},
+	"severity": 2,
+	"message": "'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss.\nTry replacing the use of the deprecated member with the replacement.",
+	"source": "dart",
+	"startLineNumber": 915,
+	"startColumn": 89,
+	"endLineNumber": 915,
+	"endColumn": 100,
+	"modelVersionId": 1,
+	"tags": [
+		2
+	],
+	"origin": "extHost1"
+},{
+	"resource": "/C:/Users/dang1/Documents/GitHub/NexHacks/Flutter/flutter_application/lib/pages/analytics_page.dart",
+	"owner": "_generated_diagnostic_collection_name_#4",
+	"code": {
+		"value": "deprecated_member_use",
+		"target": {
+			"$mid": 1,
+			"path": "/diagnostics/deprecated_member_use",
+			"scheme": "https",
+			"authority": "dart.dev"
+		}
+	},
+	"severity": 2,
+	"message": "'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss.\nTry replacing the use of the deprecated member with the replacement.",
+	"source": "dart",
+	"startLineNumber": 961,
+	"startColumn": 44,
+	"endLineNumber": 961,
+	"endColumn": 55,
+	"modelVersionId": 1,
+	"tags": [
+		2
+	],
+	"origin": "extHost1"
+},{
+	"resource": "/C:/Users/dang1/Documents/GitHub/NexHacks/Flutter/flutter_application/lib/pages/analytics_page.dart",
+	"owner": "_generated_diagnostic_collection_name_#4",
+	"code": {
+		"value": "deprecated_member_use",
+		"target": {
+			"$mid": 1,
+			"path": "/diagnostics/deprecated_member_use",
+			"scheme": "https",
+			"authority": "dart.dev"
+		}
+	},
+	"severity": 2,
+	"message": "'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss.\nTry replacing the use of the deprecated member with the replacement.",
+	"source": "dart",
+	"startLineNumber": 962,
+	"startColumn": 41,
+	"endLineNumber": 962,
+	"endColumn": 52,
+	"modelVersionId": 1,
+	"tags": [
+		2
+	],
+	"origin": "extHost1"
+},{
+	"resource": "/C:/Users/dang1/Documents/GitHub/NexHacks/Flutter/flutter_application/lib/pages/analytics_page.dart",
+	"owner": "_generated_diagnostic_collection_name_#4",
+	"code": {
+		"value": "deprecated_member_use",
+		"target": {
+			"$mid": 1,
+			"path": "/diagnostics/deprecated_member_use",
+			"scheme": "https",
+			"authority": "dart.dev"
+		}
+	},
+	"severity": 2,
+	"message": "'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss.\nTry replacing the use of the deprecated member with the replacement.",
+	"source": "dart",
+	"startLineNumber": 969,
+	"startColumn": 52,
+	"endLineNumber": 969,
+	"endColumn": 63,
+	"modelVersionId": 1,
+	"tags": [
+		2
+	],
+	"origin": "extHost1"
+},{
+	"resource": "/C:/Users/dang1/Documents/GitHub/NexHacks/Flutter/flutter_application/lib/pages/analytics_page.dart",
+	"owner": "_generated_diagnostic_collection_name_#4",
+	"code": {
+		"value": "deprecated_member_use",
+		"target": {
+			"$mid": 1,
+			"path": "/diagnostics/deprecated_member_use",
+			"scheme": "https",
+			"authority": "dart.dev"
+		}
+	},
+	"severity": 2,
+	"message": "'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss.\nTry replacing the use of the deprecated member with the replacement.",
+	"source": "dart",
+	"startLineNumber": 1019,
+	"startColumn": 44,
+	"endLineNumber": 1019,
+	"endColumn": 55,
+	"modelVersionId": 1,
+	"tags": [
+		2
+	],
+	"origin": "extHost1"
+},{
+	"resource": "/C:/Users/dang1/Documents/GitHub/NexHacks/Flutter/flutter_application/lib/pages/analytics_page.dart",
+	"owner": "_generated_diagnostic_collection_name_#4",
+	"code": {
+		"value": "deprecated_member_use",
+		"target": {
+			"$mid": 1,
+			"path": "/diagnostics/deprecated_member_use",
+			"scheme": "https",
+			"authority": "dart.dev"
+		}
+	},
+	"severity": 2,
+	"message": "'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss.\nTry replacing the use of the deprecated member with the replacement.",
+	"source": "dart",
+	"startLineNumber": 1020,
+	"startColumn": 41,
+	"endLineNumber": 1020,
+	"endColumn": 52,
+	"modelVersionId": 1,
+	"tags": [
+		2
+	],
+	"origin": "extHost1"
+},{
+	"resource": "/C:/Users/dang1/Documents/GitHub/NexHacks/Flutter/flutter_application/lib/pages/analytics_page.dart",
+	"owner": "_generated_diagnostic_collection_name_#4",
+	"code": {
+		"value": "deprecated_member_use",
+		"target": {
+			"$mid": 1,
+			"path": "/diagnostics/deprecated_member_use",
+			"scheme": "https",
+			"authority": "dart.dev"
+		}
+	},
+	"severity": 2,
+	"message": "'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss.\nTry replacing the use of the deprecated member with the replacement.",
+	"source": "dart",
+	"startLineNumber": 1030,
+	"startColumn": 56,
+	"endLineNumber": 1030,
+	"endColumn": 67,
+	"modelVersionId": 1,
+	"tags": [
+		2
+	],
+	"origin": "extHost1"
+},{
+	"resource": "/C:/Users/dang1/Documents/GitHub/NexHacks/Flutter/flutter_application/lib/pages/analytics_page.dart",
+	"owner": "_generated_diagnostic_collection_name_#4",
+	"code": {
+		"value": "deprecated_member_use",
+		"target": {
+			"$mid": 1,
+			"path": "/diagnostics/deprecated_member_use",
+			"scheme": "https",
+			"authority": "dart.dev"
+		}
+	},
+	"severity": 2,
+	"message": "'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss.\nTry replacing the use of the deprecated member with the replacement.",
+	"source": "dart",
+	"startLineNumber": 1062,
+	"startColumn": 63,
+	"endLineNumber": 1062,
+	"endColumn": 74,
+	"modelVersionId": 1,
+	"tags": [
+		2
+	],
+	"origin": "extHost1"
+},{
+	"resource": "/C:/Users/dang1/Documents/GitHub/NexHacks/Flutter/flutter_application/lib/pages/analytics_page.dart",
+	"owner": "_generated_diagnostic_collection_name_#4",
+	"code": {
+		"value": "deprecated_member_use",
+		"target": {
+			"$mid": 1,
+			"path": "/diagnostics/deprecated_member_use",
+			"scheme": "https",
+			"authority": "dart.dev"
+		}
+	},
+	"severity": 2,
+	"message": "'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss.\nTry replacing the use of the deprecated member with the replacement.",
+	"source": "dart",
+	"startLineNumber": 1106,
+	"startColumn": 78,
+	"endLineNumber": 1106,
+	"endColumn": 89,
+	"modelVersionId": 1,
+	"tags": [
+		2
+	],
+	"origin": "extHost1"
+},{
+	"resource": "/C:/Users/dang1/Documents/GitHub/NexHacks/Flutter/flutter_application/lib/pages/analytics_page.dart",
+	"owner": "_generated_diagnostic_collection_name_#4",
+	"code": {
+		"value": "deprecated_member_use",
+		"target": {
+			"$mid": 1,
+			"path": "/diagnostics/deprecated_member_use",
+			"scheme": "https",
+			"authority": "dart.dev"
+		}
+	},
+	"severity": 2,
+	"message": "'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss.\nTry replacing the use of the deprecated member with the replacement.",
+	"source": "dart",
+	"startLineNumber": 1172,
+	"startColumn": 51,
+	"endLineNumber": 1172,
+	"endColumn": 62,
+	"modelVersionId": 1,
+	"tags": [
+		2
+	],
+	"origin": "extHost1"
+},{
+	"resource": "/C:/Users/dang1/Documents/GitHub/NexHacks/Flutter/flutter_application/lib/pages/analytics_page.dart",
+	"owner": "_generated_diagnostic_collection_name_#4",
+	"code": {
+		"value": "deprecated_member_use",
+		"target": {
+			"$mid": 1,
+			"path": "/diagnostics/deprecated_member_use",
+			"scheme": "https",
+			"authority": "dart.dev"
+		}
+	},
+	"severity": 2,
+	"message": "'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss.\nTry replacing the use of the deprecated member with the replacement.",
+	"source": "dart",
+	"startLineNumber": 1174,
+	"startColumn": 53,
+	"endLineNumber": 1174,
+	"endColumn": 64,
+	"modelVersionId": 1,
+	"tags": [
+		2
+	],
+	"origin": "extHost1"
+},{
+	"resource": "/C:/Users/dang1/Documents/GitHub/NexHacks/Flutter/flutter_application/lib/pages/analytics_page.dart",
+	"owner": "_generated_diagnostic_collection_name_#4",
+	"code": {
+		"value": "deprecated_member_use",
+		"target": {
+			"$mid": 1,
+			"path": "/diagnostics/deprecated_member_use",
+			"scheme": "https",
+			"authority": "dart.dev"
+		}
+	},
+	"severity": 2,
+	"message": "'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss.\nTry replacing the use of the deprecated member with the replacement.",
+	"source": "dart",
+	"startLineNumber": 1253,
+	"startColumn": 74,
+	"endLineNumber": 1253,
+	"endColumn": 85,
+	"modelVersionId": 1,
+	"tags": [
+		2
+	],
+	"origin": "extHost1"
+},{
+	"resource": "/C:/Users/dang1/Documents/GitHub/NexHacks/Flutter/flutter_application/lib/pages/analytics_page.dart",
+	"owner": "_generated_diagnostic_collection_name_#4",
+	"code": {
+		"value": "deprecated_member_use",
+		"target": {
+			"$mid": 1,
+			"path": "/diagnostics/deprecated_member_use",
+			"scheme": "https",
+			"authority": "dart.dev"
+		}
+	},
+	"severity": 2,
+	"message": "'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss.\nTry replacing the use of the deprecated member with the replacement.",
+	"source": "dart",
+	"startLineNumber": 1254,
+	"startColumn": 72,
+	"endLineNumber": 1254,
+	"endColumn": 83,
+	"modelVersionId": 1,
+	"tags": [
+		2
+	],
+	"origin": "extHost1"
+},{
+	"resource": "/C:/Users/dang1/Documents/GitHub/NexHacks/Flutter/flutter_application/lib/pages/analytics_page.dart",
+	"owner": "_generated_diagnostic_collection_name_#4",
+	"code": {
+		"value": "deprecated_member_use",
+		"target": {
+			"$mid": 1,
+			"path": "/diagnostics/deprecated_member_use",
+			"scheme": "https",
+			"authority": "dart.dev"
+		}
+	},
+	"severity": 2,
+	"message": "'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss.\nTry replacing the use of the deprecated member with the replacement.",
+	"source": "dart",
+	"startLineNumber": 1290,
+	"startColumn": 31,
+	"endLineNumber": 1290,
+	"endColumn": 42,
+	"modelVersionId": 1,
+	"tags": [
+		2
+	],
+	"origin": "extHost1"
+},{
+	"resource": "/C:/Users/dang1/Documents/GitHub/NexHacks/Flutter/flutter_application/lib/pages/analytics_page.dart",
+	"owner": "_generated_diagnostic_collection_name_#4",
+	"code": {
+		"value": "deprecated_member_use",
+		"target": {
+			"$mid": 1,
+			"path": "/diagnostics/deprecated_member_use",
+			"scheme": "https",
+			"authority": "dart.dev"
+		}
+	},
+	"severity": 2,
+	"message": "'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss.\nTry replacing the use of the deprecated member with the replacement.",
+	"source": "dart",
+	"startLineNumber": 1299,
+	"startColumn": 33,
+	"endLineNumber": 1299,
+	"endColumn": 44,
+	"modelVersionId": 1,
+	"tags": [
+		2
+	],
+	"origin": "extHost1"
+},{
+	"resource": "/C:/Users/dang1/Documents/GitHub/NexHacks/Flutter/flutter_application/lib/pages/analytics_page.dart",
+	"owner": "_generated_diagnostic_collection_name_#4",
+	"code": {
+		"value": "non_constant_identifier_names",
+		"target": {
+			"$mid": 1,
+			"path": "/diagnostics/non_constant_identifier_names",
+			"scheme": "https",
+			"authority": "dart.dev"
+		}
+	},
+	"severity": 2,
+	"message": "The variable name 'StatelessWidget' isn't a lowerCamelCase identifier.\nTry changing the name to follow the lowerCamelCase style.",
+	"source": "dart",
+	"startLineNumber": 1318,
+	"startColumn": 29,
+	"endLineNumber": 1318,
+	"endColumn": 44,
+	"modelVersionId": 1,
+	"origin": "extHost1"
+},{
+	"resource": "/C:/Users/dang1/Documents/GitHub/NexHacks/Flutter/flutter_application/lib/pages/analytics_page.dart",
+	"owner": "_generated_diagnostic_collection_name_#4",
+	"code": {
+		"value": "strict_top_level_inference",
+		"target": {
+			"$mid": 1,
+			"path": "/lints/strict_top_level_inference",
+			"scheme": "https",
+			"authority": "dart.dev"
+		}
+	},
+	"severity": 2,
+	"message": "Missing type annotation.\nTry adding a type annotation.",
+	"source": "dart",
+	"startLineNumber": 1318,
+	"startColumn": 29,
+	"endLineNumber": 1318,
+	"endColumn": 44,
+	"modelVersionId": 1,
+	"origin": "extHost1"
+},{
+	"resource": "/C:/Users/dang1/Documents/GitHub/NexHacks/Flutter/flutter_application/lib/pages/analytics_page.dart",
+	"owner": "_generated_diagnostic_collection_name_#4",
+	"code": {
+		"value": "deprecated_member_use",
+		"target": {
+			"$mid": 1,
+			"path": "/diagnostics/deprecated_member_use",
+			"scheme": "https",
+			"authority": "dart.dev"
+		}
+	},
+	"severity": 2,
+	"message": "'required' is deprecated and shouldn't be used. In Dart 2.12 and later, use the built-in `required` keyword to mark a named parameter as required.\nTry replacing the use of the deprecated member with the replacement.",
+	"source": "dart",
+	"startLineNumber": 1323,
+	"startColumn": 24,
+	"endLineNumber": 1323,
+	"endColumn": 32,
+	"modelVersionId": 1,
+	"tags": [
+		2
+	],
+	"origin": "extHost1"
+},{
+	"resource": "/C:/Users/dang1/Documents/GitHub/NexHacks/Flutter/flutter_application/lib/pages/analytics_page.dart",
+	"owner": "_generated_diagnostic_collection_name_#4",
+	"code": {
+		"value": "deprecated_member_use",
+		"target": {
+			"$mid": 1,
+			"path": "/diagnostics/deprecated_member_use",
+			"scheme": "https",
+			"authority": "dart.dev"
+		}
+	},
+	"severity": 2,
+	"message": "'required' is deprecated and shouldn't be used. In Dart 2.12 and later, use the built-in `required` keyword to mark a named parameter as required.\nTry replacing the use of the deprecated member with the replacement.",
+	"source": "dart",
+	"startLineNumber": 1323,
+	"startColumn": 44,
+	"endLineNumber": 1323,
+	"endColumn": 52,
+	"modelVersionId": 1,
+	"tags": [
+		2
+	],
+	"origin": "extHost1"
+},{
+	"resource": "/C:/Users/dang1/Documents/GitHub/NexHacks/Flutter/flutter_application/lib/pages/analytics_page.dart",
+	"owner": "_generated_diagnostic_collection_name_#4",
+	"code": {
+		"value": "deprecated_member_use",
+		"target": {
+			"$mid": 1,
+			"path": "/diagnostics/deprecated_member_use",
+			"scheme": "https",
+			"authority": "dart.dev"
+		}
+	},
+	"severity": 2,
+	"message": "'required' is deprecated and shouldn't be used. In Dart 2.12 and later, use the built-in `required` keyword to mark a named parameter as required.\nTry replacing the use of the deprecated member with the replacement.",
+	"source": "dart",
+	"startLineNumber": 1323,
+	"startColumn": 64,
+	"endLineNumber": 1323,
+	"endColumn": 72,
+	"modelVersionId": 1,
+	"tags": [
+		2
+	],
+	"origin": "extHost1"
+},{
+	"resource": "/C:/Users/dang1/Documents/GitHub/NexHacks/Flutter/flutter_application/lib/pages/analytics_page.dart",
+	"owner": "_generated_diagnostic_collection_name_#4",
+	"code": {
+		"value": "deprecated_member_use",
+		"target": {
+			"$mid": 1,
+			"path": "/diagnostics/deprecated_member_use",
+			"scheme": "https",
+			"authority": "dart.dev"
+		}
+	},
+	"severity": 2,
+	"message": "'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss.\nTry replacing the use of the deprecated member with the replacement.",
+	"source": "dart",
+	"startLineNumber": 1332,
+	"startColumn": 22,
+	"endLineNumber": 1332,
+	"endColumn": 33,
+	"modelVersionId": 1,
+	"tags": [
+		2
+	],
+	"origin": "extHost1"
+},{
+	"resource": "/C:/Users/dang1/Documents/GitHub/NexHacks/Flutter/flutter_application/lib/pages/analytics_page.dart",
+	"owner": "_generated_diagnostic_collection_name_#4",
+	"code": {
+		"value": "deprecated_member_use",
+		"target": {
+			"$mid": 1,
+			"path": "/diagnostics/deprecated_member_use",
+			"scheme": "https",
+			"authority": "dart.dev"
+		}
+	},
+	"severity": 2,
+	"message": "'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss.\nTry replacing the use of the deprecated member with the replacement.",
+	"source": "dart",
+	"startLineNumber": 1334,
+	"startColumn": 41,
+	"endLineNumber": 1334,
+	"endColumn": 52,
+	"modelVersionId": 1,
+	"tags": [
+		2
+	],
+	"origin": "extHost1"
+},{
+	"resource": "/C:/Users/dang1/Documents/GitHub/NexHacks/Flutter/flutter_application/lib/pages/analytics_page.dart",
+	"owner": "_generated_diagnostic_collection_name_#4",
+	"code": {
+		"value": "non_constant_identifier_names",
+		"target": {
+			"$mid": 1,
+			"path": "/diagnostics/non_constant_identifier_names",
+			"scheme": "https",
+			"authority": "dart.dev"
+		}
+	},
+	"severity": 2,
+	"message": "The variable name 'StatelessWidget' isn't a lowerCamelCase identifier.\nTry changing the name to follow the lowerCamelCase style.",
+	"source": "dart",
+	"startLineNumber": 1347,
+	"startColumn": 27,
+	"endLineNumber": 1347,
+	"endColumn": 42,
+	"modelVersionId": 1,
+	"origin": "extHost1"
+},{
+	"resource": "/C:/Users/dang1/Documents/GitHub/NexHacks/Flutter/flutter_application/lib/pages/analytics_page.dart",
+	"owner": "_generated_diagnostic_collection_name_#4",
+	"code": {
+		"value": "strict_top_level_inference",
+		"target": {
+			"$mid": 1,
+			"path": "/lints/strict_top_level_inference",
+			"scheme": "https",
+			"authority": "dart.dev"
+		}
+	},
+	"severity": 2,
+	"message": "Missing type annotation.\nTry adding a type annotation.",
+	"source": "dart",
+	"startLineNumber": 1347,
+	"startColumn": 27,
+	"endLineNumber": 1347,
+	"endColumn": 42,
+	"modelVersionId": 1,
+	"origin": "extHost1"
+},{
+	"resource": "/C:/Users/dang1/Documents/GitHub/NexHacks/Flutter/flutter_application/lib/pages/analytics_page.dart",
+	"owner": "_generated_diagnostic_collection_name_#4",
+	"code": {
+		"value": "deprecated_member_use",
+		"target": {
+			"$mid": 1,
+			"path": "/diagnostics/deprecated_member_use",
+			"scheme": "https",
+			"authority": "dart.dev"
+		}
+	},
+	"severity": 2,
+	"message": "'required' is deprecated and shouldn't be used. In Dart 2.12 and later, use the built-in `required` keyword to mark a named parameter as required.\nTry replacing the use of the deprecated member with the replacement.",
+	"source": "dart",
+	"startLineNumber": 1351,
+	"startColumn": 22,
+	"endLineNumber": 1351,
+	"endColumn": 30,
+	"modelVersionId": 1,
+	"tags": [
+		2
+	],
+	"origin": "extHost1"
+},{
+	"resource": "/C:/Users/dang1/Documents/GitHub/NexHacks/Flutter/flutter_application/lib/pages/analytics_page.dart",
+	"owner": "_generated_diagnostic_collection_name_#4",
+	"code": {
+		"value": "deprecated_member_use",
+		"target": {
+			"$mid": 1,
+			"path": "/diagnostics/deprecated_member_use",
+			"scheme": "https",
+			"authority": "dart.dev"
+		}
+	},
+	"severity": 2,
+	"message": "'required' is deprecated and shouldn't be used. In Dart 2.12 and later, use the built-in `required` keyword to mark a named parameter as required.\nTry replacing the use of the deprecated member with the replacement.",
+	"source": "dart",
+	"startLineNumber": 1351,
+	"startColumn": 43,
+	"endLineNumber": 1351,
+	"endColumn": 51,
+	"modelVersionId": 1,
+	"tags": [
+		2
+	],
+	"origin": "extHost1"
+}]
