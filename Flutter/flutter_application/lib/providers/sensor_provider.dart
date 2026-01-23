@@ -445,6 +445,23 @@ class SensorNotifier extends Notifier<SensorState> {
         byteData.getInt16(offset + 2, Endian.big),
         byteData.getInt16(offset + 4, Endian.big),
       ];
+
+      // DEBUG: Print first few packets' raw values
+      if (seqId < 5 && i == 0) {
+        print('[SensorProvider] Packet $seqId Sample $i:');
+        print(
+          '  Raw Bytes at offset $offset: '
+          '${data.sublist(offset, offset + 6)}',
+        );
+        print('  Parsed GyroA (BigEndian): $rawGyroA');
+        print(
+          '  Parsed GyroA (LittleEndian): ['
+          '${byteData.getInt16(offset, Endian.little)}, '
+          '${byteData.getInt16(offset + 2, Endian.little)}, '
+          '${byteData.getInt16(offset + 4, Endian.little)}]',
+        );
+      }
+
       offset += 6;
 
       // acc_B[3] (int16 x 3, BIG ENDIAN - raw from MPU6050)
