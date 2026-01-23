@@ -1,17 +1,13 @@
-import 'dart:convert';
-
 /// Represents a recording session with metadata
 class Session {
   final int? id;
-  final int timestampUtc; // UTC milliseconds when recording started
+  final int timestampUtc; // UTC milliseconds when recording started (single source of truth)
   final String? originalVideoPath;
   final String? processedVideoPath;
   final int? durationMs;
   final int? fps;
   final int? totalFrames;
   final int? numAngles;
-  final List<int> anomalousFrameIds; // Frame indices flagged as anomalous by backend
-  final DateTime createdAt;
 
   const Session({
     this.id,
@@ -22,22 +18,10 @@ class Session {
     this.fps,
     this.totalFrames,
     this.numAngles,
-    this.anomalousFrameIds = const [],
-    required this.createdAt,
   });
 
   /// Create from database row
   factory Session.fromMap(Map<String, dynamic> map) {
-    // Parse anomalous_frame_ids from JSON string
-    List<int> anomalousIds = [];
-    if (map['anomalous_frame_ids'] != null) {
-      final jsonStr = map['anomalous_frame_ids'] as String;
-      if (jsonStr.isNotEmpty) {
-        final decoded = jsonDecode(jsonStr) as List<dynamic>;
-        anomalousIds = decoded.map((e) => e as int).toList();
-      }
-    }
-    
     return Session(
       id: map['id'] as int?,
       timestampUtc: map['timestamp_utc'] as int,
@@ -47,8 +31,6 @@ class Session {
       fps: map['fps'] as int?,
       totalFrames: map['total_frames'] as int?,
       numAngles: map['num_angles'] as int?,
-      anomalousFrameIds: anomalousIds,
-      createdAt: DateTime.parse(map['created_at'] as String),
     );
   }
 
@@ -63,28 +45,26 @@ class Session {
       'fps': fps,
       'total_frames': totalFrames,
       'num_angles': numAngles,
-      'anomalous_frame_ids': jsonEncode(anomalousFrameIds),
-      'created_at': createdAt.toIso8601String(),
     };
   }
 
-  /// Get session date formatted for display
+  /// Get createdAt as DateTime (derived from timestampUtc)
+  DateTime get createdAt => DateTime.fromMillisecondsSinceEpoch(timestampUtc, isUtc: true);
+
+  /// Get session date formatted for display (converts UTC to local)
   String get formattedDate {
-    return '${createdAt.day}/${createdAt.month}/${createdAt.year}';
+    final local = createdAt.toLocal();
+    return '${local.day}/${local.month}/${local.year}';
   }
 
-  /// Get session time formatted for display
+  /// Get session time formatted for display (converts UTC to local)
   String get formattedTime {
-    return '${createdAt.hour.toString().padLeft(2, '0')}:${createdAt.minute.toString().padLeft(2, '0')}';
+    final local = createdAt.toLocal();
+    return '${local.hour.toString().padLeft(2, '0')}:${local.minute.toString().padLeft(2, '0')}';
   }
 
-  /// Check if a frame index is marked as anomalous and should be ignored
-  bool isFrameAnomalous(int frameIndex) {
-    return anomalousFrameIds.contains(frameIndex);
-  }
-
-  /// Get the count of anomalous frames
-  int get anomalousFrameCount => anomalousFrameIds.length;
+  /// Get ISO8601 string for display purposes
+  String get createdAtIso => createdAt.toIso8601String();
 
   @override
   String toString() {

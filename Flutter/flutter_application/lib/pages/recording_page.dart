@@ -64,18 +64,13 @@ class _RecordingPageState extends ConsumerState<RecordingPage> {
   /// Check if device supports video recording + image analysis simultaneously
   Future<void> _checkDeviceCapabilities() async {
     try {
-      final supported =
-          await CameraCharacteristics.isVideoRecordingAndImageAnalysisSupported(
-            SensorPosition.back,
-          );
+      final supported = await CameraCharacteristics.isVideoRecordingAndImageAnalysisSupported(SensorPosition.back);
       print('[RecordingPage] 📱 Device supports video+analysis: $supported');
       if (!supported && _enableVideoRecording) {
         print(
           '[RecordingPage] ⚠️ WARNING: This device does NOT support video recording + image analysis at the same time!',
         );
-        print(
-          '[RecordingPage] ⚠️ Image analysis will be DISABLED during video recording.',
-        );
+        print('[RecordingPage] ⚠️ Image analysis will be DISABLED during video recording.');
       }
     } catch (e) {
       print('[RecordingPage] ⚠️ Could not check device capabilities: $e');
@@ -84,21 +79,15 @@ class _RecordingPageState extends ConsumerState<RecordingPage> {
 
   void _setupFrameStreamingListeners() {
     // Listen for inference results from the server
-    _resultsSubscription = _frameStreamingService.resultsStream.listen((
-      result,
-    ) {
-      ref
-          .read(frameAnalysisProvider.notifier)
-          .addFrameWithResult(result.timestampUtc, result.result);
+    _resultsSubscription = _frameStreamingService.resultsStream.listen((result) {
+      ref.read(frameAnalysisProvider.notifier).addFrameWithResult(result.timestampUtc, result.result);
       setState(() {
         _latestInferenceResult = result.result;
       });
     });
 
     // Listen for connection state changes
-    _connectionSubscription = _frameStreamingService.connectionStream.listen((
-      connected,
-    ) {
+    _connectionSubscription = _frameStreamingService.connectionStream.listen((connected) {
       if (!connected && _isRecording && _isAnalysisAvailable) {
         print('[RecordingPage] ⚠️ WebSocket connection lost during recording');
         setState(() {
@@ -109,14 +98,13 @@ class _RecordingPageState extends ConsumerState<RecordingPage> {
     });
 
     // Listen for all results received
-    _allResultsSubscription = _frameStreamingService.allResultsReceivedStream
-        .listen((_) {
-          ref.read(frameAnalysisProvider.notifier).markSessionComplete();
-          setState(() {
-            _isWaitingForResults = false;
-          });
-          _navigateToReview();
-        });
+    _allResultsSubscription = _frameStreamingService.allResultsReceivedStream.listen((_) {
+      ref.read(frameAnalysisProvider.notifier).markSessionComplete();
+      setState(() {
+        _isWaitingForResults = false;
+      });
+      _navigateToReview();
+    });
   }
 
   /// Handle analysis image from camerawesome - convert to JPEG and send
@@ -155,9 +143,7 @@ class _RecordingPageState extends ConsumerState<RecordingPage> {
 
         _framesSent++;
         if (_framesSent % 10 == 0) {
-          print(
-            '[RecordingPage] 📹 Sent $_framesSent frames (last: ${jpegImage.bytes.length} bytes, sent: $sent)',
-          );
+          print('[RecordingPage] 📹 Sent $_framesSent frames (last: ${jpegImage.bytes.length} bytes, sent: $sent)');
         }
       }
     } catch (e) {
@@ -182,7 +168,8 @@ class _RecordingPageState extends ConsumerState<RecordingPage> {
       // With fps=10, samplingRatio=0.3, clipLength=10.0, delay=1.0:
       // (10 * 0.3 * 10.0) / 1.0 = 30 frames per clip (max allowed, 10s window)
       final config = StreamConfig(
-        prompt: 'Analyze the physical therapy exercise form. Describe the movement, body position, and any form issues.',
+        prompt:
+            'Analyze the physical therapy exercise form. Describe the movement, body position, and any form issues.',
         model: 'gemini-2.0-flash',
         backend: 'gemini',
         samplingRatio: 0.3, // Sample 30% of frames to fit 10s window in constraint
@@ -216,26 +203,31 @@ class _RecordingPageState extends ConsumerState<RecordingPage> {
       _videoStartTimeUtc = DateTime.now().toUtc().millisecondsSinceEpoch;
 
       // Start a new analysis session
-      ref
-          .read(frameAnalysisProvider.notifier)
-          .startSession(_videoStartTimeUtc!);
+      ref.read(frameAnalysisProvider.notifier).startSession(_videoStartTimeUtc!);
 
       // Start video recording if enabled
       if (_enableVideoRecording) {
+        bool recordingStarted = false;
         _cameraState?.when(
           onVideoMode: (videoState) {
             videoState.startRecording();
-            print('[RecordingPage] 🎥 Video recording started');
+            recordingStarted = true;
+            print('[RecordingPage] 🎥 Video recording started from video mode');
           },
           onVideoRecordingMode: (recordingState) {
             // Already recording
-            print('[RecordingPage] 🎥 Already recording');
+            recordingStarted = true;
+            print('[RecordingPage] 🎥 Already in recording mode');
+          },
+          onPhotoMode: (photoState) {
+            print('[RecordingPage] ⚠️ Camera in photo mode, cannot start video recording');
           },
         );
+        if (!recordingStarted) {
+          print('[RecordingPage] ⚠️ Video recording did not start - camera not in video mode');
+        }
       } else {
-        print(
-          '[RecordingPage] 🎥 Video recording DISABLED - only image stream will run',
-        );
+        print('[RecordingPage] 🎥 Video recording DISABLED - only image stream will run');
       }
 
       if (ref.read(sensorProvider).isConnected) {
@@ -248,9 +240,7 @@ class _RecordingPageState extends ConsumerState<RecordingPage> {
         _frameStreamingService.startStreaming(cameraFps: 10);
         // Image analysis is handled by camerawesome's onImageForAnalysis callback
       } else {
-        print(
-          '[RecordingPage] ⚠️ Analysis NOT available - WebSocket not connected',
-        );
+        print('[RecordingPage] ⚠️ Analysis NOT available - WebSocket not connected');
       }
 
       setState(() {
@@ -283,9 +273,7 @@ class _RecordingPageState extends ConsumerState<RecordingPage> {
 
     timeoutTimer = Timer(Duration(milliseconds: _wsReadyTimeoutMs), () {
       if (!completer.isCompleted) {
-        print(
-          '[RecordingPage] ⚠️ WebSocket ready timeout after ${_wsReadyTimeoutMs}ms',
-        );
+        print('[RecordingPage] ⚠️ WebSocket ready timeout after ${_wsReadyTimeoutMs}ms');
         completer.complete(false);
       }
     });
@@ -295,9 +283,7 @@ class _RecordingPageState extends ConsumerState<RecordingPage> {
       return true;
     }
 
-    final pollTimer = Timer.periodic(const Duration(milliseconds: 100), (
-      timer,
-    ) {
+    final pollTimer = Timer.periodic(const Duration(milliseconds: 100), (timer) {
       if (_frameStreamingService.isReady) {
         timer.cancel();
         timeoutTimer?.cancel();
@@ -338,15 +324,20 @@ class _RecordingPageState extends ConsumerState<RecordingPage> {
         final completer = Completer<void>();
         bool handlerCalled = false;
 
+        print('[RecordingPage] 🎥 Attempting to stop video recording...');
+
         _cameraState!.when(
           onVideoRecordingMode: (recordingState) {
             handlerCalled = true;
+            print('[RecordingPage] 🎥 Stopping recording from VideoRecordingMode...');
             recordingState.stopRecording(
               onVideo: (captureRequest) {
                 // Get the video file path from the capture request
                 if (captureRequest is SingleCaptureRequest) {
                   _tempVideoPath = captureRequest.file?.path;
                   print('[RecordingPage] 🎥 Video saved: $_tempVideoPath');
+                } else {
+                  print('[RecordingPage] ⚠️ CaptureRequest is not SingleCaptureRequest: ${captureRequest.runtimeType}');
                 }
                 if (!completer.isCompleted) completer.complete();
               },
@@ -358,7 +349,7 @@ class _RecordingPageState extends ConsumerState<RecordingPage> {
           },
           onVideoMode: (videoState) {
             // Camera is in video mode but not recording - nothing to stop
-            print('[RecordingPage] ⚠️ Camera in video mode but not recording');
+            print('[RecordingPage] ⚠️ Camera in video mode but not actively recording');
             handlerCalled = true;
             if (!completer.isCompleted) completer.complete();
           },
@@ -403,9 +394,7 @@ class _RecordingPageState extends ConsumerState<RecordingPage> {
 
         Timer(Duration(milliseconds: _waitingForResultsTimeoutMs), () {
           if (_isWaitingForResults && mounted) {
-            print(
-              '[RecordingPage] ⚠️ Timeout waiting for results, proceeding to review',
-            );
+            print('[RecordingPage] ⚠️ Timeout waiting for results, proceeding to review');
             setState(() {
               _isWaitingForResults = false;
             });
@@ -449,21 +438,11 @@ class _RecordingPageState extends ConsumerState<RecordingPage> {
     if (!mounted) return;
 
     if (_tempVideoPath != null) {
-      Navigator.push(
-        context,
-        MaterialPageRoute(
-          builder: (_) => ReviewPage(videoPath: _tempVideoPath!),
-        ),
-      );
+      Navigator.push(context, MaterialPageRoute(builder: (_) => ReviewPage(videoPath: _tempVideoPath!)));
     } else if (!_enableVideoRecording) {
-      print(
-        '[RecordingPage] ℹ️ No video to review (video recording was disabled)',
-      );
+      print('[RecordingPage] ℹ️ No video to review (video recording was disabled)');
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Image stream test complete. No video recorded.'),
-          duration: Duration(seconds: 3),
-        ),
+        const SnackBar(content: Text('Image stream test complete. No video recorded.'), duration: Duration(seconds: 3)),
       );
     } else {
       // Video recording was enabled but no video was saved
@@ -537,17 +516,11 @@ class _RecordingPageState extends ConsumerState<RecordingPage> {
                       width: 8,
                       height: 8,
                       margin: const EdgeInsets.only(right: 6),
-                      decoration: const BoxDecoration(
-                        color: AppColors.success,
-                        shape: BoxShape.circle,
-                      ),
+                      decoration: const BoxDecoration(color: AppColors.success, shape: BoxShape.circle),
                     ),
                   const Text(
                     'Done',
-                    style: TextStyle(
-                      color: AppColors.accent,
-                      fontWeight: FontWeight.bold,
-                    ),
+                    style: TextStyle(color: AppColors.accent, fontWeight: FontWeight.bold),
                   ),
                 ],
               ),
@@ -558,10 +531,7 @@ class _RecordingPageState extends ConsumerState<RecordingPage> {
         child: Stack(
           children: [
             // CamerAwesome Camera Preview
-            RotatedBox(
-              quarterTurns: -1,
-              child: _buildCameraAwesome(),
-            ),
+            RotatedBox(quarterTurns: -1, child: _buildCameraAwesome()),
 
             // Waiting for Results Overlay
             if (_isWaitingForResults)
@@ -575,17 +545,12 @@ class _RecordingPageState extends ConsumerState<RecordingPage> {
                       const SizedBox(height: 24),
                       Text(
                         'Processing frames...',
-                        style: theme.textTheme.titleMedium?.copyWith(
-                          color: Colors.white,
-                          fontWeight: FontWeight.w500,
-                        ),
+                        style: theme.textTheme.titleMedium?.copyWith(color: Colors.white, fontWeight: FontWeight.w500),
                       ),
                       const SizedBox(height: 8),
                       Text(
                         '${_frameStreamingService.pendingFrameCount} frames remaining',
-                        style: theme.textTheme.bodyMedium?.copyWith(
-                          color: Colors.white70,
-                        ),
+                        style: theme.textTheme.bodyMedium?.copyWith(color: Colors.white70),
                       ),
                     ],
                   ),
@@ -600,10 +565,7 @@ class _RecordingPageState extends ConsumerState<RecordingPage> {
                 right: 0,
                 child: Center(
                   child: Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 16,
-                      vertical: 8,
-                    ),
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                     decoration: BoxDecoration(
                       color: Colors.red.withOpacity(0.8),
                       borderRadius: BorderRadius.circular(20),
@@ -614,18 +576,12 @@ class _RecordingPageState extends ConsumerState<RecordingPage> {
                         Container(
                           width: 12,
                           height: 12,
-                          decoration: const BoxDecoration(
-                            color: Colors.white,
-                            shape: BoxShape.circle,
-                          ),
+                          decoration: const BoxDecoration(color: Colors.white, shape: BoxShape.circle),
                         ),
                         const SizedBox(width: 8),
                         Text(
                           'REC ${_formatDuration(_recordingSeconds)}',
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontWeight: FontWeight.bold,
-                          ),
+                          style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
                         ),
                       ],
                     ),
@@ -640,10 +596,7 @@ class _RecordingPageState extends ConsumerState<RecordingPage> {
                 left: 16,
                 right: 16,
                 child: Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 12,
-                    vertical: 10,
-                  ),
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
                   decoration: BoxDecoration(
                     color: Colors.black.withOpacity(0.7),
                     borderRadius: BorderRadius.circular(12),
@@ -657,12 +610,8 @@ class _RecordingPageState extends ConsumerState<RecordingPage> {
                   child: Row(
                     children: [
                       Icon(
-                        _latestInferenceResult != null
-                            ? Icons.psychology
-                            : Icons.hourglass_empty,
-                        color: _latestInferenceResult != null
-                            ? AppColors.accent
-                            : Colors.white54,
+                        _latestInferenceResult != null ? Icons.psychology : Icons.hourglass_empty,
+                        color: _latestInferenceResult != null ? AppColors.accent : Colors.white54,
                         size: 20,
                       ),
                       const SizedBox(width: 10),
@@ -670,13 +619,9 @@ class _RecordingPageState extends ConsumerState<RecordingPage> {
                         child: Text(
                           _latestInferenceResult ?? 'Waiting for inference...',
                           style: TextStyle(
-                            color: _latestInferenceResult != null
-                                ? Colors.white
-                                : Colors.white54,
+                            color: _latestInferenceResult != null ? Colors.white : Colors.white54,
                             fontSize: 13,
-                            fontStyle: _latestInferenceResult != null
-                                ? FontStyle.normal
-                                : FontStyle.italic,
+                            fontStyle: _latestInferenceResult != null ? FontStyle.normal : FontStyle.italic,
                           ),
                           maxLines: 3,
                           overflow: TextOverflow.ellipsis,
@@ -696,28 +641,18 @@ class _RecordingPageState extends ConsumerState<RecordingPage> {
                 bottom: 200,
                 child: Container(
                   decoration: BoxDecoration(
-                    border: Border.all(
-                      color: Colors.white.withOpacity(0.3),
-                      width: 2,
-                    ),
+                    border: Border.all(color: Colors.white.withOpacity(0.3), width: 2),
                     borderRadius: BorderRadius.circular(16),
                   ),
                   child: Center(
                     child: Column(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        Icon(
-                          Icons.accessibility_new,
-                          size: 100,
-                          color: Colors.white.withOpacity(0.2),
-                        ),
+                        Icon(Icons.accessibility_new, size: 100, color: Colors.white.withOpacity(0.2)),
                         const SizedBox(height: 16),
                         Text(
                           'Position yourself here',
-                          style: TextStyle(
-                            color: Colors.white.withOpacity(0.5),
-                            fontSize: 16,
-                          ),
+                          style: TextStyle(color: Colors.white.withOpacity(0.5), fontSize: 16),
                         ),
                       ],
                     ),
@@ -734,9 +669,7 @@ class _RecordingPageState extends ConsumerState<RecordingPage> {
                 children: [
                   // Instructions
                   Text(
-                    _isRecording
-                        ? 'Perform your exercise'
-                        : 'Tap to start recording',
+                    _isRecording ? 'Perform your exercise' : 'Tap to start recording',
                     style: const TextStyle(color: Colors.white70, fontSize: 16),
                   ),
                   const SizedBox(height: 24),
@@ -771,9 +704,7 @@ class _RecordingPageState extends ConsumerState<RecordingPage> {
                               height: _isRecording ? 32 : 64,
                               decoration: BoxDecoration(
                                 color: Colors.red,
-                                borderRadius: BorderRadius.circular(
-                                  _isRecording ? 8 : 32,
-                                ),
+                                borderRadius: BorderRadius.circular(_isRecording ? 8 : 32),
                               ),
                             ),
                           ),
@@ -804,9 +735,7 @@ class _RecordingPageState extends ConsumerState<RecordingPage> {
   Widget _buildCameraAwesome() {
     return CameraAwesomeBuilder.custom(
       // Use video mode for recording capability
-      saveConfig: _enableVideoRecording
-          ? SaveConfig.video()
-          : SaveConfig.photo(),
+      saveConfig: _enableVideoRecording ? SaveConfig.video() : SaveConfig.photo(),
       // Image analysis config - 10 FPS for streaming
       onImageForAnalysis: _onImageForAnalysis,
       imageAnalysisConfig: AnalysisConfig(
