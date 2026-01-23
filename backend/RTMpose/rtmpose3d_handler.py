@@ -143,6 +143,8 @@ class RTMPose3DHandler:
         # Calculate frame duration in milliseconds
         frame_duration_ms = 1000.0 / fps if fps > 0 else 33.33  # Default to ~30fps
         
+        print(f"[RTMPose] Processing video: {total} frames, {fps} FPS, {w}x{h}")
+        
         # INITIAL PASS: PROCESS FRAMES
         frame_idx = 0
         for _ in tqdm(range(total)): # for all frames

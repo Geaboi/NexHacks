@@ -25,7 +25,12 @@ class DatabaseService {
 
     print('[DatabaseService] 📁 Initializing database at: $path');
 
-    return await openDatabase(path, version: _databaseVersion, onCreate: _onCreate, onUpgrade: _onUpgrade);
+    return await openDatabase(
+      path,
+      version: _databaseVersion,
+      onCreate: _onCreate,
+      onUpgrade: _onUpgrade,
+    );
   }
 
   /// Create database tables
@@ -102,19 +107,27 @@ class DatabaseService {
 
   /// Handle database upgrades (for future schema changes)
   Future<void> _onUpgrade(Database db, int oldVersion, int newVersion) async {
-    print('[DatabaseService] ⬆️ Upgrading database from v$oldVersion to v$newVersion');
+    print(
+      '[DatabaseService] ⬆️ Upgrading database from v$oldVersion to v$newVersion',
+    );
 
     // Migration from v1 to v2: Add anomalous_frame_ids column (now deprecated)
     if (oldVersion < 2) {
-      await db.execute('ALTER TABLE sessions ADD COLUMN anomalous_frame_ids TEXT');
-      print('[DatabaseService] ✅ Added anomalous_frame_ids column (deprecated)');
+      await db.execute(
+        'ALTER TABLE sessions ADD COLUMN anomalous_frame_ids TEXT',
+      );
+      print(
+        '[DatabaseService] ✅ Added anomalous_frame_ids column (deprecated)',
+      );
     }
 
     // Migration v2 to v3: anomalous_frame_ids and created_at are now ignored
     // SQLite doesn't support DROP COLUMN in older versions, so columns remain but are unused
     // Session.fromMap() handles missing/ignored columns gracefully
     if (oldVersion < 3) {
-      print('[DatabaseService] ✅ Migrated to v3 - anomalous_frame_ids and created_at deprecated');
+      print(
+        '[DatabaseService] ✅ Migrated to v3 - anomalous_frame_ids and created_at deprecated',
+      );
     }
 
     // Migration v3 to v4: Add detected_actions table for Overshoot action segments
@@ -148,7 +161,10 @@ class DatabaseService {
   /// Insert a new session and return its ID
   Future<int> insertSession(Session session) async {
     final db = await database;
-    final id = await db.insert('sessions', session.toMap());
+    final map = session.toMap();
+    // Add created_at for legacy database compatibility (v2 migration left strict NOT NULL column)
+    map['created_at'] = DateTime.now().toIso8601String();
+    final id = await db.insert('sessions', map);
     print('[DatabaseService] 📝 Inserted session with ID: $id');
     return id;
   }
@@ -156,14 +172,23 @@ class DatabaseService {
   /// Get all sessions ordered by timestamp (most recent first)
   Future<List<Session>> getAllSessions({int? limit}) async {
     final db = await database;
-    final List<Map<String, dynamic>> maps = await db.query('sessions', orderBy: 'timestamp_utc DESC', limit: limit);
+    final List<Map<String, dynamic>> maps = await db.query(
+      'sessions',
+      orderBy: 'timestamp_utc DESC',
+      limit: limit,
+    );
     return maps.map((map) => Session.fromMap(map)).toList();
   }
 
   /// Get a single session by ID
   Future<Session?> getSession(int id) async {
     final db = await database;
-    final List<Map<String, dynamic>> maps = await db.query('sessions', where: 'id = ?', whereArgs: [id], limit: 1);
+    final List<Map<String, dynamic>> maps = await db.query(
+      'sessions',
+      where: 'id = ?',
+      whereArgs: [id],
+      limit: 1,
+    );
     if (maps.isEmpty) return null;
     return Session.fromMap(maps.first);
   }
@@ -209,7 +234,11 @@ class DatabaseService {
   }
 
   /// Get frame angles for a specific frame range
-  Future<List<FrameAngle>> getFrameRange(int sessionId, int startFrame, int endFrame) async {
+  Future<List<FrameAngle>> getFrameRange(
+    int sessionId,
+    int startFrame,
+    int endFrame,
+  ) async {
     final db = await database;
     final List<Map<String, dynamic>> maps = await db.query(
       'frame_angles',
@@ -369,7 +398,9 @@ class DatabaseService {
 
   /// Get max angle per session for trend analysis
   /// Returns a list of (session timestamp, max angle) pairs for charting
-  Future<List<Map<String, dynamic>>> getAngleTrendBySession(String angleColumn) async {
+  Future<List<Map<String, dynamic>>> getAngleTrendBySession(
+    String angleColumn,
+  ) async {
     final db = await database;
 
     final result = await db.rawQuery('''
@@ -396,7 +427,10 @@ class DatabaseService {
   ///
   /// SQLite doesn't have built-in percentile functions, so we calculate it
   /// by ordering values and selecting at the appropriate offset.
-  Future<List<Map<String, dynamic>>> getAnglePercentileBySession(String angleColumn, double percentile) async {
+  Future<List<Map<String, dynamic>>> getAnglePercentileBySession(
+    String angleColumn,
+    double percentile,
+  ) async {
     final db = await database;
 
     // First get all sessions that have data for this angle
@@ -445,7 +479,11 @@ class DatabaseService {
 
       final percentileValue = values[index]['value'] as double;
 
-      results.add({'session_id': sessionId, 'timestamp_utc': timestampUtc, 'percentile_value': percentileValue});
+      results.add({
+        'session_id': sessionId,
+        'timestamp_utc': timestampUtc,
+        'percentile_value': percentileValue,
+      });
     }
 
     return results;

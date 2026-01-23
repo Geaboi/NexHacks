@@ -3,10 +3,12 @@ import 'dart:convert';
 import 'dart:io';
 import 'package:http/http.dart' as http;
 import 'package:path_provider/path_provider.dart';
+import 'package:http_parser/http_parser.dart';
 
 /// Response from the analytics backend
 class AnalyticsResponse {
-  final String? processedVideoPath; // Path to the downloaded processed video (null if not provided)
+  final String?
+  processedVideoPath; // Path to the downloaded processed video (null if not provided)
   final Map<String, dynamic> analyticsData; // JSON analytics data
   final List<List<dynamic>>? rawAngles; // Raw CV angles (before fusion)
   final List<List<dynamic>>? imuAngles; // Raw IMU accumulated angles
@@ -28,24 +30,31 @@ class AnalyticsResponse {
     this.errorMessage,
   });
 
-  factory AnalyticsResponse.fromJson(Map<String, dynamic> json, String? videoPath) {
+  factory AnalyticsResponse.fromJson(
+    Map<String, dynamic> json,
+    String? videoPath,
+  ) {
     // Parse anomalous_ids from response
     List<int> anomalousIds = [];
     if (json.containsKey('anomalous_ids') && json['anomalous_ids'] != null) {
       final rawIds = json['anomalous_ids'] as List<dynamic>;
       anomalousIds = rawIds.map((e) => e as int).toList();
     }
-    
+
     // Parse raw_angles
     List<List<dynamic>>? rawAngles;
     if (json.containsKey('raw_angles') && json['raw_angles'] != null) {
-      rawAngles = (json['raw_angles'] as List<dynamic>).map((e) => e as List<dynamic>).toList();
+      rawAngles = (json['raw_angles'] as List<dynamic>)
+          .map((e) => e as List<dynamic>)
+          .toList();
     }
-    
+
     // Parse imu_angles
     List<List<dynamic>>? imuAngles;
     if (json.containsKey('imu_angles') && json['imu_angles'] != null) {
-      imuAngles = (json['imu_angles'] as List<dynamic>).map((e) => e as List<dynamic>).toList();
+      imuAngles = (json['imu_angles'] as List<dynamic>)
+          .map((e) => e as List<dynamic>)
+          .toList();
     }
 
     // Parse joint_index
@@ -74,7 +83,11 @@ class AnalyticsResponse {
   }
 
   factory AnalyticsResponse.error(String message) {
-    return AnalyticsResponse(analyticsData: {}, success: false, errorMessage: message);
+    return AnalyticsResponse(
+      analyticsData: {},
+      success: false,
+      errorMessage: message,
+    );
   }
 }
 
@@ -85,7 +98,8 @@ typedef OvershootPoints = List<List<dynamic>>;
 /// Service for sending video and analysis data to backend and receiving analytics
 class AnalyticsService {
   // Backend Configuration - Update with your actual backend URL
-  static const String _defaultBackendUrl = 'https://api.mateotaylortest.org/api/pose/process';
+  static const String _defaultBackendUrl =
+      'https://api.mateotaylortest.org/api/pose/process';
   static const String _defaultBaseUrl = 'https://api.mateotaylortest.org';
 
   /// Helper to format JSON for debug logging with truncated arrays
@@ -107,7 +121,9 @@ class AnalyticsService {
       final buffer = StringBuffer('[\n');
       final itemsToShow = data.length > 5 ? 5 : data.length;
       for (var i = 0; i < itemsToShow; i++) {
-        buffer.write('$nextIndent${_formatJsonForDebug(data[i], indent: indent + 1)}');
+        buffer.write(
+          '$nextIndent${_formatJsonForDebug(data[i], indent: indent + 1)}',
+        );
         if (i < itemsToShow - 1 || data.length > 5) {
           buffer.write(',');
         }
@@ -126,7 +142,9 @@ class AnalyticsService {
       final entries = data.entries.toList();
       for (var i = 0; i < entries.length; i++) {
         final entry = entries[i];
-        buffer.write('$nextIndent"${entry.key}": ${_formatJsonForDebug(entry.value, indent: indent + 1)}');
+        buffer.write(
+          '$nextIndent"${entry.key}": ${_formatJsonForDebug(entry.value, indent: indent + 1)}',
+        );
         if (i < entries.length - 1) {
           buffer.write(',');
         }
@@ -185,10 +203,14 @@ class AnalyticsService {
         videoDurationMs: videoDurationMs,
       );
 
-      print('[AnalyticsService] 📊 Mapped ${overshootPoints.length} overshoot points to video frames');
+      print(
+        '[AnalyticsService] 📊 Mapped ${overshootPoints.length} overshoot points to video frames',
+      );
 
       // 3. Prepare sensor data (empty list if not available)
-      final sensorJson = sensorSamples != null ? jsonEncode(sensorSamples) : '[]';
+      final sensorJson = sensorSamples != null
+          ? jsonEncode(sensorSamples)
+          : '[]';
 
       print(
         '[AnalyticsService] 📡 Sensor data: ${sensorSamples != null ? '${sensorSamples.length} samples' : 'not available'}',
@@ -253,7 +275,10 @@ class AnalyticsService {
       }
 
       // Calculate frame index (clamped to valid range)
-      final frameIndex = (offsetMs * fps / 1000).round().clamp(0, totalFrames - 1);
+      final frameIndex = (offsetMs * fps / 1000).round().clamp(
+        0,
+        totalFrames - 1,
+      );
 
       result.add([frameIndex, inferenceResult]);
     }
@@ -300,20 +325,39 @@ class AnalyticsService {
     final request = http.MultipartRequest('POST', uri);
 
     // Add video file
-    request.files.add(await http.MultipartFile.fromPath('video', videoFile.path, filename: 'recording.mp4'));
+    request.files.add(
+      await http.MultipartFile.fromPath(
+        'video',
+        videoFile.path,
+        filename: 'recording.mp4',
+      ),
+    );
 
-    // Add overshoot points as JSON (Form field)
-    request.fields['overshoot_data'] = jsonEncode(overshootPoints);
+    // Add overshoot points as JSON file
+    request.files.add(
+      http.MultipartFile.fromString(
+        'overshoot_data',
+        jsonEncode(overshootPoints),
+        filename: 'overshoot_data.json',
+        contentType: MediaType('application', 'json'),
+      ),
+    );
 
     // Add video start time (Form field)
     request.fields['video_start_time'] = videoStartTimeUtc.toString();
 
-    // Add sensor data as JSON (Form field)
-    request.fields['sensor_data'] = sensorDataJson;
-    
+    // Add sensor data as JSON file
+    request.files.add(
+      http.MultipartFile.fromString(
+        'sensor_data',
+        sensorDataJson,
+        filename: 'sensor_data.json',
+        contentType: MediaType('application', 'json'),
+      ),
+    );
+
     // Add joint index (Form field)
     request.fields['joint_index'] = jointIndex.toString();
-
 
     print(
       '[AnalyticsService] 📤 Request fields: overshoot_data=${overshootPoints.length} points, sensor_data length=${sensorDataJson.length}',
@@ -350,7 +394,9 @@ class AnalyticsService {
     if (response.statusCode != 200) {
       final errorBody = response.body;
       print('[AnalyticsService] ❌ Backend error: $errorBody');
-      return AnalyticsResponse.error('Backend request failed: ${response.statusCode} - $errorBody');
+      return AnalyticsResponse.error(
+        'Backend request failed: ${response.statusCode} - $errorBody',
+      );
     }
 
     try {
@@ -359,12 +405,17 @@ class AnalyticsService {
       print('[AnalyticsService] 📦 Response data:');
       print('[AnalyticsService]   - num_frames: ${jsonResponse['num_frames']}');
       print('[AnalyticsService]   - num_angles: ${jsonResponse['num_angles']}');
-      print('[AnalyticsService]   - overlay_video_path: ${jsonResponse['overlay_video_path']}');
-      print('[AnalyticsService]   - anomalous_ids: ${jsonResponse['anomalous_ids']}');
+      print(
+        '[AnalyticsService]   - overlay_video_path: ${jsonResponse['overlay_video_path']}',
+      );
+      print(
+        '[AnalyticsService]   - anomalous_ids: ${jsonResponse['anomalous_ids']}',
+      );
 
       // Download overlay video if path is provided
       String? processedVideoPath;
-      if (jsonResponse.containsKey('overlay_video_path') && jsonResponse['overlay_video_path'] != null) {
+      if (jsonResponse.containsKey('overlay_video_path') &&
+          jsonResponse['overlay_video_path'] != null) {
         final videoFilename = jsonResponse['overlay_video_path'] as String;
         // Extract just the filename if it's a full path
         final filename = videoFilename.split('/').last.split('\\').last;
@@ -377,7 +428,10 @@ class AnalyticsService {
     } catch (e) {
       print('[AnalyticsService] ⚠️ Error parsing response: $e');
       // Return raw response body as analytics data if JSON parsing fails
-      return AnalyticsResponse(analyticsData: {'raw_response': response.body}, success: true);
+      return AnalyticsResponse(
+        analyticsData: {'raw_response': response.body},
+        success: true,
+      );
     }
   }
 
@@ -396,7 +450,9 @@ class AnalyticsService {
         );
 
     if (response.statusCode != 200) {
-      throw Exception('Failed to download video: ${response.statusCode} - ${response.body}');
+      throw Exception(
+        'Failed to download video: ${response.statusCode} - ${response.body}',
+      );
     }
 
     // Save to temp directory
@@ -405,7 +461,9 @@ class AnalyticsService {
     final file = File(videoPath);
     await file.writeAsBytes(response.bodyBytes);
 
-    print('[AnalyticsService] ✅ Overlay video saved to: $videoPath (${response.bodyBytes.length} bytes)');
+    print(
+      '[AnalyticsService] ✅ Overlay video saved to: $videoPath (${response.bodyBytes.length} bytes)',
+    );
 
     return videoPath;
   }
