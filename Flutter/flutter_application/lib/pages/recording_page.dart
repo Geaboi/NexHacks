@@ -19,7 +19,7 @@ class RecordingPage extends ConsumerStatefulWidget {
 class _RecordingPageState extends ConsumerState<RecordingPage> {
   // ==================== VIDEO RECORDING TOGGLE ====================
   // Set to false to disable video recording and only stream images
-  static const bool _enableVideoRecording = false;
+  static const bool _enableVideoRecording = true;
   // ================================================================
 
   // Frame streaming service
@@ -177,15 +177,18 @@ class _RecordingPageState extends ConsumerState<RecordingPage> {
       final sensorNotifier = ref.read(sensorProvider.notifier);
 
       // Connect to WebSocket server NOW (when recording starts)
-      // IMPORTANT: fps must match _frameSamplingFps to ensure consistent inference timing
+      // IMPORTANT: fps must match camerawesome maxFramesPerSecond
+      // Overshoot constraint: (fps * samplingRatio * clipLength) / delay <= 30
+      // With fps=10, samplingRatio=0.3, clipLength=10.0, delay=1.0:
+      // (10 * 0.3 * 10.0) / 1.0 = 30 frames per clip (max allowed, 10s window)
       final config = StreamConfig(
-        prompt: 'Analyze the physical therapy exercise form',
+        prompt: 'Analyze the physical therapy exercise form. Describe the movement, body position, and any form issues.',
         model: 'gemini-2.0-flash',
         backend: 'gemini',
-        samplingRatio: 1.0,
+        samplingRatio: 0.3, // Sample 30% of frames to fit 10s window in constraint
         fps: 10, // Must match camerawesome maxFramesPerSecond
-        clipLengthSeconds: 0.5,
-        delaySeconds: 0.3,
+        clipLengthSeconds: 10.0, // 10 seconds for full exercise context
+        delaySeconds: 1.0, // Inference every 1 second
         width: 640,
         height: 480,
       );
@@ -193,7 +196,7 @@ class _RecordingPageState extends ConsumerState<RecordingPage> {
       bool wsConnected = false;
       try {
         wsConnected = await _frameStreamingService.connect(
-          wsUrl: 'ws://10.0.2.2:8000/api/overshoot/ws/stream',
+          wsUrl: 'wss://api.mateotaylortest.org/api/overshoot/ws/stream',
           config: config,
         );
 
@@ -333,9 +336,11 @@ class _RecordingPageState extends ConsumerState<RecordingPage> {
       // Stop video recording if enabled
       if (_enableVideoRecording && _cameraState != null) {
         final completer = Completer<void>();
+        bool handlerCalled = false;
 
         _cameraState!.when(
           onVideoRecordingMode: (recordingState) {
+            handlerCalled = true;
             recordingState.stopRecording(
               onVideo: (captureRequest) {
                 // Get the video file path from the capture request
@@ -351,7 +356,25 @@ class _RecordingPageState extends ConsumerState<RecordingPage> {
               },
             );
           },
+          onVideoMode: (videoState) {
+            // Camera is in video mode but not recording - nothing to stop
+            print('[RecordingPage] ⚠️ Camera in video mode but not recording');
+            handlerCalled = true;
+            if (!completer.isCompleted) completer.complete();
+          },
+          onPhotoMode: (photoState) {
+            // Camera is in photo mode - nothing to stop
+            print('[RecordingPage] ⚠️ Camera in photo mode, no video to save');
+            handlerCalled = true;
+            if (!completer.isCompleted) completer.complete();
+          },
         );
+
+        // If no handler was called, complete immediately
+        if (!handlerCalled) {
+          print('[RecordingPage] ⚠️ No camera state handler matched');
+          if (!completer.isCompleted) completer.complete();
+        }
 
         // Wait for video to be saved (with timeout)
         await completer.future.timeout(
@@ -442,6 +465,16 @@ class _RecordingPageState extends ConsumerState<RecordingPage> {
           duration: Duration(seconds: 3),
         ),
       );
+    } else {
+      // Video recording was enabled but no video was saved
+      print('[RecordingPage] ⚠️ Video recording enabled but no video saved');
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Video save failed. Please try recording again.'),
+          backgroundColor: Colors.orange,
+          duration: Duration(seconds: 3),
+        ),
+      );
     }
   }
 
@@ -525,7 +558,10 @@ class _RecordingPageState extends ConsumerState<RecordingPage> {
         child: Stack(
           children: [
             // CamerAwesome Camera Preview
-            _buildCameraAwesome(),
+            RotatedBox(
+              quarterTurns: -1,
+              child: _buildCameraAwesome(),
+            ),
 
             // Waiting for Results Overlay
             if (_isWaitingForResults)
@@ -593,6 +629,60 @@ class _RecordingPageState extends ConsumerState<RecordingPage> {
                         ),
                       ],
                     ),
+                  ),
+                ),
+              ),
+
+            // Inference Result Info Bar (during recording)
+            if (_isRecording && _isAnalysisAvailable)
+              Positioned(
+                top: 56,
+                left: 16,
+                right: 16,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 10,
+                  ),
+                  decoration: BoxDecoration(
+                    color: Colors.black.withOpacity(0.7),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(
+                      color: _latestInferenceResult != null
+                          ? AppColors.accent.withOpacity(0.5)
+                          : Colors.white.withOpacity(0.2),
+                      width: 1,
+                    ),
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(
+                        _latestInferenceResult != null
+                            ? Icons.psychology
+                            : Icons.hourglass_empty,
+                        color: _latestInferenceResult != null
+                            ? AppColors.accent
+                            : Colors.white54,
+                        size: 20,
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Text(
+                          _latestInferenceResult ?? 'Waiting for inference...',
+                          style: TextStyle(
+                            color: _latestInferenceResult != null
+                                ? Colors.white
+                                : Colors.white54,
+                            fontSize: 13,
+                            fontStyle: _latestInferenceResult != null
+                                ? FontStyle.normal
+                                : FontStyle.italic,
+                          ),
+                          maxLines: 3,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    ],
                   ),
                 ),
               ),
