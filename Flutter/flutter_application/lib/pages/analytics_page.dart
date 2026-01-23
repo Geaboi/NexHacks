@@ -34,6 +34,9 @@ class _AnalyticsPageState extends ConsumerState<AnalyticsPage> {
   List<AngleStats>? _sessionStats;
   List<FrameAngle>? _sessionAngles;
   List<int> _anomalousFrameIds = [];
+  List<List<dynamic>>? _rawAngles;
+  int? _usedJointIndex;
+  
   int? _savedSessionId;
   DateTime? _sessionTimestamp;
 
@@ -147,6 +150,10 @@ class _AnalyticsPageState extends ConsumerState<AnalyticsPage> {
       print('[AnalyticsPage] 📊 Inference points: ${inferencePointsJson.length}');
       print('[AnalyticsPage] ⏱️ Video duration: ${widget.videoDurationMs}ms, FPS: ${widget.fps}');
 
+      // Hardcode joint index to 0 (Left Knee) for now as per requirement
+      // This will be moved to user selection later
+      const jointIndex = 0;
+
       final response = await _analyticsService.submitAnalysis(
         videoPath: widget.videoPath,
         inferencePoints: inferencePointsJson,
@@ -156,6 +163,7 @@ class _AnalyticsPageState extends ConsumerState<AnalyticsPage> {
         sensorSamples: sensorSamples,
         datasetName: 'flutter_recording_${DateTime.now().millisecondsSinceEpoch}',
         modelId: '1OZUO0uahYoua8SklFmr',
+        jointIndex: jointIndex,
       );
 
       setState(() {
@@ -164,6 +172,10 @@ class _AnalyticsPageState extends ConsumerState<AnalyticsPage> {
         _response = response;
         if (!response.success) {
           _errorMessage = response.errorMessage;
+        } else {
+          // Store raw angles and joint index
+          _rawAngles = response.rawAngles;
+          _usedJointIndex = response.jointIndex;
         }
       });
 
@@ -513,6 +525,15 @@ class _AnalyticsPageState extends ConsumerState<AnalyticsPage> {
       backgroundColor: AppColors.background,
       appBar: AppBar(
         title: const Text('Analysis Results'),
+        actions: [
+          // Developer Info Button
+          if (_hasSubmitted && _response?.success == true)
+            IconButton(
+              icon: const Icon(Icons.developer_mode),
+              tooltip: 'Developer Info',
+              onPressed: () => _showDeveloperInfoDialog(context),
+            ),
+        ],
         leading: IconButton(
           icon: const Icon(Icons.close),
           onPressed: () {
@@ -1117,6 +1138,159 @@ class _AngleChartCard extends StatelessWidget {
       ),
     );
   }
+  void _showDeveloperInfoDialog(BuildContext context) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Developer Info'),
+        content: SizedBox(
+          width: double.maxFinite,
+          child: SingleChildScrollView(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Text(
+                  'Comparison: Raw CV vs Fused (CV+IMU)',
+                  style: TextStyle(fontWeight: FontWeight.bold),
+                ),
+                const SizedBox(height: 16),
+                SizedBox(
+                  height: 300,
+                  child: _buildComparisonChart(),
+                ),
+                const SizedBox(height: 16),
+                const Text(
+                  'Legend:',
+                  style: TextStyle(fontWeight: FontWeight.bold),
+                ),
+                const SizedBox(height: 8),
+                Row(
+                  children: [
+                    _LegendItem(color: Colors.blue, label: 'Freq Filtered (Final)'),
+                    const SizedBox(width: 16),
+                    _LegendItem(color: Colors.red.withOpacity(0.5), label: 'Raw CV'),
+                  ],
+                ),
+                if (_usedJointIndex != null) ...[
+                  const SizedBox(height: 16),
+                  Text('Joint Index Used: $_usedJointIndex'),
+                ],
+              ],
+            ),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Close'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildComparisonChart() {
+    if (_sessionAngles == null || _sessionAngles!.isEmpty) {
+      return const Center(child: Text('No data available'));
+    }
+
+    final rawSpots = <FlSpot>[];
+    final fusedSpots = <FlSpot>[];
+
+    // Determine which field to use based on joint index (default to left knee if null)
+    // 0: leftKnee, 1: rightKnee, etc.
+    // Sync with rtmpose3d_handler.py
+    final jointIndex = _usedJointIndex ?? 0;
+
+    for (int i = 0; i < _sessionAngles!.length; i++) {
+      final angle = _sessionAngles![i];
+      
+      // Get fused value
+      double? fusedVal;
+      switch (jointIndex) {
+        case 0: fusedVal = angle.leftKneeFlexion; break;
+        case 1: fusedVal = angle.rightKneeFlexion; break;
+        // Add others if needed
+        default: fusedVal = angle.leftKneeFlexion;
+      }
+
+      if (fusedVal != null) {
+        fusedSpots.add(FlSpot(i.toDouble(), fusedVal));
+      }
+
+      // Get raw value if available
+      if (_rawAngles != null && i < _rawAngles!.length) {
+        final rawFrame = _rawAngles![i];
+        if (rawFrame.length > jointIndex) {
+          final rawVal = rawFrame[jointIndex] as num?;
+          if (rawVal != null) {
+            rawSpots.add(FlSpot(i.toDouble(), rawVal.toDouble()));
+          }
+        }
+      }
+    }
+
+    return LineChart(
+      LineChartData(
+        gridData: FlGridData(
+          show: true,
+          drawVerticalLine: true,
+          getDrawingHorizontalLine: (value) => FlLine(color: Colors.grey.withOpacity(0.2), strokeWidth: 1),
+          getDrawingVerticalLine: (value) => FlLine(color: Colors.grey.withOpacity(0.2), strokeWidth: 1),
+        ),
+        titlesData: FlTitlesData(
+          show: true,
+          bottomTitles: AxisTitles(
+            sideTitles: SideTitles(
+              showTitles: true,
+              reservedSize: 22,
+              getTitlesWidget: (value, meta) {
+                if (value % 30 == 0) return Text(value.toInt().toString(), style: const TextStyle(fontSize: 10));
+                return const SizedBox();
+              },
+            ),
+          ),
+          leftTitles: AxisTitles(
+            sideTitles: SideTitles(
+              showTitles: true,
+              reservedSize: 30,
+              getTitlesWidget: (value, meta) {
+                return Text(value.toInt().toString(), style: const TextStyle(fontSize: 10));
+              },
+            ),
+          ),
+          topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+          rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+        ),
+        borderData: FlBorderData(show: true, border: Border.all(color: const Color(0xff37434d), width: 1)),
+        minX: 0,
+        maxX: _sessionAngles!.length.toDouble(),
+        minY: 0,
+        maxY: 180,
+        lineBarsData: [
+          // Raw CV Data (Red, slightly transparent)
+          LineChartBarData(
+            spots: rawSpots,
+            isCurved: false,
+            color: Colors.red.withOpacity(0.5),
+            barWidth: 2,
+            isStrokeCapRound: true,
+            dotData: const FlDotData(show: false),
+          ),
+          // Fused Data (Blue, main)
+          LineChartBarData(
+            spots: fusedSpots,
+            isCurved: false,
+            color: Colors.blue,
+            barWidth: 2,
+            isStrokeCapRound: true,
+            dotData: const FlDotData(show: false),
+          ),
+        ],
+      ),
+    );
+  }
 }
 
 class _FeedbackItem extends StatelessWidget {
@@ -1144,6 +1318,31 @@ class _FeedbackItem extends StatelessWidget {
           Expanded(child: Text(text, style: theme.textTheme.bodyMedium)),
         ],
       ),
+    );
+  }
+}
+
+class _LegendItem extends StatelessWidget {
+  final Color color;
+  final String label;
+
+  const _LegendItem({required this.color, required this.label});
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        Container(
+          width: 12,
+          height: 12,
+          decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+        ),
+        const SizedBox(width: 4),
+        Text(
+          label,
+          style: const TextStyle(fontWeight: FontWeight.w500, fontSize: 12),
+        ),
+      ],
     );
   }
 }

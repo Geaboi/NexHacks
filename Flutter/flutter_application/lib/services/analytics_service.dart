@@ -8,6 +8,8 @@ import 'package:path_provider/path_provider.dart';
 class AnalyticsResponse {
   final String? processedVideoPath; // Path to the downloaded processed video (null if not provided)
   final Map<String, dynamic> analyticsData; // JSON analytics data
+  final List<List<dynamic>>? rawAngles; // Raw CV angles (before fusion)
+  final int? jointIndex; // The joint index used for fusion
   final List<int> anomalousIds; // Frame indices flagged as anomalous by backend
   final bool success;
   final String? errorMessage;
@@ -15,6 +17,8 @@ class AnalyticsResponse {
   const AnalyticsResponse({
     this.processedVideoPath,
     required this.analyticsData,
+    this.rawAngles,
+    this.jointIndex,
     this.anomalousIds = const [],
     this.success = true,
     this.errorMessage,
@@ -28,9 +32,20 @@ class AnalyticsResponse {
       anomalousIds = rawIds.map((e) => e as int).toList();
     }
     
+    // Parse raw_angles
+    List<List<dynamic>>? rawAngles;
+    if (json.containsKey('raw_angles') && json['raw_angles'] != null) {
+      rawAngles = (json['raw_angles'] as List<dynamic>).map((e) => e as List<dynamic>).toList();
+    }
+
+    // Parse joint_index
+    int? jointIndex = json['joint_index'] as int?;
+
     return AnalyticsResponse(
       processedVideoPath: videoPath,
       analyticsData: json,
+      rawAngles: rawAngles,
+      jointIndex: jointIndex,
       anomalousIds: anomalousIds,
       success: true,
     );
@@ -119,6 +134,7 @@ class AnalyticsService {
   /// - sensorSamples: Sensor data from SensorProvider (null or empty if not used)
   /// - datasetName: Name for the dataset in backend
   /// - modelId: Model ID for anomaly detection
+  /// - jointIndex: Index of joint to fuse (default 0)
   ///
   /// Returns: AnalyticsResponse with video path and analytics data
   Future<AnalyticsResponse> submitAnalysis({
@@ -131,6 +147,7 @@ class AnalyticsService {
     String datasetName = 'flutter_recording',
     String modelId = 'default_model',
     String? backendUrl,
+    int jointIndex = 0,
   }) async {
     final url = backendUrl ?? _defaultBackendUrl;
 
@@ -164,6 +181,7 @@ class AnalyticsService {
         sensorDataJson: sensorJson,
         datasetName: datasetName,
         modelId: modelId,
+        jointIndex: jointIndex,
       );
 
       // 5. Process response
@@ -242,6 +260,7 @@ class AnalyticsService {
     required String sensorDataJson,
     required String datasetName,
     required String modelId,
+    required int jointIndex,
   }) async {
     print('[AnalyticsService] 🚀 Sending data to backend: $url');
 
@@ -269,6 +288,10 @@ class AnalyticsService {
 
     // Add sensor data as JSON (Form field)
     request.fields['sensor_data'] = sensorDataJson;
+    
+    // Add joint index (Form field)
+    request.fields['joint_index'] = jointIndex.toString();
+
 
     print(
       '[AnalyticsService] 📤 Request fields: overshoot_data=${overshootPoints.length} points, sensor_data length=${sensorDataJson.length}',

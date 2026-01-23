@@ -347,8 +347,8 @@ async def process_video_to_angles(
     overwrite: bool = Query(False, description="Overwrite existing dataset"),
     sensor_data: str = Form("", description="Sensor data associated with the video"),
     overshoot_data: str = Form("", description="Overshoot data associated with the video"),
-    video_start_time: int = Form(None, description="Start time of the video in UTC")
-
+    video_start_time: int = Form(None, description="Start time of the video in UTC"),
+    joint_index: int = Form(0, description="Index of the joint to fuse (0=left_knee, 1=right_knee, etc.)")
 ):
     """Process video through RTMpose and run anomaly detection via Woodwide.
 
@@ -372,7 +372,12 @@ async def process_video_to_angles(
                 parsed_sensor_data = None
 
         # Process video to get joint angles and CSV
-        angles, overlay_video_path, csv_path = handler.process_video(video_bytes, parsed_sensor_data)
+        # handler.process_video now returns raw_angles too
+        angles, raw_angles, overlay_video_path, csv_path = handler.process_video(
+            video_bytes, 
+            parsed_sensor_data, 
+            joint_index=joint_index
+        )
 
         # Convert numpy values to native Python floats for JSON serialization
         import math
@@ -386,11 +391,14 @@ async def process_video_to_angles(
                 return None
 
         serializable_angles = [[to_json_float(v) for v in frame] for frame in angles]
+        serializable_raw_angles = [[to_json_float(v) for v in frame] for frame in raw_angles]
 
         result = {
             "num_frames": len(angles),
             "num_angles": 6,
             "angles": serializable_angles,
+            "raw_angles": serializable_raw_angles,
+            "joint_index": joint_index,
             "overlay_video_path": overlay_video_path,
         }
 

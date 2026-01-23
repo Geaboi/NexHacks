@@ -9,7 +9,7 @@ import sys
 from sensorFusion import FusionEKF
 import datetime
 
-JOINT_INDEX = 0 # hard-code to left knee for now.
+
 
 # Add cuDNN/cuBLAS DLLs to path for ONNX Runtime GPU support (Windows)
 if sys.platform == 'win32':
@@ -95,11 +95,9 @@ class RTMPose3DHandler:
         print(f"Using device: {device}")
         self.model = Wholebody3d(mode='balanced', backend='onnxruntime', device=device)
         self.device = device
-        self.output_file_2D = tempfile.NamedTemporaryFile(delete=False, suffix='.mp4')
-        self.output_file_csv = tempfile.NamedTemporaryFile(delete=False, suffix='.csv')
         self.CONF_THRESHOLD = 0.3
     
-    def process_video(self, video_bytes, sensor_data=None):
+    def process_video(self, video_bytes, sensor_data=None, joint_index=0):
         """Process video with optional IMU sensor data for Kalman-filtered joint angles.
         
         Args:
@@ -119,9 +117,10 @@ class RTMPose3DHandler:
                     },
                     ...
                 ]
+            joint_index: Index of the jointangle to fuse (default 0 = left_knee_flexion)
         
         Returns:
-            tuple: (angles_list, output_2d_video_path, csv_path)
+            tuple: (angles_list, raw_angles_list, output_2d_video_path, csv_path)
         """
         video_handler = VideoHandler(video_bytes)
 
@@ -130,7 +129,12 @@ class RTMPose3DHandler:
         w = int(video_handler.cap.get(cv2.CAP_PROP_FRAME_WIDTH))
         h = int(video_handler.cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
 
-        out2d = cv2.VideoWriter(self.output_file_2D.name, cv2.VideoWriter_fourcc(*'mp4v'), fps, (w, h))
+
+        # Create unique temporary files for this processing session
+        output_file_2D = tempfile.NamedTemporaryFile(delete=False, suffix='.mp4')
+        output_file_csv = tempfile.NamedTemporaryFile(delete=False, suffix='.csv')
+
+        out2d = cv2.VideoWriter(output_file_2D.name, cv2.VideoWriter_fourcc(*'mp4v'), fps, (w, h))
 
         all_poses = []
         all_scores = []
@@ -182,6 +186,9 @@ class RTMPose3DHandler:
         angles = self.build_leg_angles(norm_poses)
         angle_scores = self.average_leg_scores(all_scores)
 
+        # Create a copy of raw angles before sensor fusion
+        raw_angles = [a.copy() if isinstance(a, list) else list(a) for a in angles]
+
         # Sensor fusion with Kalman filtering
         # sensor_data format from Flutter getSamplesForBackend():
         # [{'data': {'xA', 'yA', 'zA', 'xB', 'yB', 'zB'}, 'timestamp_ms': int}, ...]
@@ -192,7 +199,7 @@ class RTMPose3DHandler:
             out_angles = []
             
             # Kalman filtering with sensor data
-            ekf = FusionEKF(initial_angle=pre_sensor_angles[0][JOINT_INDEX])
+            ekf = FusionEKF(initial_angle=pre_sensor_angles[0][joint_index])
 
             cv_idx = 1
 
@@ -215,11 +222,11 @@ class RTMPose3DHandler:
                 while cv_idx < len(pre_sensor_angles) and \
                       s_samp['timestamp_ms'] >= frame_timestamps_ms[cv_idx]:
                     # Only update if we have valid angle measurement
-                    if not np.isnan(pre_sensor_angles[cv_idx][JOINT_INDEX]) and \
-                       not np.isnan(angle_scores[cv_idx][JOINT_INDEX]):
+                    if not np.isnan(pre_sensor_angles[cv_idx][joint_index]) and \
+                       not np.isnan(angle_scores[cv_idx][joint_index]):
                         ekf.update(
-                            pre_sensor_angles[cv_idx][JOINT_INDEX], 
-                            angle_scores[cv_idx][JOINT_INDEX]
+                            pre_sensor_angles[cv_idx][joint_index], 
+                            angle_scores[cv_idx][joint_index]
                         )
                     cv_idx += 1
                 
@@ -244,12 +251,12 @@ class RTMPose3DHandler:
                         out_ang_idx += 1
                     
                     if count > 0:
-                        angles[i][JOINT_INDEX] = angle_sum / count
+                        angles[i][joint_index] = angle_sum / count
                 
         # Save angles to CSV
-        csv_path = self.angles_to_csv(angles, self.output_file_csv.name)
+        csv_path = self.angles_to_csv(angles, output_file_csv.name)
 
-        return angles, self.output_file_2D.name, csv_path
+        return angles, raw_angles, output_file_2D.name, csv_path
 
     def normalize_by_torso_height(self, all_poses):
         norm_poses = []
