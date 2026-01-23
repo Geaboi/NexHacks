@@ -1471,9 +1471,13 @@ class ActionSegment {
     // Track active start events: {action_label: start_action}
     final activeStarts = <String, DetectedAction>{};
 
+    print('DEBUG: Processing ${sorted.length} detected actions for segmentation');
+
     bool hasExplicitEvents = sorted.any((a) => 
       a.metadata != null && (a.metadata!['event_type'] == 'started' || a.metadata!['event_type'] == 'ended')
     );
+
+    print('DEBUG: Explicit start/end events found: $hasExplicitEvents');
 
     if (hasExplicitEvents) {
       // Logic for explicit start/end events
@@ -1483,9 +1487,11 @@ class ActionSegment {
 
         if (type == 'started') {
           activeStarts[label] = action;
+          print('DEBUG: Found START for "$label" at frame ${action.frameNumber}');
         } else if (type == 'ended') {
           final startAction = activeStarts.remove(label);
           if (startAction != null) {
+            print('DEBUG: Found END for "$label" at frame ${action.frameNumber} (paired with start at ${startAction.frameNumber})');
             // Found a complete pair
             segments.add(ActionSegment(
               startFrame: startAction.frameNumber,
@@ -1493,6 +1499,8 @@ class ActionSegment {
               label: label,
               confidence: (startAction.confidence + action.confidence) / 2,
             ));
+          } else {
+             print('DEBUG: Found END for "$label" at frame ${action.frameNumber} but no start found (orphaned)');
           }
         }
       }
