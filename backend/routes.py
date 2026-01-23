@@ -348,7 +348,8 @@ async def process_video_to_angles(
     sensor_data: str = Form("", description="Sensor data associated with the video"),
     overshoot_data: str = Form("", description="Overshoot data associated with the video"),
     video_start_time: int = Form(None, description="Start time of the video in UTC"),
-    joint_index: int = Form(0, description="Index of the joint to fuse (0=left_knee, 1=right_knee, etc.)")
+    joint_index: int = Form(0, description="Index of the joint to fuse (0=left_knee, 1=right_knee, etc.)"),
+    stream_id: str = Form(None, description="Stream ID to retrieve detected actions from")
 ):
     """Process video through RTMpose and run anomaly detection via Woodwide.
 
@@ -404,8 +405,28 @@ async def process_video_to_angles(
             "overlay_video_path": overlay_video_path,
         }
 
+        # Add detected actions if stream_id is provided
+        detected_actions_result = []
+        if stream_id:
+            logger.info(f"Looking for actions for stream_id: {stream_id}")
+            store = ACTION_STORES.get(stream_id)
+            if store:
+                actions = store.get_actions()
+                logger.info(f"Found {len(actions)} actions for stream {stream_id}")
+                detected_actions_result = [
+                    {
+                        "action": a.action,
+                        "timestamp": a.timestamp,
+                        "confidence": a.confidence,
+                        "frame_number": a.frame_number
+                    }
+                    for a in actions
+                ]
+            else:
+                 logger.warning(f"No ActionStore found for stream_id: {stream_id}")
+        
         result["anomaly_detection"] = []
-
+        result["detected_actions"] = detected_actions_result
         
         return result
 
@@ -438,6 +459,8 @@ def download_overlay_video(video_filename: str):
 overshoot_router = APIRouter(prefix="/api/overshoot", tags=["Overshoot"])
 _overshoot_sessions: dict[str, OvershootHttpClient] = {}
 _overshoot_sessions_lock = asyncio.Lock()
+# Global store for action detection results keyed by stream_id
+ACTION_STORES: dict[str, ActionStore] = {}
 
 
 def _overshoot_api_url() -> str:
@@ -583,12 +606,122 @@ async def overshoot_video_websocket(websocket: WebSocket):
 
         logger.debug(f"[Overshoot WS] Config: {model}/{backend} {width}x{height}@{fps}fps")
 
+        # Action Detection State
+        store = ActionStore()
+        # Track active actions: {action_name: {"start_time": float, "last_seen": float, "confidence": float}}
+        active_actions: dict[str, dict] = {}
+        # Track pending actions: {action_name: {"count": int, "first_seen": float, "confidence": float}}
+        pending_actions: dict[str, dict] = {}
+        
+        frame_counter = 0
+        min_confidence = 0.6
+        start_threshold = 2
+
         # Create relay with callback to forward results to client
         async def send_result(result: dict):
             try:
+                # Forward result to client
                 await websocket.send_json(result)
+                
+                # --- Action Detection Logic ---
+                if result.get("type") == "inference":
+                    nonlocal frame_counter
+                    frame_counter += 1
+                    
+                    # Parse detections
+                    try:
+                        inference_data = result.get("result", {})
+                        if isinstance(inference_data, str):
+                            inference_data = json.loads(inference_data)
+                    except (json.JSONDecodeError, TypeError):
+                        logger.warning("Failed to parse inference result for action detection")
+                        return
+
+                    detected_list = inference_data.get("detected_actions", [])
+                    current_time_stream = result.get("timestamp") or time.time()
+                    now = time.time()
+
+                    currently_detected = set()
+
+                    # 1. Identify currently detected actions
+                    for action_data in detected_list:
+                        action_name = action_data.get("action")
+                        is_detected = action_data.get("detected", False)
+                        confidence = action_data.get("confidence", 0.0)
+
+                        if action_name and is_detected and confidence >= min_confidence:
+                            currently_detected.add(action_name)
+                            
+                            # Update active if already active
+                            if action_name in active_actions:
+                                active_actions[action_name]["last_seen"] = now
+                                active_actions[action_name]["last_seen_stream_time"] = current_time_stream
+                                active_actions[action_name]["confidence"] = confidence
+                            
+                            # Check pending
+                            elif action_name in pending_actions:
+                                pending_actions[action_name]["count"] += 1
+                                pending_actions[action_name]["confidence"] = confidence
+                                pending_actions[action_name]["last_seen"] = now
+                                pending_actions[action_name]["last_seen_stream_time"] = current_time_stream
+                                
+                                # Confirm start?
+                                if pending_actions[action_name]["count"] >= start_threshold:
+                                    # ACTION STARTED
+                                    pending_info = pending_actions.pop(action_name)
+                                    start_time = pending_info["first_seen_stream_time"]
+                                    
+                                    active_actions[action_name] = {
+                                        "start_time": start_time,
+                                        "start_real_time": pending_info["first_seen_real"],
+                                        "last_seen": now,
+                                        "last_seen_stream_time": current_time_stream,
+                                        "confidence": confidence,
+                                    }
+                                    
+                                    # Store
+                                    action = DetectedAction(
+                                        action=action_name,
+                                        timestamp=start_time,
+                                        frame_number=frame_counter,
+                                        confidence=confidence,
+                                        metadata={"event_type": "started"}
+                                    )
+                                    store.add(action)
+                            
+                            else:
+                                # New pending
+                                pending_actions[action_name] = {
+                                    "count": 1,
+                                    "first_seen_stream_time": current_time_stream,
+                                    "first_seen_real": now,
+                                    "last_seen": now,
+                                    "confidence": confidence,
+                                }
+                    
+                    # 2. Clear stale pending
+                    stale = [name for name in pending_actions if name not in currently_detected]
+                    for name in stale:
+                        del pending_actions[name]
+                        
+                    # 3. Check for stopped actions
+                    stopped = []
+                    for action_name in active_actions:
+                        if action_name not in currently_detected:
+                            stopped.append(action_name)
+                            
+                    for action_name in stopped:
+                        action_info = active_actions.pop(action_name)
+                        # Action stopped - we just stop tracking it as active
+                        # The start event is already stored with its start timestamp
+                        # If we wanted durations, we would update the store entry here, 
+                        # but simple point events are enough for now or we can add a stop event.
+                        # For now, let's just log it locally if needed.
+                        pass
+
             except Exception as e:
-                logger.error(f"Failed to send result: {e}")
+                logger.error(f"Failed to send result or process actions: {e}")
+                logger.exception("Error detail:")
 
         def on_relay_error(e: Exception):
             logger.error(f"Relay error: {e}")
@@ -610,6 +743,10 @@ async def overshoot_video_websocket(websocket: WebSocket):
         )
 
         stream_id = await relay.start()
+        
+        # Register store
+        ACTION_STORES[stream_id] = store
+        
         logger.info(f"[Overshoot WS] Stream started: {stream_id}")
         await websocket.send_json({"type": "ready", "stream_id": stream_id})
         await websocket.send_json({"type": "connected", "message": "Connected to Overshoot"})
@@ -693,6 +830,14 @@ async def overshoot_video_websocket(websocket: WebSocket):
     finally:
         if relay:
             await relay.stop()
+            
+            # Clean up store (keep it for a bit? or delete immediately?
+            # User workflow implies process_video_to_angles is called AFTER stream?
+            # If process_video_to_angles is called simultaneously or shortly after, we should keep it.
+            # But we need a cleanup policy. For now, let's NOT delete it immediately so the next call can find it.
+            # Ideally we'd have a timeout or explicit cleanup.)
+            pass
+            
         try:
             await websocket.close()
         except Exception:
