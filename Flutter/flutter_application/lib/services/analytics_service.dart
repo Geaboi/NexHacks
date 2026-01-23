@@ -9,6 +9,7 @@ class AnalyticsResponse {
   final String? processedVideoPath; // Path to the downloaded processed video (null if not provided)
   final Map<String, dynamic> analyticsData; // JSON analytics data
   final List<List<dynamic>>? rawAngles; // Raw CV angles (before fusion)
+  final List<List<dynamic>>? imuAngles; // Raw IMU accumulated angles
   final int? jointIndex; // The joint index used for fusion
   final List<int> anomalousIds; // Frame indices flagged as anomalous by backend
   final bool success;
@@ -18,6 +19,7 @@ class AnalyticsResponse {
     this.processedVideoPath,
     required this.analyticsData,
     this.rawAngles,
+    this.imuAngles,
     this.jointIndex,
     this.anomalousIds = const [],
     this.success = true,
@@ -37,6 +39,12 @@ class AnalyticsResponse {
     if (json.containsKey('raw_angles') && json['raw_angles'] != null) {
       rawAngles = (json['raw_angles'] as List<dynamic>).map((e) => e as List<dynamic>).toList();
     }
+    
+    // Parse imu_angles
+    List<List<dynamic>>? imuAngles;
+    if (json.containsKey('imu_angles') && json['imu_angles'] != null) {
+      imuAngles = (json['imu_angles'] as List<dynamic>).map((e) => e as List<dynamic>).toList();
+    }
 
     // Parse joint_index
     int? jointIndex = json['joint_index'] as int?;
@@ -45,6 +53,7 @@ class AnalyticsResponse {
       processedVideoPath: videoPath,
       analyticsData: json,
       rawAngles: rawAngles,
+      imuAngles: imuAngles,
       jointIndex: jointIndex,
       anomalousIds: anomalousIds,
       success: true,

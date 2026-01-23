@@ -1138,7 +1138,7 @@ class _AngleChartCard extends StatelessWidget {
       ),
     );
   }
-  void _showDeveloperInfoDialog(BuildContext context) {
+    void _showDeveloperInfoDialog(BuildContext context) {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
@@ -1170,6 +1170,8 @@ class _AngleChartCard extends StatelessWidget {
                     _LegendItem(color: Colors.blue, label: 'Freq Filtered (Final)'),
                     const SizedBox(width: 16),
                     _LegendItem(color: Colors.red.withOpacity(0.5), label: 'Raw CV'),
+                    const SizedBox(width: 16),
+                    _LegendItem(color: Colors.green.withOpacity(0.5), label: 'Raw IMU'),
                   ],
                 ),
                 if (_usedJointIndex != null) ...[
@@ -1197,6 +1199,7 @@ class _AngleChartCard extends StatelessWidget {
 
     final rawSpots = <FlSpot>[];
     final fusedSpots = <FlSpot>[];
+    final imuSpots = <FlSpot>[];
 
     // Determine which field to use based on joint index (default to left knee if null)
     // 0: leftKnee, 1: rightKnee, etc.
@@ -1226,6 +1229,17 @@ class _AngleChartCard extends StatelessWidget {
           final rawVal = rawFrame[jointIndex] as num?;
           if (rawVal != null) {
             rawSpots.add(FlSpot(i.toDouble(), rawVal.toDouble()));
+          }
+        }
+      }
+
+      // Get IMU value if available
+      if (_imuAngles != null && i < _imuAngles!.length) {
+        final imuFrame = _imuAngles![i];
+        if (imuFrame.length > jointIndex) {
+          final imuVal = imuFrame[jointIndex] as num?;
+          if (imuVal != null) {
+            imuSpots.add(FlSpot(i.toDouble(), imuVal.toDouble()));
           }
         }
       }
@@ -1278,6 +1292,15 @@ class _AngleChartCard extends StatelessWidget {
             isStrokeCapRound: true,
             dotData: const FlDotData(show: false),
           ),
+          // Raw IMU Data (Green, slightly transparent)
+          LineChartBarData(
+            spots: imuSpots,
+            isCurved: false,
+            color: Colors.green.withOpacity(0.5),
+            barWidth: 2,
+            isStrokeCapRound: true,
+            dotData: const FlDotData(show: false),
+          ),
           // Fused Data (Blue, main)
           LineChartBarData(
             spots: fusedSpots,
@@ -1291,7 +1314,6 @@ class _AngleChartCard extends StatelessWidget {
       ),
     );
   }
-}
 
 class _FeedbackItem extends StatelessWidget {
   final IconData icon;

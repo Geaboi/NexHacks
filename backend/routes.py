@@ -372,8 +372,8 @@ async def process_video_to_angles(
                 parsed_sensor_data = None
 
         # Process video to get joint angles and CSV
-        # handler.process_video now returns raw_angles too
-        angles, raw_angles, overlay_video_path, csv_path = handler.process_video(
+        # handler.process_video now returns raw_angles and imu_angles too
+        angles, raw_angles, imu_angles, overlay_video_path, csv_path = handler.process_video(
             video_bytes, 
             parsed_sensor_data, 
             joint_index=joint_index
@@ -392,12 +392,14 @@ async def process_video_to_angles(
 
         serializable_angles = [[to_json_float(v) for v in frame] for frame in angles]
         serializable_raw_angles = [[to_json_float(v) for v in frame] for frame in raw_angles]
+        serializable_imu_angles = [[to_json_float(v) for v in frame] for frame in imu_angles]
 
         result = {
             "num_frames": len(angles),
             "num_angles": 6,
             "angles": serializable_angles,
             "raw_angles": serializable_raw_angles,
+            "imu_angles": serializable_imu_angles,
             "joint_index": joint_index,
             "overlay_video_path": overlay_video_path,
         }

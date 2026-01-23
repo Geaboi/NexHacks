@@ -188,6 +188,9 @@ class RTMPose3DHandler:
 
         # Create a copy of raw angles before sensor fusion
         raw_angles = [a.copy() if isinstance(a, list) else list(a) for a in angles]
+        
+        # Initialize IMU-only angles (same structure as angles)
+        imu_angles = [a.copy() if isinstance(a, list) else list(a) for a in angles]
 
         # Sensor fusion with Kalman filtering
         # sensor_data format from Flutter getSamplesForBackend():
@@ -197,9 +200,13 @@ class RTMPose3DHandler:
             
             pre_sensor_angles = [a.copy() if isinstance(a, list) else list(a) for a in angles]
             out_angles = []
+            out_imu_angles = [] # For storing raw accumulated IMU angles
             
             # Kalman filtering with sensor data
             ekf = FusionEKF(initial_angle=pre_sensor_angles[0][joint_index])
+
+            # Raw IMU Accumulator
+            imu_accumulator = pre_sensor_angles[0][joint_index]
 
             cv_idx = 1
 
@@ -217,6 +224,10 @@ class RTMPose3DHandler:
                     continue
 
                 ekf.predict(w_rel, dt)
+                
+                # Update raw IMU accumulator
+                if not np.isnan(w_rel):
+                     imu_accumulator += w_rel * dt
 
                 # Update with vision measurements when sensor timestamp passes frame timestamp
                 while cv_idx < len(pre_sensor_angles) and \
@@ -235,10 +246,16 @@ class RTMPose3DHandler:
                     'joint_angle': float(ekf.x[0]),
                     'bias_est': float(ekf.x[1])
                 })
+                
+                out_imu_angles.append({
+                    'timestamp_ms': s_samp['timestamp_ms'],
+                    'joint_angle': float(imu_accumulator)
+                })
 
             # Map fused angles back to frame timestamps
             if out_angles:
                 out_ang_idx = 0
+                out_imu_idx = 0
                 for i in range(len(frame_timestamps_ms)):
                     angle_sum = 0.0
                     count = 0
@@ -252,11 +269,23 @@ class RTMPose3DHandler:
                     
                     if count > 0:
                         angles[i][joint_index] = angle_sum / count
+                        
+                    # Process IMU-only angles similarly
+                    imu_sum = 0.0
+                    imu_count = 0
+                    while out_imu_idx < len(out_imu_angles) and \
+                          out_imu_angles[out_imu_idx]['timestamp_ms'] < frame_timestamps_ms[i]:
+                        imu_sum += out_imu_angles[out_imu_idx]['joint_angle']
+                        imu_count += 1
+                        out_imu_idx += 1
+                        
+                    if imu_count > 0:
+                        imu_angles[i][joint_index] = imu_sum / imu_count
                 
         # Save angles to CSV
         csv_path = self.angles_to_csv(angles, output_file_csv.name)
 
-        return angles, raw_angles, output_file_2D.name, csv_path
+        return angles, raw_angles, imu_angles, output_file_2D.name, csv_path
 
     def normalize_by_torso_height(self, all_poses):
         norm_poses = []
