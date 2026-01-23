@@ -162,8 +162,6 @@ class DatabaseService {
   Future<int> insertSession(Session session) async {
     final db = await database;
     final map = session.toMap();
-    // Add created_at for legacy database compatibility (v2 migration left strict NOT NULL column)
-    map['created_at'] = DateTime.now().toIso8601String();
     final id = await db.insert('sessions', map);
     print('[DatabaseService] 📝 Inserted session with ID: $id');
     return id;
