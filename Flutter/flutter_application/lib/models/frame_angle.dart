@@ -1,5 +1,5 @@
 /// Represents the 6 joint angles for a single video frame
-/// 
+///
 /// Angle order matches backend:
 /// - left_knee_flexion
 /// - right_knee_flexion
@@ -60,12 +60,24 @@ class FrameAngle {
       sessionId: sessionId,
       frameIndex: frameIndex,
       timestampOffsetMs: fps != null ? (frameIndex * 1000 ~/ fps) : null,
-      leftKneeFlexion: angles.length > 0 ? (angles[0] as num?)?.toDouble() : null,
-      rightKneeFlexion: angles.length > 1 ? (angles[1] as num?)?.toDouble() : null,
-      leftHipFlexion: angles.length > 2 ? (angles[2] as num?)?.toDouble() : null,
-      rightHipFlexion: angles.length > 3 ? (angles[3] as num?)?.toDouble() : null,
-      leftAnkleFlexion: angles.length > 4 ? (angles[4] as num?)?.toDouble() : null,
-      rightAnkleFlexion: angles.length > 5 ? (angles[5] as num?)?.toDouble() : null,
+      leftKneeFlexion: angles.isNotEmpty
+          ? (angles[0] as num?)?.toDouble()
+          : null,
+      rightKneeFlexion: angles.length > 1
+          ? (angles[1] as num?)?.toDouble()
+          : null,
+      leftHipFlexion: angles.length > 2
+          ? (angles[2] as num?)?.toDouble()
+          : null,
+      rightHipFlexion: angles.length > 3
+          ? (angles[3] as num?)?.toDouble()
+          : null,
+      leftAnkleFlexion: angles.length > 4
+          ? (angles[4] as num?)?.toDouble()
+          : null,
+      rightAnkleFlexion: angles.length > 5
+          ? (angles[5] as num?)?.toDouble()
+          : null,
     );
   }
 
@@ -87,13 +99,13 @@ class FrameAngle {
 
   /// Get all angles as a list (same order as backend)
   List<double?> get anglesList => [
-        leftKneeFlexion,
-        rightKneeFlexion,
-        leftHipFlexion,
-        rightHipFlexion,
-        leftAnkleFlexion,
-        rightAnkleFlexion,
-      ];
+    leftKneeFlexion,
+    rightKneeFlexion,
+    leftHipFlexion,
+    rightHipFlexion,
+    leftAnkleFlexion,
+    rightAnkleFlexion,
+  ];
 
   /// Angle column names for display
   static const List<String> angleNames = [
