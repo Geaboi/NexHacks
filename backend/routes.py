@@ -4,6 +4,7 @@ import base64
 import json
 import logging
 import struct
+import time
 from unittest import result
 import requests
 import dotenv
@@ -418,7 +419,8 @@ async def process_video_to_angles(
                         "action": a.action,
                         "timestamp": a.timestamp,
                         "confidence": a.confidence,
-                        "frame_number": a.frame_number
+                        "frame_number": a.frame_number,
+                        "metadata": a.metadata
                     }
                     for a in actions
                 ]
@@ -629,15 +631,31 @@ async def overshoot_video_websocket(websocket: WebSocket):
                     frame_counter += 1
                     
                     # Parse detections
-                    try:
-                        inference_data = result.get("result", {})
-                        if isinstance(inference_data, str):
-                            inference_data = json.loads(inference_data)
-                    except (json.JSONDecodeError, TypeError):
-                        logger.warning("Failed to parse inference result for action detection")
-                        return
+                    inference_data = result.get("result", {})
+                    
+                    # Try to parse stringified JSON if it is a string
+                    if isinstance(inference_data, str):
+                        try:
+                            parsed = json.loads(inference_data)
+                            if isinstance(parsed, (dict, list)):
+                                inference_data = parsed
+                        except (json.JSONDecodeError, TypeError):
+                            # It's a plain string (e.g. "Waving hand."), keep as string
+                            pass
 
-                    detected_list = inference_data.get("detected_actions", [])
+                    detected_list = []
+                    if isinstance(inference_data, dict):
+                        # Expecting structured JSON with "detected_actions"
+                        detected_list = inference_data.get("detected_actions", [])
+                    
+                    elif isinstance(inference_data, str) and inference_data.strip():
+                        # It's a generic text description like "Waving hand"
+                        # treat it as a detected action
+                        detected_list = [{
+                            "action": inference_data.strip(),
+                            "detected": True,
+                            "confidence": 0.8 # arbitrary high confidence for direct text
+                        }]
                     current_time_stream = result.get("timestamp") or time.time()
                     now = time.time()
 
@@ -712,12 +730,21 @@ async def overshoot_video_websocket(websocket: WebSocket):
                             
                     for action_name in stopped:
                         action_info = active_actions.pop(action_name)
-                        # Action stopped - we just stop tracking it as active
-                        # The start event is already stored with its start timestamp
-                        # If we wanted durations, we would update the store entry here, 
-                        # but simple point events are enough for now or we can add a stop event.
-                        # For now, let's just log it locally if needed.
-                        pass
+                        # Action stopped - record the end event
+                        end_time = current_time_stream
+                        
+                        action = DetectedAction(
+                            action=action_name,
+                            timestamp=end_time,
+                            frame_number=frame_counter,
+                            confidence=action_info.get("confidence", 0.0),
+                            metadata={
+                                "event_type": "ended",
+                                "start_timestamp": action_info.get("start_time"),
+                                "duration": end_time - action_info.get("start_time", end_time)
+                            }
+                        )
+                        store.add(action)
 
             except Exception as e:
                 logger.error(f"Failed to send result or process actions: {e}")
