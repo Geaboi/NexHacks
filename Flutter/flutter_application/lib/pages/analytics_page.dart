@@ -20,7 +20,12 @@ class AnalyticsPage extends ConsumerStatefulWidget {
   final int videoDurationMs;
   final int fps;
 
-  const AnalyticsPage({super.key, required this.videoPath, required this.videoDurationMs, this.fps = 30});
+  const AnalyticsPage({
+    super.key,
+    required this.videoPath,
+    required this.videoDurationMs,
+    this.fps = 30,
+  });
 
   @override
   ConsumerState<AnalyticsPage> createState() => _AnalyticsPageState();
@@ -73,7 +78,9 @@ class _AnalyticsPageState extends ConsumerState<AnalyticsPage> {
             backgroundColor: Colors.orange.shade700,
             duration: const Duration(seconds: 3),
             behavior: SnackBarBehavior.floating,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(8),
+            ),
           ),
         );
       }
@@ -136,25 +143,39 @@ class _AnalyticsPageState extends ConsumerState<AnalyticsPage> {
       final sensorState = ref.read(sensorProvider);
 
       // Get video start time from frame analysis state
-      final videoStartTimeUtc = frameAnalysis.videoStartTimeUtc ?? DateTime.now().toUtc().millisecondsSinceEpoch;
+      final videoStartTimeUtc =
+          frameAnalysis.videoStartTimeUtc ??
+          DateTime.now().toUtc().millisecondsSinceEpoch;
 
       // Convert inference points to JSON format
-      final inferencePointsJson = frameAnalysis.inferencePoints.map((p) => p.toJson()).toList();
+      final inferencePointsJson = frameAnalysis.inferencePoints
+          .map((p) => p.toJson())
+          .toList();
 
       // Get sensor data if samples were collected
       // Check if sensor buffer has any samples - this indicates sensors were used
       List<Map<String, dynamic>>? sensorSamples;
       if (sensorState.sampleBuffer.isNotEmpty) {
-        sensorSamples = ref.read(sensorProvider.notifier).getSamplesForBackend();
-        print('[AnalyticsPage] 📡 Sensor data available: ${sensorSamples.length} samples');
+        sensorSamples = ref
+            .read(sensorProvider.notifier)
+            .getSamplesForBackend();
+        print(
+          '[AnalyticsPage] 📡 Sensor data available: ${sensorSamples.length} samples',
+        );
       } else {
-        print('[AnalyticsPage] 📡 No sensor data available (sensor not used during recording)');
+        print(
+          '[AnalyticsPage] 📡 No sensor data available (sensor not used during recording)',
+        );
       }
 
       print('[AnalyticsPage] 🚀 Submitting analysis...');
       print('[AnalyticsPage] 📹 Video: ${widget.videoPath}');
-      print('[AnalyticsPage] 📊 Inference points: ${inferencePointsJson.length}');
-      print('[AnalyticsPage] ⏱️ Video duration: ${widget.videoDurationMs}ms, FPS: ${widget.fps}');
+      print(
+        '[AnalyticsPage] 📊 Inference points: ${inferencePointsJson.length}',
+      );
+      print(
+        '[AnalyticsPage] ⏱️ Video duration: ${widget.videoDurationMs}ms, FPS: ${widget.fps}',
+      );
 
       // Hardcode joint index to 0 (Left Knee) for now as per requirement
       // This will be moved to user selection later
@@ -167,7 +188,8 @@ class _AnalyticsPageState extends ConsumerState<AnalyticsPage> {
         fps: widget.fps,
         videoDurationMs: widget.videoDurationMs,
         sensorSamples: sensorSamples,
-        datasetName: 'flutter_recording_${DateTime.now().millisecondsSinceEpoch}',
+        datasetName:
+            'flutter_recording_${DateTime.now().millisecondsSinceEpoch}',
         modelId: '1OZUO0uahYoua8SklFmr',
         jointIndex: jointIndex,
       );
@@ -1083,7 +1105,12 @@ class _AnalyticsPageState extends ConsumerState<AnalyticsPage> {
             ),
           ),
         ),
-        actions: [TextButton(onPressed: () => Navigator.pop(context), child: const Text('Close'))],
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Close'),
+          ),
+        ],
       ),
     );
   }
