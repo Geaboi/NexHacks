@@ -420,6 +420,9 @@ class AnalyticsService {
       print(
         '[AnalyticsService]   - anomalous_ids: ${jsonResponse['anomalous_ids']}',
       );
+      print(
+        '[AnalyticsService]   - detected_actions: ${jsonResponse['detected_actions'] != null ? (jsonResponse['detected_actions'] as List).length : 0} actions',
+      );
 
       // Download overlay video if path is provided
       String? processedVideoPath;
