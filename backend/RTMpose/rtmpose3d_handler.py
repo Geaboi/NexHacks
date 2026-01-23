@@ -211,6 +211,10 @@ class RTMPose3DHandler:
             imu_accumulator = pre_sensor_angles[0][joint_index]
 
             cv_idx = 1
+                
+            # Debug stats
+            w_rel_values = []
+            dt_values = []
 
             for i in range(1, len(sensor_data)):
                 s_samp = sensor_data[i]
@@ -220,10 +224,20 @@ class RTMPose3DHandler:
                 # Relative angular velocity between the two IMU sensors
                 w_rel = s_samp['data']['yB'] - s_samp['data']['yA']
                 
+                # Debug: Print first 5 samples to check all axes
+                if i < 5:
+                    d = s_samp['data']
+                    print(f"[RTMPose] Sample {i}: yA={d.get('yA')}, yB={d.get('yB')}, xA={d.get('xA')}, xB={d.get('xB')}, zA={d.get('zA')}, zB={d.get('zB')}")
+
+                
                 # Calculate dt in seconds from millisecond timestamps
                 dt = (s_samp['timestamp_ms'] - s_prev['timestamp_ms']) / 1000.0
                 if dt <= 0: 
                     continue
+
+                # Collect stats
+                w_rel_values.append(w_rel)
+                dt_values.append(dt)
 
                 ekf.predict(w_rel, dt)
                 
@@ -253,6 +267,14 @@ class RTMPose3DHandler:
                     'timestamp_ms': s_samp['timestamp_ms'],
                     'joint_angle': float(imu_accumulator)
                 })
+
+            if w_rel_values:
+                # np is already imported globally
+                w_rel_arr = np.array(w_rel_values)
+                dt_arr = np.array(dt_values)
+                print(f"[RTMPose] Sensor Stats - w_rel: avg={np.mean(np.abs(w_rel_arr)):.2f} max={np.max(np.abs(w_rel_arr)):.2f} (deg/s)")
+                print(f"[RTMPose] Sensor Stats - dt: avg={np.mean(dt_arr)*1000:.2f}ms sum={np.sum(dt_arr):.2f}s")
+                print(f"[RTMPose] IMU Accumulator Change: {out_imu_angles[-1]['joint_angle'] - pre_sensor_angles[0][joint_index]:.2f} degrees")
 
             # Map fused angles back to frame timestamps
             if out_angles:
