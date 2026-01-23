@@ -1457,6 +1457,9 @@ class ActionSegment {
   });
 
   /// Consolidate consecutive actions with the same label into segments
+  /// Consolidate consecutive actions into segments.
+  /// Handles both continuous point-detection (grouping adjacent frames)
+  /// and explicit start/end events from the backend.
   static List<ActionSegment> fromDetectedActions(List<DetectedAction> actions) {
     if (actions.isEmpty) return [];
 
@@ -1464,36 +1467,74 @@ class ActionSegment {
     final sorted = List<DetectedAction>.from(actions)..sort((a, b) => a.frameNumber.compareTo(b.frameNumber));
 
     final segments = <ActionSegment>[];
-    int i = 0;
+    
+    // Track active start events: {action_label: start_action}
+    final activeStarts = <String, DetectedAction>{};
 
-    while (i < sorted.length) {
-      final currentAction = sorted[i];
-      final currentLabel = currentAction.action;
-      int startFrame = currentAction.frameNumber;
-      int endFrame = currentAction.frameNumberEnd ?? currentAction.frameNumber;
-      double totalConfidence = currentAction.confidence;
-      int count = 1;
+    bool hasExplicitEvents = sorted.any((a) => 
+      a.metadata != null && (a.metadata!['event_type'] == 'started' || a.metadata!['event_type'] == 'ended')
+    );
 
-      // Look ahead for consecutive same labels
-      int j = i + 1;
-      while (j < sorted.length && sorted[j].action == currentLabel) {
-        final nextAction = sorted[j];
-        endFrame = nextAction.frameNumberEnd ?? nextAction.frameNumber;
-        totalConfidence += nextAction.confidence;
-        count++;
-        j++;
+    if (hasExplicitEvents) {
+      // Logic for explicit start/end events
+      for (final action in sorted) {
+        final type = action.metadata?['event_type'] as String?;
+        final label = action.action;
+
+        if (type == 'started') {
+          activeStarts[label] = action;
+        } else if (type == 'ended') {
+          final startAction = activeStarts.remove(label);
+          if (startAction != null) {
+            // Found a complete pair
+            segments.add(ActionSegment(
+              startFrame: startAction.frameNumber,
+              endFrame: action.frameNumber,
+              label: label,
+              confidence: (startAction.confidence + action.confidence) / 2,
+            ));
+          }
+        }
       }
+    } else {
+      // Fallback: Group consecutive frames (Old Logic)
+      int i = 0;
+      while (i < sorted.length) {
+        final currentAction = sorted[i];
+        final currentLabel = currentAction.action;
+        int startFrame = currentAction.frameNumber;
+        int endFrame = currentAction.frameNumberEnd ?? currentAction.frameNumber;
+        double totalConfidence = currentAction.confidence;
+        int count = 1;
 
-      segments.add(
-        ActionSegment(
-          startFrame: startFrame,
-          endFrame: endFrame,
-          label: currentLabel,
-          confidence: totalConfidence / count,
-        ),
-      );
+        // Look ahead for consecutive same labels within reasonable gap (e.g. 5 frames) to bridge gaps
+        int j = i + 1;
+        while (j < sorted.length) {
+          final nextAction = sorted[j];
+          if (nextAction.action == currentLabel) {
+             // Check if contiguous or close enough (e.g. < 10 frames gap)
+             if (nextAction.frameNumber - endFrame < 10) {
+                endFrame = nextAction.frameNumberEnd ?? nextAction.frameNumber;
+                totalConfidence += nextAction.confidence;
+                count++;
+                j++;
+                continue;
+             }
+          }
+          break;
+        }
 
-      i = j;
+        segments.add(
+          ActionSegment(
+            startFrame: startFrame,
+            endFrame: endFrame,
+            label: currentLabel,
+            confidence: totalConfidence / count,
+          ),
+        );
+
+        i = j;
+      }
     }
 
     return segments;
