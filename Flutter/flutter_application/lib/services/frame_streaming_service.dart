@@ -19,7 +19,7 @@ class StreamConfig {
   final int height;
 
   const StreamConfig({
-    this.prompt = 'Describe what you see',
+    this.prompt = 'Choose an exercise being performed by the user from ["Arm Flex", "Neck Flex", "Knee Raise", and "None"]. Do not return any output other than these options.',
     this.model = 'gemini-2.0-flash',
     this.backend = 'gemini',
     this.outputSchemaJson,
