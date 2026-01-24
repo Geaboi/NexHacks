@@ -203,6 +203,19 @@ class FrameStreamingService {
 
   /// Start WebRTC Streaming
   Future<void> startStreaming({int cameraFps = 30}) async {
+    print(
+      '[FrameStreaming] 🚀 startStreaming called. Ready=$_isReady, LocalStream=${_localStream != null}',
+    );
+
+    // Wait for Ready state if not yet ready (up to 5 seconds)
+    if (!_isReady) {
+      print('[FrameStreaming] ⏳ Waiting for signaling Ready state...');
+      for (var i = 0; i < 50; i++) {
+        if (_isReady) break;
+        await Future.delayed(const Duration(milliseconds: 100));
+      }
+    }
+
     if (!_isReady || _localStream == null) {
       print(
         '[FrameStreaming] ⚠️ Cannot start streaming: Ready=$_isReady, Stream=${_localStream != null}',
@@ -210,17 +223,28 @@ class FrameStreamingService {
       return;
     }
 
+    if (_isStreaming) {
+      print('[FrameStreaming] ⚠️ Already streaming, ignoring start request.');
+      return;
+    }
+
     _isStreaming = true;
     print('[FrameStreaming] 🎬 Starting WebRTC negotiation...');
 
     try {
+      print('[FrameStreaming] 🔧 Creating PeerConnection...');
       _peerConnection = await createPeerConnection({
         'iceServers': [
           {'urls': 'stun:stun.l.google.com:19302'},
         ],
+        'sdpSemantics': 'unified-plan',
       });
 
       _peerConnection!.onIceCandidate = (candidate) {
+        final candidateStr = candidate.candidate ?? 'null';
+        print(
+          '[FrameStreaming] 🧊 OnIceCandidate: ${candidateStr.length > 20 ? candidateStr.substring(0, 20) : candidateStr}...',
+        );
         if (_isConnected && _wsChannel != null) {
           _wsChannel!.sink.add(
             jsonEncode({
@@ -230,24 +254,46 @@ class FrameStreamingService {
               'sdpMLineIndex': candidate.sdpMLineIndex,
             }),
           );
+        } else {
+          print('[FrameStreaming] ⚠️ Cannot send candidate: WS not connected');
         }
       };
 
       _peerConnection!.onConnectionState = (state) {
-        print('[FrameStreaming] 🔗 Connection state: $state');
+        print('[FrameStreaming] 🔗 Connection state changed: $state');
+      };
+
+      _peerConnection!.onSignalingState = (state) {
+        print('[FrameStreaming] 🚦 Signaling state changed: $state');
+      };
+
+      _peerConnection!.onIceConnectionState = (state) {
+        print('[FrameStreaming] ❄️ ICE Connection state changed: $state');
       };
 
       // Add local stream tracks
+      print('[FrameStreaming] ➕ Adding local tracks...');
       _localStream!.getTracks().forEach((track) {
         _peerConnection!.addTrack(track, _localStream!);
+        print(
+          '[FrameStreaming] 📹 Added track: ${track.kind}, id: ${track.id}',
+        );
       });
 
       // Create Offer
+      print('[FrameStreaming] 📜 Creating Offer...');
       RTCSessionDescription offer = await _peerConnection!.createOffer();
+      print('[FrameStreaming] ✅ Offer created. SDP size: ${offer.sdp?.length}');
+
+      print('[FrameStreaming] 💾 Setting Local Description...');
       await _peerConnection!.setLocalDescription(offer);
 
       if (_isConnected && _wsChannel != null) {
+        print('[FrameStreaming] 📤 Sending Offer to Signaling Server...');
         _wsChannel!.sink.add(jsonEncode({'type': 'offer', 'sdp': offer.sdp}));
+      } else {
+        print('[FrameStreaming] ❌ Cannot send offer: WS not connected');
+        _isStreaming = false;
       }
     } catch (e) {
       print('[FrameStreaming] ❌ WebRTC Setup failed: $e');

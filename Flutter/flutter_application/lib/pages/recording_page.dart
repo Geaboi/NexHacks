@@ -291,17 +291,43 @@ class _RecordingPageState extends ConsumerState<RecordingPage> {
               ),
 
             // Inference Result Display
-            if (_latestInferenceResult != null)
+            if (_isRecording && _isStreamingFrames)
               Positioned(
                 top: 60,
                 left: 16,
                 right: 16,
                 child: Container(
-                  padding: const EdgeInsets.all(8),
-                  color: Colors.black54,
-                  child: Text(
-                    _latestInferenceResult!,
-                    style: const TextStyle(color: Colors.white),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 8,
+                  ),
+                  decoration: BoxDecoration(
+                    color: Colors.black.withOpacity(0.6),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Row(
+                    children: [
+                      if (_latestInferenceResult == null)
+                        const SizedBox(
+                          width: 16,
+                          height: 16,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: Colors.white,
+                          ),
+                        ),
+                      if (_latestInferenceResult == null)
+                        const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          _latestInferenceResult ?? 'Waiting for inference...',
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 16,
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
                 ),
               ),

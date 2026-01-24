@@ -395,11 +395,24 @@ async def process_video_to_angles(
 
         # Process video to get joint angles and CSV
         # handler.process_video now returns raw_angles and imu_angles too
-        angles, raw_angles, imu_angles, overlay_video_path, csv_path = handler.process_video(
-            video_bytes, 
-            parsed_sensor_data, 
-            joint_index=joint_index
-        )
+        angles = []
+        raw_angles = []
+        imu_angles = []
+        overlay_video_path = None
+        
+        # Check if video bytes are valid (not empty)
+        if video_bytes and len(video_bytes) > 100:
+             try:
+                angles, raw_angles, imu_angles, overlay_video_path, csv_path = handler.process_video(
+                    video_bytes, 
+                    parsed_sensor_data, 
+                    joint_index=joint_index
+                )
+             except Exception as e:
+                logger.error(f"Failed to process video: {e}")
+                # We proceed without angles if video is bad, so we can still return actions
+        else:
+             logger.warning("Video file is empty or too small. Skipping pose estimation.")
 
         # Convert numpy values to native Python floats for JSON serialization
         import math
@@ -744,6 +757,7 @@ async def overshoot_video_websocket(websocket: WebSocket):
         tfile.close() # Close so recorder can open
         temp_video_path = tfile.name
         stream_videos[stream_id] = temp_video_path
+        print(temp_video_path)
         
         recorder = MediaRecorder(temp_video_path)
         
@@ -752,18 +766,20 @@ async def overshoot_video_websocket(websocket: WebSocket):
         
         @pc.on("icecandidate")
         async def on_icecandidate(candidate):
+            print("ICE")
             # Send candidate to client
             if candidate:
-                 msg = {
-                     "type": "candidate", 
-                     "candidate": candidate.candidate, 
-                     "sdpMid": candidate.sdpMid, 
-                     "sdpMLineIndex": candidate.sdpMLineIndex
-                 }
-                 await websocket.send_json(msg)
+                msg = {
+                    "type": "candidate", 
+                    "candidate": candidate.candidate, 
+                    "sdpMid": candidate.sdpMid, 
+                    "sdpMLineIndex": candidate.sdpMLineIndex
+                }
+                await websocket.send_json(msg)
 
         @pc.on("track")
         def on_track(track):
+            print("TRACK")
             if track.kind == "video":
                 print(f"[WebRTC] Video track received: {track.kind}")
                 # Create proxy track
