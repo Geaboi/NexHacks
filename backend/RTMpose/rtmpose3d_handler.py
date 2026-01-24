@@ -81,13 +81,16 @@ class VideoHandler():
         ret, frame = self.cap.read()
         if not ret:
             self.cap.release()
-            os.unlink(self.tfile.name) # Manual cleanup to be safe
             return False, None # return False to indicate end of video
         return ret, frame
     
     def release(self):
         self.cap.release()
-        os.unlink(self.tfile.name) # Cleanup temporary file
+        if os.path.exists(self.tfile.name):
+            try:
+                os.unlink(self.tfile.name) # Cleanup temporary file
+            except PermissionError:
+                pass # access denied/file in use
 
 class RTMPose3DHandler:
 

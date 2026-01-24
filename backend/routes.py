@@ -426,9 +426,13 @@ async def process_video_to_angles(
         # Add detected actions if stream_id is provided
         detected_actions_result = []
         if stream_id:
-            print(f"Looking for actions for stream_id: {stream_id}")
-            print(f"ACTION_STORES currently has {len(ACTION_STORES)} entries: {list(ACTION_STORES.keys())}")
-            store = ACTION_STORES.get(stream_id)
+            print(f"Looking for actions for stream_id: {repr(stream_id)}")  # Use repr()!
+            print(f"ACTION_STORES keys: {[repr(k) for k in action_stores.keys()]}")
+            print(f"Exact match test: {stream_id in action_stores}")
+            print(f"Stripped match test: {stream_id.strip() in action_stores}")
+
+            print(action_stores[stream_id])
+            store = action_stores[stream_id] if stream_id in action_stores else None
             if store:
                 actions = store.get_actions()
                 print(f"Found {len(actions)} actions for stream {stream_id}")
@@ -481,7 +485,7 @@ overshoot_router = APIRouter(prefix="/api/overshoot", tags=["Overshoot"])
 _overshoot_sessions: dict[str, OvershootHttpClient] = {}
 _overshoot_sessions_lock = asyncio.Lock()
 # Global store for action detection results keyed by stream_id
-ACTION_STORES: dict[str, ActionStore] = {}
+action_stores: dict[str, ActionStore] = {}
 
 
 def _overshoot_api_url() -> str:
@@ -629,6 +633,7 @@ async def overshoot_video_websocket(websocket: WebSocket):
 
         # Action Detection State
         store = ActionStore()
+        print(f"[Overshoot WS] ActionStore: {store}")
         # Track active actions: {action_name: {"start_time": float, "last_seen": float, "confidence": float}}
         active_actions: dict[str, dict] = {}
         # Track pending actions: {action_name: {"count": int, "first_seen": float, "confidence": float}}
@@ -796,11 +801,12 @@ async def overshoot_video_websocket(websocket: WebSocket):
 
         stream_id = await relay.start()
 
+        print(f"store before adding: {store}")
         # Register store
-        ACTION_STORES[stream_id] = store
+        action_stores[stream_id] = store
 
         print(f"[Overshoot WS] Stream started: {stream_id}")
-        print(f"[Overshoot WS] ACTION_STORES now has {len(ACTION_STORES)} entries: {list(ACTION_STORES.keys())}")
+        print(f"[Overshoot WS] ACTION_STORES now has {len(action_stores)} entries: {list(action_stores.keys())}")
         await websocket.send_json({"type": "ready", "stream_id": stream_id})
         await websocket.send_json({"type": "connected", "message": "Connected to Overshoot"})
 
@@ -884,7 +890,7 @@ async def overshoot_video_websocket(websocket: WebSocket):
         print(f"[Overshoot WS] WebSocket finally block - relay exists: {relay is not None}")
         if relay:
             print(f"[Overshoot WS] Stopping relay, stream_id was: {stream_id if 'stream_id' in dir() else 'unknown'}")
-            print(f"[Overshoot WS] ACTION_STORES before cleanup: {list(ACTION_STORES.keys())}")
+            print(f"[Overshoot WS] ACTION_STORES before cleanup: {list(action_stores.keys())}")
             await relay.stop()
 
             # Clean up store (keep it for a bit? or delete immediately?
@@ -892,7 +898,7 @@ async def overshoot_video_websocket(websocket: WebSocket):
             # If process_video_to_angles is called simultaneously or shortly after, we should keep it.
             # But we need a cleanup policy. For now, let's NOT delete it immediately so the next call can find it.
             # Ideally we'd have a timeout or explicit cleanup.)
-            print(f"[Overshoot WS] ACTION_STORES after relay.stop(): {list(ACTION_STORES.keys())}")
+            print(f"[Overshoot WS] ACTION_STORES after relay.stop(): {list(action_stores.keys())}")
             
         try:
             await websocket.close()
