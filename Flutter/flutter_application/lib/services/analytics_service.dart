@@ -14,7 +14,8 @@ class AnalyticsResponse {
   final List<List<dynamic>>? imuAngles; // Raw IMU accumulated angles
   final int? jointIndex; // The joint index used for fusion
   final List<int> anomalousIds; // Frame indices flagged as anomalous by backend
-  final List<Map<String, dynamic>> detectedActions; // Detected action segments from Overshoot
+  final List<Map<String, dynamic>>
+  detectedActions; // Detected action segments from Overshoot
   final bool success;
   final String? errorMessage;
 
@@ -63,7 +64,8 @@ class AnalyticsResponse {
     // Parse detected_actions from Overshoot
     // Format: [{action, timestamp, confidence, frame_number, metadata}, ...]
     List<Map<String, dynamic>> detectedActions = [];
-    if (json.containsKey('detected_actions') && json['detected_actions'] != null) {
+    if (json.containsKey('detected_actions') &&
+        json['detected_actions'] != null) {
       final rawActions = json['detected_actions'] as List<dynamic>;
       detectedActions = rawActions
           .map((e) => Map<String, dynamic>.from(e as Map))
@@ -157,26 +159,6 @@ class AnalyticsService {
   }
 
   /// Submit analysis request to backend
-  ///
-  /// This method will:
-  /// 1. Gather the recorded video file (temp_record.mp4)
-  /// 2. Map overshoot points from FrameAnalysisProvider to video frames
-  /// 3. Gather sensor data from SensorProvider (if available)
-  /// 4. Send all data to backend
-  /// 5. Receive processed video and analytics JSON
-  ///
-  /// Parameters:
-  /// - videoPath: Path to the recorded MP4 file
-  /// - overshootPoints: List of InferencePoint from FrameAnalysisProvider
-  /// - videoStartTimeUtc: UTC timestamp (ms) when the MP4 recording started
-  /// - fps: Frame rate of the video (for frame index calculation)
-  /// - videoDurationMs: Duration of the video in milliseconds
-  /// - sensorSamples: Sensor data from SensorProvider (null or empty if not used)
-  /// - datasetName: Name for the dataset in backend
-  /// - modelId: Model ID for anomaly detection
-  /// - jointIndex: Index of joint to fuse (default 0)
-  ///
-  /// Returns: AnalyticsResponse with video path and analytics data
   Future<AnalyticsResponse> submitAnalysis({
     required String videoPath,
     required List<Map<String, dynamic>> inferencePoints,
@@ -193,8 +175,17 @@ class AnalyticsService {
     final url = backendUrl ?? _defaultBackendUrl;
 
     try {
-      // 1. Gather video file
-      final videoFile = await _gatherVideoFile(videoPath);
+      // 1. Gather video file (only if not a stream ID and path exists)
+      File? videoFile;
+      if (streamId == null || !videoPath.startsWith('stream://')) {
+        try {
+          videoFile = await _gatherVideoFile(videoPath);
+        } catch (e) {
+          print('[AnalyticsService] ⚠️ Could not load video file: $e');
+          // If streamId is present, we permit missing file
+          if (streamId == null) rethrow;
+        }
+      }
 
       // 2. Map overshoot points to video frame indices
       final overshootPoints = mapInferenceToVideoFrames(
@@ -303,7 +294,7 @@ class AnalyticsService {
   /// Matches the backend's process_video_to_angles endpoint
   Future<http.Response> _sendDataToBackend({
     required String url,
-    required File videoFile,
+    File? videoFile,
     required OvershootPoints overshootPoints,
     required int videoStartTimeUtc,
     required String sensorDataJson,
@@ -327,14 +318,16 @@ class AnalyticsService {
     // Create multipart request
     final request = http.MultipartRequest('POST', uri);
 
-    // Add video file
-    request.files.add(
-      await http.MultipartFile.fromPath(
-        'video',
-        videoFile.path,
-        filename: 'recording.mp4',
-      ),
-    );
+    // Add video file (Optional now)
+    if (videoFile != null) {
+      request.files.add(
+        await http.MultipartFile.fromPath(
+          'video',
+          videoFile.path,
+          filename: 'recording.mp4',
+        ),
+      );
+    }
 
     // Add overshoot points as JSON file
     request.files.add(
@@ -368,15 +361,6 @@ class AnalyticsService {
       print('[AnalyticsService] 📋 Including stream_id: $streamId');
     }
 
-    print(
-      '[AnalyticsService] 📤 Request fields: overshoot_data=${overshootPoints.length} points, sensor_data length=${sensorDataJson.length}',
-    );
-
-    // Debug log the sensor data JSON with truncated arrays
-    final sensorDataDecoded = jsonDecode(sensorDataJson);
-    print('[AnalyticsService] 📋 sensor_data JSON:');
-    print(_formatJsonForDebug(sensorDataDecoded));
-
     // Send request with timeout (extended for video processing)
     final streamedResponse = await request.send().timeout(
       const Duration(minutes: 10),
@@ -389,14 +373,6 @@ class AnalyticsService {
   }
 
   /// Process backend response
-  ///
-  /// Expected response format:
-  /// {
-  ///   "num_frames": int,
-  ///   "num_angles": int,
-  ///   "angles": List,
-  ///   "overlay_video_path": string (filename only)
-  /// }
   Future<AnalyticsResponse> _processResponse(http.Response response) async {
     print('[AnalyticsService] 📥 Response status: ${response.statusCode}');
 
@@ -411,19 +387,6 @@ class AnalyticsService {
     try {
       final jsonResponse = jsonDecode(response.body) as Map<String, dynamic>;
 
-      print('[AnalyticsService] 📦 Response data:');
-      print('[AnalyticsService]   - num_frames: ${jsonResponse['num_frames']}');
-      print('[AnalyticsService]   - num_angles: ${jsonResponse['num_angles']}');
-      print(
-        '[AnalyticsService]   - overlay_video_path: ${jsonResponse['overlay_video_path']}',
-      );
-      print(
-        '[AnalyticsService]   - anomalous_ids: ${jsonResponse['anomalous_ids']}',
-      );
-      print(
-        '[AnalyticsService]   - detected_actions: ${jsonResponse['detected_actions'] != null ? (jsonResponse['detected_actions'] as List).length : 0} actions',
-      );
-
       // Download overlay video if path is provided
       String? processedVideoPath;
       if (jsonResponse.containsKey('overlay_video_path') &&
@@ -431,7 +394,11 @@ class AnalyticsService {
         final videoFilename = jsonResponse['overlay_video_path'] as String;
         // Extract just the filename if it's a full path
         final filename = videoFilename.split('/').last.split('\\').last;
-        processedVideoPath = await _downloadOverlayVideo(filename);
+        try {
+          processedVideoPath = await _downloadOverlayVideo(filename);
+        } catch (e) {
+          print("Failed to download overlay video: $e");
+        }
       }
 
       print('[AnalyticsService] ✅ Analysis complete');
