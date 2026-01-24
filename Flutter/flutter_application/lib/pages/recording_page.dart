@@ -179,11 +179,46 @@ class _RecordingPageState extends ConsumerState<RecordingPage> {
     // Stop Streaming
     _frameStreamingService.stopStreaming();
 
+    // Wait for Stream ID if not yet available (Parallel connection optimization)
+    if (_frameStreamingService.streamId == null) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Row(
+              children: [
+                SizedBox(
+                  width: 16,
+                  height: 16,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2,
+                    color: Colors.white,
+                  ),
+                ),
+                SizedBox(width: 8),
+                Text("Finalizing connection..."),
+              ],
+            ),
+            duration: Duration(seconds: 3),
+          ),
+        );
+      }
+
+      // Wait up to 3 seconds
+      for (int i = 0; i < 30; i++) {
+        await Future.delayed(const Duration(milliseconds: 100));
+        if (_frameStreamingService.streamId != null) break;
+      }
+    }
+
     // Set Stream ID to provider if available
     if (_frameStreamingService.streamId != null) {
       ref
           .read(frameAnalysisProvider.notifier)
           .setStreamId(_frameStreamingService.streamId!);
+    } else {
+      _showErrorSnackBar("Recording too short or connection failed");
+      // Don't navigate to review yet if we don't have an ID
+      // But we still update UI state to stop recording
     }
 
     if (mounted) {

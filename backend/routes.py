@@ -742,6 +742,7 @@ async def overshoot_video_websocket(websocket: WebSocket):
                 else:
                     logger.error(f"Send result error: {e}")
 
+        # Prepare Relay (sync initialization of queues and local PC)
         relay = OvershootStreamRelay(
             api_url=_overshoot_api_url(),
             api_key=_overshoot_api_key(),
@@ -757,28 +758,25 @@ async def overshoot_video_websocket(websocket: WebSocket):
             delay_seconds=delay_seconds,
         )
         
-        # Start Relay to get stream_id
-        stream_id = await relay.start()
-        
-        # Register ActionStore
-        action_stores[stream_id] = store
+        await relay.prepare()
         
         # Prepare MediaRecorder
         import tempfile
         tfile = tempfile.NamedTemporaryFile(delete=False, suffix='.mp4')
         tfile.close() # Close so recorder can open
         temp_video_path = tfile.name
-        stream_videos[stream_id] = temp_video_path
-        print(temp_video_path)
+        # Note: stream_id is not yet available, use temporary key or handle later.
+        # But we need to store it so process endpoint can find it.
+        # We will update stream_videos once we have stream_id.
         
         recorder = MediaRecorder(temp_video_path)
         
-        # Initialize WebRTC
+        # Initialize WebRTC (Local PC)
         pc = RTCPeerConnection()
         
         @pc.on("icecandidate")
         async def on_icecandidate(candidate):
-            print("ICE")
+            # print("ICE")
             # Send candidate to client
             if candidate:
                 msg = {
@@ -795,7 +793,7 @@ async def overshoot_video_websocket(websocket: WebSocket):
             if track.kind == "video":
                 print(f"[WebRTC] Video track received: {track.kind}")
                 # Create proxy track
-                proxy = RelayProxyTrack(track, relay, subsample=1) # 30fps input -> 30fps relay (let Overshoot handle sampling)
+                proxy = RelayProxyTrack(track, relay, subsample=1) 
                 recorder.addTrack(proxy)
 
         @pc.on("connectionstatechange")
@@ -804,8 +802,30 @@ async def overshoot_video_websocket(websocket: WebSocket):
             if pc.connectionState == "failed":
                 await pc.close()
 
-        # Send Ready
-        await websocket.send_json({"type": "ready", "stream_id": stream_id})
+        # Send Ready IMMEDIATELY to unblock client
+        # Stream ID is not yet available, client should handle null stream_id or wait for 'stream_created'
+        await websocket.send_json({"type": "ready", "stream_id": None})
+
+        # Start Relay Connect in Background
+        async def connect_relay_task():
+            nonlocal stream_id
+            try:
+                stream_id = await relay.connect()
+                # Store action store
+                action_stores[stream_id] = store
+                # Store video path mapping
+                stream_videos[stream_id] = temp_video_path
+                print(f"[WebRTC] ☁️ Stream created on Overshoot: {stream_id}")
+                
+                # Notify client
+                if websocket.client_state == WebSocketState.CONNECTED:
+                    await websocket.send_json({"type": "stream_created", "stream_id": stream_id})
+            except Exception as e:
+                logger.error(f"[WebRTC] Failed to connect relay: {e}")
+                if websocket.client_state == WebSocketState.CONNECTED:
+                    await websocket.send_json({"type": "error", "error": f"Cloud connection failed: {e}"})
+
+        asyncio.create_task(connect_relay_task())
 
         # Main Loop
         async for message_str in websocket.iter_text():
@@ -817,7 +837,7 @@ async def overshoot_video_websocket(websocket: WebSocket):
                     offer = RTCSessionDescription(sdp=msg["sdp"], type="offer")
                     await pc.setRemoteDescription(offer)
                     
-                    # Start recorder after track is set up (happens during setRemoteDescription/on_track)
+                    # Start recorder after track is set up
                     await recorder.start()
                     
                     answer = await pc.createAnswer()
@@ -847,8 +867,6 @@ async def overshoot_video_websocket(websocket: WebSocket):
                      
             except Exception as e:
                 logger.error(f"Error handling message: {e}")
-                # Don't break loop on minor errors, but maybe on critical ones?
-                # For now log and continue
                 pass
 
     except WebSocketDisconnect:
@@ -863,13 +881,12 @@ async def overshoot_video_websocket(websocket: WebSocket):
         # Cleanup
         print("[WebRTC] 🧹 Cleaning up resources...")
 
-        # 1. Stop Recorder (Stop this FIRST to finalize file while sources are alive)
+        # 1. Stop Recorder
         if recorder:
             try:
                 await recorder.stop()
                 print("[WebRTC] ⏹️ Recorder stopped")
             except Exception as e:
-                # [Errno 22] Invalid argument can happen if handle is already bad, usually safe to ignore if we just want to close
                 logger.error(f"[WebRTC] ⚠️ Recorder stop failed: {e}")
             finally:
                 recorder = None
@@ -882,17 +899,16 @@ async def overshoot_video_websocket(websocket: WebSocket):
             except Exception as e:
                 logger.error(f"[WebRTC] ⚠️ Relay stop error: {e}")
 
-        # 3. Stop Proxy Tracks & PC
+        # 3. Stop PC
         if pc:
             try:
                 # Stop transceivers
                 for transceiver in pc.getTransceivers():
-                    if transceiver.sender and transceiver.sender.track and hasattr(transceiver.sender.track, "stop"):
-                        try:
-                           transceiver.sender.track.stop()
-                        except: pass
+                    if transceiver.sender and transceiver.sender.track: 
+                         try:
+                             transceiver.sender.track.stop()
+                         except: pass
                 
-                # Close PC
                 await pc.close()
                 print("[WebRTC] 🔌 PeerConnection closed")
             except Exception as e:

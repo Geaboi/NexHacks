@@ -19,7 +19,8 @@ class StreamConfig {
   final int height;
 
   const StreamConfig({
-    this.prompt = 'Choose an exercise being performed by the user from ["Arm Flex", "Neck Flex", "Knee Raise", and "None"]. Do not return any output other than these options.',
+    this.prompt =
+        'Choose an exercise being performed by the user from ["Arm Flex", "Neck Flex", "Knee Raise", and "None"]. Do not return any output other than these options.',
     this.model = 'gemini-2.0-flash',
     this.backend = 'gemini',
     this.outputSchemaJson,
@@ -325,8 +326,18 @@ class FrameStreamingService {
       switch (type) {
         case 'ready':
           _isReady = true;
+          if (data['stream_id'] != null) {
+            _streamId = data['stream_id'];
+            print('[FrameStreaming] ✅ Ready. Stream ID: $_streamId');
+          } else {
+            print('[FrameStreaming] ✅ Ready (Waiting for Stream ID...)');
+            // _streamId remains null or previous value until 'stream_created' arrives
+          }
+          break;
+
+        case 'stream_created':
           _streamId = data['stream_id'];
-          print('[FrameStreaming] ✅ Ready. Stream ID: $_streamId');
+          print('[FrameStreaming] ☁️ Stream Created. ID: $_streamId');
           break;
 
         case 'answer':
