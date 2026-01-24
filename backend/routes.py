@@ -352,6 +352,7 @@ async def process_video_to_angles(
     joint_index: int = Form(0, description="Index of the joint to fuse (0=left_knee, 1=right_knee, etc.)"),
     stream_id: str = Form(None, description="Stream ID to retrieve detected actions from")
 ):
+    print(stream_id)
     """Process video through RTMpose and run anomaly detection via Woodwide.
 
     Flow:
@@ -373,7 +374,7 @@ async def process_video_to_angles(
                 if content:
                     sensor_json_str = content.decode("utf-8")
                     parsed_sensor_data = json.loads(sensor_json_str)
-                    logger.info(f"Received sensor data with {len(parsed_sensor_data)} samples")
+                    print(f"Received sensor data with {len(parsed_sensor_data)} samples")
             except (json.JSONDecodeError, TypeError, UnicodeDecodeError) as e:
                 logger.warning(f"Failed to parse sensor data file: {e}")
                 parsed_sensor_data = None
@@ -430,7 +431,7 @@ async def process_video_to_angles(
             store = ACTION_STORES.get(stream_id)
             if store:
                 actions = store.get_actions()
-                logger.info(f"Found {len(actions)} actions for stream {stream_id}")
+                print(f"Found {len(actions)} actions for stream {stream_id}")
                 detected_actions_result = [
                     {
                         "action": a.action,
@@ -441,7 +442,7 @@ async def process_video_to_angles(
                     }
                     for a in actions
                 ]
-                logger.info(f"[Process Video] Including {len(detected_actions_result)} detected actions in response: {detected_actions_result}")
+                print(f"[Process Video] Including {len(detected_actions_result)} detected actions in response: {detected_actions_result}")
             else:
                  logger.warning(f"No ActionStore found for stream_id: {stream_id}")
         
@@ -621,8 +622,8 @@ async def overshoot_video_websocket(websocket: WebSocket):
 
         # Log the actual config being used
         frames_per_clip = fps * sampling_ratio * clip_length_seconds
-        logger.info(f"[Overshoot WS] Processing config: fps={fps}, sampling={sampling_ratio}, clip={clip_length_seconds}s, delay={delay_seconds}s")
-        logger.info(f"[Overshoot WS] Frames per clip: {frames_per_clip:.1f} (constraint: must be <= 30 * delay)")
+        print(f"[Overshoot WS] Processing config: fps={fps}, sampling={sampling_ratio}, clip={clip_length_seconds}s, delay={delay_seconds}s")
+        print(f"[Overshoot WS] Frames per clip: {frames_per_clip:.1f} (constraint: must be <= 30 * delay)")
 
         logger.debug(f"[Overshoot WS] Config: {model}/{backend} {width}x{height}@{fps}fps")
 
@@ -676,7 +677,7 @@ async def overshoot_video_websocket(websocket: WebSocket):
                         }]
                     
                     if detected_list:
-                        logger.info(f"[Overshoot Relay] Frame {frame_counter}: Received actions: {detected_list}")
+                        print(f"[Overshoot Relay] Frame {frame_counter}: Received actions: {detected_list}")
 
                     current_time_stream = result.get("timestamp") or time.time()
                     now = time.time()
@@ -727,7 +728,7 @@ async def overshoot_video_websocket(websocket: WebSocket):
                                         confidence=confidence,
                                         metadata={"event_type": "started"}
                                     )
-                                    logger.info(f"[Overshoot Relay] Action STARTED: {action_name} at {start_time}")
+                                    print(f"[Overshoot Relay] Action STARTED: {action_name} at {start_time}")
                                     store.add(action)
                             
                             else:
@@ -767,7 +768,7 @@ async def overshoot_video_websocket(websocket: WebSocket):
                                 "duration": end_time - action_info.get("start_time", end_time)
                             }
                         )
-                        logger.info(f"[Overshoot Relay] Action ENDED: {action_name} at {end_time}")
+                        print(f"[Overshoot Relay] Action ENDED: {action_name} at {end_time}")
                         store.add(action)
 
             except Exception as e:
