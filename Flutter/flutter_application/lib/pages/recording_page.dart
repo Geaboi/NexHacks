@@ -175,7 +175,7 @@ class _RecordingPageState extends ConsumerState<RecordingPage> {
       // (10 * 0.3 * 10.0) / 1.0 = 30 frames per clip (max allowed, 10s window)
       final config = StreamConfig(
         prompt:
-            'Analyze the physical therapy exercise form. Describe the movement, body position, and any form issues.',
+            'Choose an exercise being performed by the user from ["Arm Flex", "Neck Flex", "Knee Raise", and "None"]. Do not return any output other than these options.',
         model: 'gemini-2.0-flash',
         backend: 'gemini',
         samplingRatio: 0.3, // Sample 30% of frames to fit 10s window in constraint
