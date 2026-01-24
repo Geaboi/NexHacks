@@ -205,16 +205,17 @@ class _RecordingPageState extends ConsumerState<RecordingPage> {
         _isAnalysisAvailable = wsConnected;
       });
 
+      // Capture the video start timestamp
+      _videoStartTimeUtc = DateTime.now().toUtc().millisecondsSinceEpoch;
+
+      // Start a new analysis session BEFORE setting stream ID
+      // (startSession creates a new state, so setStreamId must come after)
+      ref.read(frameAnalysisProvider.notifier).startSession(_videoStartTimeUtc!);
+
       // Store stream ID if available for detected actions retrieval
       if (wsConnected && _frameStreamingService.streamId != null) {
         ref.read(frameAnalysisProvider.notifier).setStreamId(_frameStreamingService.streamId!);
       }
-
-      // Capture the video start timestamp
-      _videoStartTimeUtc = DateTime.now().toUtc().millisecondsSinceEpoch;
-
-      // Start a new analysis session
-      ref.read(frameAnalysisProvider.notifier).startSession(_videoStartTimeUtc!);
 
       // Start video recording if enabled
       if (_enableVideoRecording) {

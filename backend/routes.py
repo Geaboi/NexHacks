@@ -426,6 +426,7 @@ async def process_video_to_angles(
         detected_actions_result = []
         if stream_id:
             logger.info(f"Looking for actions for stream_id: {stream_id}")
+            logger.info(f"ACTION_STORES currently has {len(ACTION_STORES)} entries: {list(ACTION_STORES.keys())}")
             store = ACTION_STORES.get(stream_id)
             if store:
                 actions = store.get_actions()
@@ -793,11 +794,12 @@ async def overshoot_video_websocket(websocket: WebSocket):
         )
 
         stream_id = await relay.start()
-        
+
         # Register store
         ACTION_STORES[stream_id] = store
-        
+
         logger.info(f"[Overshoot WS] Stream started: {stream_id}")
+        logger.info(f"[Overshoot WS] ACTION_STORES now has {len(ACTION_STORES)} entries: {list(ACTION_STORES.keys())}")
         await websocket.send_json({"type": "ready", "stream_id": stream_id})
         await websocket.send_json({"type": "connected", "message": "Connected to Overshoot"})
 
@@ -878,15 +880,18 @@ async def overshoot_video_websocket(websocket: WebSocket):
         except Exception:
             pass
     finally:
+        logger.info(f"[Overshoot WS] WebSocket finally block - relay exists: {relay is not None}")
         if relay:
+            logger.info(f"[Overshoot WS] Stopping relay, stream_id was: {stream_id if 'stream_id' in dir() else 'unknown'}")
+            logger.info(f"[Overshoot WS] ACTION_STORES before cleanup: {list(ACTION_STORES.keys())}")
             await relay.stop()
-            
+
             # Clean up store (keep it for a bit? or delete immediately?
             # User workflow implies process_video_to_angles is called AFTER stream?
             # If process_video_to_angles is called simultaneously or shortly after, we should keep it.
             # But we need a cleanup policy. For now, let's NOT delete it immediately so the next call can find it.
             # Ideally we'd have a timeout or explicit cleanup.)
-            pass
+            logger.info(f"[Overshoot WS] ACTION_STORES after relay.stop(): {list(ACTION_STORES.keys())}")
             
         try:
             await websocket.close()
