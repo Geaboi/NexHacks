@@ -32,6 +32,7 @@ class _RecordingPageState extends ConsumerState<RecordingPage> {
   Timer? _recordingTimer;
   String? _latestInferenceResult;
   bool _isWaitingForResults = false;
+  bool _hasCriticalError = false;
   int _framesSent =
       0; // Keeping track for UI feedback, though handled internally by WebRTC mostly
 
@@ -92,6 +93,9 @@ class _RecordingPageState extends ConsumerState<RecordingPage> {
       message,
     ) {
       if (mounted) {
+        if (message.contains("too short") || message.contains("failed")) {
+          _hasCriticalError = true;
+        }
         // Show as a warning/info snackbar
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -112,7 +116,19 @@ class _RecordingPageState extends ConsumerState<RecordingPage> {
           ref.read(frameAnalysisProvider.notifier).markSessionComplete();
           if (mounted) {
             setState(() => _isWaitingForResults = false);
-            _navigateToReview();
+
+            // Only navigate if we have a valid stream ID and no critical error
+            if (!_hasCriticalError && _frameStreamingService.streamId != null) {
+              _navigateToReview();
+            } else {
+              debugPrint(
+                "[RecordingPage] Navigation blocked: Error=$_hasCriticalError, StreamID=${_frameStreamingService.streamId}",
+              );
+              if (!_hasCriticalError &&
+                  _frameStreamingService.streamId == null) {
+                _showErrorSnackBar("Session setup failed. Please try again.");
+              }
+            }
           }
         });
   }
@@ -172,6 +188,7 @@ class _RecordingPageState extends ConsumerState<RecordingPage> {
         _isRecording = true;
         _isStreamingFrames = true;
         _recordingSeconds = 0;
+        _hasCriticalError = false;
       });
 
       _recordingTimer = Timer.periodic(const Duration(seconds: 1), (timer) {

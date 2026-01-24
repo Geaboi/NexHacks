@@ -61,6 +61,26 @@ from overshoot import (
 
 logger = logging.getLogger(__name__)
 
+# Suppress annoying aioice/asyncio errors on shutdown
+def custom_exception_handler(loop, context):
+    msg = context.get("message")
+    exception = context.get("exception")
+    if isinstance(exception, AttributeError) and "'NoneType' object has no attribute 'sendto'" in str(exception):
+        return
+    if isinstance(exception, AttributeError) and "'NoneType' object has no attribute 'call_exception_handler'" in str(exception):
+        return
+    # Delegate to default handler
+    loop.default_exception_handler(context)
+
+# Apply global exception handler on startup if possible, 
+# but FastAPI manages the loop. We can try to set it in a lifespan event or just globally for current loop if running.
+try:
+    loop = asyncio.get_running_loop()
+    loop.set_exception_handler(custom_exception_handler)
+except RuntimeError:
+    pass # No loop running yet
+
+
 
 # ============================================================================
 # Health Router
