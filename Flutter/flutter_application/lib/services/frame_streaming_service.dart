@@ -229,7 +229,10 @@ class FrameStreamingService {
     }
 
     _isStreaming = true;
-    print('[FrameStreaming] 🎬 Starting WebRTC negotiation...');
+    _streamStartTime = DateTime.now().toUtc().millisecondsSinceEpoch;
+    print(
+      '[FrameStreaming] 🎬 Starting WebRTC negotiation at $_streamStartTime...',
+    );
 
     try {
       print('[FrameStreaming] 🔧 Creating PeerConnection...');
@@ -374,18 +377,26 @@ class FrameStreamingService {
     }
   }
 
+  int _streamStartTime = 0;
+
   void _handleInferenceResult(Map<String, dynamic> data) {
     final resultStr = data['result'] as String?;
-    int timestampMs = 0;
+    double relativeTimestampSec = 0.0;
+
     if (data['timestamp'] is num) {
-      timestampMs = (data['timestamp'] * 1000).toInt();
+      relativeTimestampSec = (data['timestamp'] as num).toDouble();
     }
 
     if (resultStr != null) {
+      // Calculate absolute UTC timestamp: StartTime + RelativeTime
+      // This aligns with FrameAnalysisProvider which subtracts VideoStartTime from this value
+      final timestampUtc =
+          _streamStartTime + (relativeTimestampSec * 1000).toInt();
+
       _resultsController.add(
         InferenceResult(
-          timestampUtc: timestampMs > 0
-              ? timestampMs
+          timestampUtc: timestampUtc > 0
+              ? timestampUtc
               : DateTime.now().millisecondsSinceEpoch,
           result: resultStr,
         ),

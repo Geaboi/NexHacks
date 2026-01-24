@@ -6,6 +6,7 @@ import logging
 import struct
 import time
 from unittest import result
+from fastapi.websockets import WebSocketState
 import requests
 import dotenv
 from fastapi import APIRouter, HTTPException, UploadFile, File, Query, Form, WebSocket, WebSocketDisconnect
@@ -13,6 +14,7 @@ from fastapi.responses import FileResponse
 import cv2
 import av
 from aiortc import RTCPeerConnection, RTCSessionDescription, RTCIceCandidate, VideoStreamTrack
+from aiortc.sdp import candidate_from_sdp
 from aiortc.contrib.media import MediaRecorder
 
 # Load environment variables from .env file
@@ -618,22 +620,28 @@ class RelayProxyTrack(VideoStreamTrack):
         self.counter = 0
 
     async def recv(self):
-        frame = await self.track.recv()
+        try:
+            frame = await self.track.recv()
+        except Exception as e:
+            # Track ended or error
+            self.stop() 
+            raise e
         
         # Forward to relay (subsampled)
         if self.counter % self.subsample == 0:
-            try:
-                # Convert AVFrame to numpy RGB24 for Overshoot
-                # This might be expensive, so we do it only for sampled frames
-                img = frame.to_ndarray(format="rgb24")
-                
-                # Calculate timestamp in seconds
-                timestamp = float(frame.pts * frame.time_base) if (frame.pts is not None and frame.time_base is not None) else None
-                
-                # Push to relay
-                self.relay.push_frame(img, timestamp)
-            except Exception as e:
-                logger.error(f"RelayProxyTrack error processing frame: {e}")
+            if self.relay and self.relay.is_running:
+                try:
+                    # Convert AVFrame to numpy RGB24 for Overshoot
+                    # This might be expensive, so we do it only for sampled frames
+                    img = frame.to_ndarray(format="rgb24")
+                    
+                    # Calculate timestamp in seconds
+                    timestamp = float(frame.pts * frame.time_base) if (frame.pts is not None and frame.time_base is not None) else None
+                    
+                    # Push to relay
+                    self.relay.push_frame(img, timestamp)
+                except Exception as e:
+                    logger.error(f"RelayProxyTrack error processing frame: {e}")
 
         self.counter += 1
         return frame
@@ -674,9 +682,12 @@ async def overshoot_video_websocket(websocket: WebSocket):
         height = config_msg.get("height", 480)
 
         # Initialize Relay
-        # Note: We don't start it yet, we wait for the WebRTC offer or connection
         store = ActionStore()
-        action_stores_lock = asyncio.Lock() # Local lock not needed since global dict is sync/async safe enough for Python GIL, but let's be safe later
+        # action_stores_lock is global, but used locally here? No, declared global at module level but referenced?
+        # Actually line 687 in original file said `action_stores_lock = asyncio.Lock()`.
+        # This seems to be a local variable shadowing a global if there is one, or just a local lock?
+        # The global `action_stores` is used.
+        # Let's keep it simple.
         
         # Helper to send results back
         async def send_result(result: dict):
@@ -687,18 +698,16 @@ async def overshoot_video_websocket(websocket: WebSocket):
                 elif result.get("type") == "error":
                      print(f"[WebRTC] ❌ Error from Overshoot: {result.get('error')}")
 
-                await websocket.send_json(result)
+                if websocket.client_state == WebSocketState.CONNECTED:
+                    await websocket.send_json(result)
+                else:
+                    # Connection closed, ignore
+                    pass
                 
                 # Action Detection Logic Integration
                 if result.get("type") == "inference":
-                    # (Existing logic for action detection...)
-                    # For brevity, let's reuse the logic but encapsulated or just inline it briefly 
-                    # since we can't easily refactor it out right now in this replacement block.
-                    # Ideally we move this logic to a helper, but I will strip it down to essential correct logic.
-                    
                     inference_data = result.get("result", {})
-                    # ... [Action Parsing Logic] ...
-                    # Simplified for this block:
+                    # Parse JSON string if needed
                     if isinstance(inference_data, str):
                         try:
                             parsed = json.loads(inference_data)
@@ -713,10 +722,9 @@ async def overshoot_video_websocket(websocket: WebSocket):
                     
                     for action_data in detected_list:
                          if action_data.get("detected") and action_data.get("confidence", 0) > 0.6:
-                             # Simplified ActionStore add
+                             import time
                              ts = result.get("timestamp", time.time())
                              # Estimate local frame number (approximate)
-                             # Note: This assumes timestamp is in seconds from start
                              frame_num = int(ts * fps) if isinstance(ts, (int, float)) and ts > 0 else 0
                              
                              store.add(DetectedAction(
@@ -725,10 +733,14 @@ async def overshoot_video_websocket(websocket: WebSocket):
                                  frame_number=frame_num,
                                  confidence=action_data.get("confidence", 0.8),
                                  metadata={"raw": str(action_data)}
-                             ))
+                             )) 
 
             except Exception as e:
-                logger.error(f"Send result error: {e}")
+                # Swallow errors if we are shutting down or socket is closed
+                if "websocket.send" in str(e) or "closed" in str(e):
+                    pass
+                else:
+                    logger.error(f"Send result error: {e}")
 
         relay = OvershootStreamRelay(
             api_url=_overshoot_api_url(),
@@ -783,7 +795,7 @@ async def overshoot_video_websocket(websocket: WebSocket):
             if track.kind == "video":
                 print(f"[WebRTC] Video track received: {track.kind}")
                 # Create proxy track
-                proxy = RelayProxyTrack(track, relay, subsample=3) # Assume 30fps input -> 10fps relay
+                proxy = RelayProxyTrack(track, relay, subsample=1) # 30fps input -> 30fps relay (let Overshoot handle sampling)
                 recorder.addTrack(proxy)
 
         @pc.on("connectionstatechange")
@@ -817,11 +829,14 @@ async def overshoot_video_websocket(websocket: WebSocket):
                     })
                 
                 elif msg_type == "candidate":
-                    candidate = RTCIceCandidate(
-                        candidate=msg["candidate"], 
-                        sdpMid=msg["sdpMid"], 
-                        sdpMLineIndex=msg["sdpMLineIndex"]
-                    )
+                    cand_str = msg["candidate"]
+                    if cand_str.startswith("candidate:"):
+                        cand_str = cand_str.split(":", 1)[1].strip()
+                    
+                    candidate = candidate_from_sdp(cand_str)
+                    candidate.sdpMid = msg["sdpMid"]
+                    candidate.sdpMLineIndex = msg["sdpMLineIndex"]
+                    
                     await pc.addIceCandidate(candidate)
                     
                 elif msg_type == "stop":
@@ -829,24 +844,55 @@ async def overshoot_video_websocket(websocket: WebSocket):
                 
                 elif msg_type == "update_prompt":
                      await relay.update_prompt(msg["prompt"])
-
+                     
             except Exception as e:
-                logger.error(f"WebSocket message error: {e}")
+                logger.error(f"Error handling message: {e}")
+                # Don't break loop on minor errors, but maybe on critical ones?
+                # For now log and continue
+                pass
 
     except WebSocketDisconnect:
         print("[WebRTC] Client disconnected")
     except Exception as e:
-        logger.exception(f"WebRTC Error: {e}")
-        await websocket.send_json({"type": "error", "error": str(e)})
+        print(f"WebRTC Error: {e}")
+        try:
+            if websocket.client_state == WebSocketState.CONNECTED:
+                await websocket.send_json({"type": "error", "error": str(e)})
+        except: pass
     finally:
         # Cleanup
-        if recorder:
-            await recorder.stop()
-        if pc:
-            await pc.close()
-        if relay:
-            await relay.stop()
+        print("[WebRTC] 🧹 Cleaning up resources...")
         
-        # Don't delete temp_video_path yet, needed for processing!
-        # Don't delete action_stores[stream_id] yet!
-        # stream_videos[stream_id] is kept
+        # 1. Stop Relay
+        if relay:
+            try:
+                await relay.stop()
+                print("[WebRTC] 🛑 Relay stopped")
+            except Exception as e:
+                logger.error(f"[WebRTC] ⚠️ Relay stop error: {e}")
+
+        # 2. Stop Proxy Tracks
+        if pc:
+            for transceiver in pc.getTransceivers():
+                if transceiver.sender and transceiver.sender.track and hasattr(transceiver.sender.track, "stop"):
+                    try:
+                        print(f"[WebRTC] 🛑 Stopping track: {transceiver.sender.track.kind}")
+                        transceiver.sender.track.stop()
+                    except: pass
+
+        # 3. Stop Recorder
+        if recorder:
+            try:
+                await recorder.stop()
+                print("[WebRTC] ⏹️ Recorder stopped")
+            except Exception as e:
+                logger.error(f"[WebRTC] ⚠️ Recorder stop failed: {e}")
+                print(f"[WebRTC] ⚠️ Recorder stop failed (check if video is valid): {e}")
+
+        # 4. Close PeerConnection
+        if pc:
+            try:
+                await pc.close()
+                print("[WebRTC] 🔌 PeerConnection closed")
+            except Exception as e:
+                logger.error(f"[WebRTC] PeerConnection close error: {e}")
