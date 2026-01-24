@@ -39,6 +39,7 @@ class _RecordingPageState extends ConsumerState<RecordingPage> {
   StreamSubscription<InferenceResult>? _resultsSubscription;
   StreamSubscription<void>? _allResultsSubscription;
   StreamSubscription<bool>? _connectionSubscription;
+  StreamSubscription<String>? _warningSubscription;
 
   @override
   void initState() {
@@ -87,6 +88,21 @@ class _RecordingPageState extends ConsumerState<RecordingPage> {
       }
     });
 
+    _warningSubscription = _frameStreamingService.warningStream.listen((
+      message,
+    ) {
+      if (mounted) {
+        // Show as a warning/info snackbar
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(message),
+            backgroundColor: Colors.orange,
+            duration: const Duration(seconds: 3),
+          ),
+        );
+      }
+    });
+
     _allResultsReceivedControllerListener();
   }
 
@@ -107,6 +123,7 @@ class _RecordingPageState extends ConsumerState<RecordingPage> {
     _resultsSubscription?.cancel();
     _allResultsSubscription?.cancel();
     _connectionSubscription?.cancel();
+    _warningSubscription?.cancel();
     _localRenderer.dispose();
     _frameStreamingService.dispose();
     SystemChrome.setPreferredOrientations([

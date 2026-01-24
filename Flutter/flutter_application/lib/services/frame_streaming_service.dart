@@ -83,11 +83,14 @@ class FrameStreamingService {
       StreamController<bool>.broadcast();
   final StreamController<void> _allResultsReceivedController =
       StreamController<void>.broadcast();
+  final StreamController<String> _warningController =
+      StreamController<String>.broadcast();
 
   Stream<InferenceResult> get resultsStream => _resultsController.stream;
   Stream<bool> get connectionStream => _connectionController.stream;
   Stream<void> get allResultsReceivedStream =>
       _allResultsReceivedController.stream;
+  Stream<String> get warningStream => _warningController.stream;
 
   // Pending frames is less relevant in WebRTC as it's continuous
   int get pendingFrameCount => 0;
@@ -373,6 +376,16 @@ class FrameStreamingService {
           _handleInferenceResult(data);
           break;
 
+        case 'info':
+          final message = data['message'];
+          final level = data['level'] ?? 'info';
+          print('[FrameStreaming] ℹ️ Info ($level): $message');
+
+          if (level == 'warning' && message != null) {
+            _warningController.add(message);
+          }
+          break;
+
         case 'error':
           print('[FrameStreaming] ❌ Server Error: ${data['error']}');
           _resultsController.add(
@@ -431,6 +444,7 @@ class FrameStreamingService {
     _resultsController.close();
     _connectionController.close();
     _allResultsReceivedController.close();
+    _warningController.close();
     _wsSubscription?.cancel();
     _wsChannel?.sink.close();
   }

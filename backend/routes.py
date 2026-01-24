@@ -868,6 +868,21 @@ async def overshoot_video_websocket(websocket: WebSocket):
         # Cleanup
         print("[WebRTC] 🧹 Cleaning up resources...")
 
+        # CHECK FOR SHORT SESSION
+        if stream_id is None:
+            msg = "Recording session ended before stream could be established (too short)."
+            print(f"[WebRTC] ⚠️ {msg}")
+            try:
+                if websocket.client_state == WebSocketState.CONNECTED:
+                    # Send info message to client with warning level
+                    await websocket.send_json({
+                        "type": "info", 
+                        "message": "Recording session too short", 
+                        "level": "warning"
+                    })
+            except Exception as e:
+                logger.warning(f"Failed to send short session warning: {e}")
+
         # 1. Stop Recorder
         if recorder:
             try:
