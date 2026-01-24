@@ -862,8 +862,19 @@ async def overshoot_video_websocket(websocket: WebSocket):
     finally:
         # Cleanup
         print("[WebRTC] 🧹 Cleaning up resources...")
-        
-        # 1. Stop Relay
+
+        # 1. Stop Recorder (Stop this FIRST to finalize file while sources are alive)
+        if recorder:
+            try:
+                await recorder.stop()
+                print("[WebRTC] ⏹️ Recorder stopped")
+            except Exception as e:
+                # [Errno 22] Invalid argument can happen if handle is already bad, usually safe to ignore if we just want to close
+                logger.error(f"[WebRTC] ⚠️ Recorder stop failed: {e}")
+            finally:
+                recorder = None
+
+        # 2. Stop Relay
         if relay:
             try:
                 await relay.stop()
@@ -871,27 +882,17 @@ async def overshoot_video_websocket(websocket: WebSocket):
             except Exception as e:
                 logger.error(f"[WebRTC] ⚠️ Relay stop error: {e}")
 
-        # 2. Stop Proxy Tracks
-        if pc:
-            for transceiver in pc.getTransceivers():
-                if transceiver.sender and transceiver.sender.track and hasattr(transceiver.sender.track, "stop"):
-                    try:
-                        print(f"[WebRTC] 🛑 Stopping track: {transceiver.sender.track.kind}")
-                        transceiver.sender.track.stop()
-                    except: pass
-
-        # 3. Stop Recorder
-        if recorder:
-            try:
-                await recorder.stop()
-                print("[WebRTC] ⏹️ Recorder stopped")
-            except Exception as e:
-                logger.error(f"[WebRTC] ⚠️ Recorder stop failed: {e}")
-                print(f"[WebRTC] ⚠️ Recorder stop failed (check if video is valid): {e}")
-
-        # 4. Close PeerConnection
+        # 3. Stop Proxy Tracks & PC
         if pc:
             try:
+                # Stop transceivers
+                for transceiver in pc.getTransceivers():
+                    if transceiver.sender and transceiver.sender.track and hasattr(transceiver.sender.track, "stop"):
+                        try:
+                           transceiver.sender.track.stop()
+                        except: pass
+                
+                # Close PC
                 await pc.close()
                 print("[WebRTC] 🔌 PeerConnection closed")
             except Exception as e:
