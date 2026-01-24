@@ -18,6 +18,7 @@ class AnalyticsResponse {
   detectedActions; // Detected action segments from Overshoot
   final bool success;
   final String? errorMessage;
+  final Map<String, dynamic>? debugStats; // Alignment debug info
 
   const AnalyticsResponse({
     this.processedVideoPath,
@@ -29,6 +30,7 @@ class AnalyticsResponse {
     this.detectedActions = const [],
     this.success = true,
     this.errorMessage,
+    this.debugStats,
   });
 
   factory AnalyticsResponse.fromJson(
@@ -58,6 +60,12 @@ class AnalyticsResponse {
           .toList();
     }
 
+    // Parse debug_stats
+    Map<String, dynamic>? debugStats;
+    if (json.containsKey('debug_stats') && json['debug_stats'] != null) {
+      debugStats = json['debug_stats'] as Map<String, dynamic>;
+    }
+
     // Parse joint_index
     int? jointIndex = json['joint_index'] as int?;
 
@@ -81,6 +89,7 @@ class AnalyticsResponse {
       anomalousIds: anomalousIds,
       detectedActions: detectedActions,
       success: true,
+      debugStats: debugStats,
     );
   }
 

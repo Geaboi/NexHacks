@@ -1126,6 +1126,32 @@ class _AnalyticsPageState extends ConsumerState<AnalyticsPage> {
                   const SizedBox(height: 16),
                   Text('Joint Index Used: $_usedJointIndex'),
                 ],
+
+                // Alignment Debug Section
+                if (_response?.debugStats != null) ...[
+                  const Divider(height: 32),
+                  const Text(
+                    'Signal Alignment (IMU vs CV)',
+                    style: TextStyle(fontWeight: FontWeight.bold),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    'Offset Applied: ${_response!.debugStats!['offset_ms']} ms',
+                  ),
+                  Text(
+                    'Max Correlation: ${_response!.debugStats!['max_correlation']?.toStringAsFixed(3)}',
+                  ),
+                  const SizedBox(height: 16),
+                  SizedBox(height: 200, child: _buildAlignmentDebugChart()),
+                  const SizedBox(height: 8),
+                  Row(
+                    children: [
+                      _LegendItem(color: Colors.green, label: 'IMU Velocity'),
+                      const SizedBox(width: 16),
+                      _LegendItem(color: Colors.red, label: 'CV Velocity'),
+                    ],
+                  ),
+                ],
               ],
             ),
           ),
@@ -1134,6 +1160,54 @@ class _AnalyticsPageState extends ConsumerState<AnalyticsPage> {
           TextButton(
             onPressed: () => Navigator.pop(context),
             child: const Text('Close'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildAlignmentDebugChart() {
+    final stats = _response?.debugStats;
+    if (stats == null) return const SizedBox();
+
+    final imuTrace = List<num>.from(
+      stats['imu_trace'] ?? [],
+    ).map((e) => e.toDouble()).toList();
+    final cvTrace = List<num>.from(
+      stats['cv_trace'] ?? [],
+    ).map((e) => e.toDouble()).toList();
+    final timeGrid = List<num>.from(
+      stats['time_grid'] ?? [],
+    ).map((e) => e.toDouble()).toList();
+
+    if (imuTrace.isEmpty || cvTrace.isEmpty)
+      return const Center(child: Text("No alignment traces"));
+
+    final imuSpots = <FlSpot>[];
+    final cvSpots = <FlSpot>[];
+
+    for (int i = 0; i < timeGrid.length; i++) {
+      if (i < imuTrace.length) imuSpots.add(FlSpot(timeGrid[i], imuTrace[i]));
+      if (i < cvTrace.length) cvSpots.add(FlSpot(timeGrid[i], cvTrace[i]));
+    }
+
+    return LineChart(
+      LineChartData(
+        gridData: const FlGridData(show: true),
+        titlesData: const FlTitlesData(show: false),
+        borderData: FlBorderData(show: true),
+        lineBarsData: [
+          LineChartBarData(
+            spots: imuSpots,
+            color: Colors.green,
+            dotData: const FlDotData(show: false),
+            barWidth: 2,
+          ),
+          LineChartBarData(
+            spots: cvSpots,
+            color: Colors.red,
+            dotData: const FlDotData(show: false),
+            barWidth: 2,
           ),
         ],
       ),
@@ -1492,10 +1566,15 @@ class ActionSegment {
     // Track active start events: {action_label: start_action}
     final activeStarts = <String, DetectedAction>{};
 
-    print('DEBUG: Processing ${sorted.length} detected actions for segmentation');
+    print(
+      'DEBUG: Processing ${sorted.length} detected actions for segmentation',
+    );
 
-    bool hasExplicitEvents = sorted.any((a) => 
-      a.metadata != null && (a.metadata!['event_type'] == 'started' || a.metadata!['event_type'] == 'ended')
+    bool hasExplicitEvents = sorted.any(
+      (a) =>
+          a.metadata != null &&
+          (a.metadata!['event_type'] == 'started' ||
+              a.metadata!['event_type'] == 'ended'),
     );
 
     print('DEBUG: Explicit start/end events found: $hasExplicitEvents');
@@ -1508,20 +1587,28 @@ class ActionSegment {
 
         if (type == 'started') {
           activeStarts[label] = action;
-          print('DEBUG: Found START for "$label" at frame ${action.frameNumber}');
+          print(
+            'DEBUG: Found START for "$label" at frame ${action.frameNumber}',
+          );
         } else if (type == 'ended') {
           final startAction = activeStarts.remove(label);
           if (startAction != null) {
-            print('DEBUG: Found END for "$label" at frame ${action.frameNumber} (paired with start at ${startAction.frameNumber})');
+            print(
+              'DEBUG: Found END for "$label" at frame ${action.frameNumber} (paired with start at ${startAction.frameNumber})',
+            );
             // Found a complete pair
-            segments.add(ActionSegment(
-              startFrame: startAction.frameNumber,
-              endFrame: action.frameNumber,
-              label: label,
-              confidence: (startAction.confidence + action.confidence) / 2,
-            ));
+            segments.add(
+              ActionSegment(
+                startFrame: startAction.frameNumber,
+                endFrame: action.frameNumber,
+                label: label,
+                confidence: (startAction.confidence + action.confidence) / 2,
+              ),
+            );
           } else {
-             print('DEBUG: Found END for "$label" at frame ${action.frameNumber} but no start found (orphaned)');
+            print(
+              'DEBUG: Found END for "$label" at frame ${action.frameNumber} but no start found (orphaned)',
+            );
           }
         }
       }

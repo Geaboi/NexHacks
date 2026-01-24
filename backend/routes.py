@@ -358,15 +358,7 @@ async def process_video_to_angles(
     stream_id: str = Form(None, description="Stream ID to retrieve detected actions from")
 ):
     print(stream_id)
-    """Process video through RTMpose and run anomaly detection via Woodwide.
-
-    Flow:
-    1. Process video to extract joint angles
-    2. Upload angles CSV as a dataset
-    3. Run anomaly detection inference on the dataset
-
-    Returns the angle CSV, dataset info, and anomaly detection results.
-    """
+    """Process video through RTMpose and run anomaly detection via Woodwide."""
     try:
         if video:
             video_bytes = await video.read()
@@ -396,16 +388,18 @@ async def process_video_to_angles(
                 parsed_sensor_data = None
 
         # Process video to get joint angles and CSV
-        # handler.process_video now returns raw_angles and imu_angles too
         angles = []
         raw_angles = []
         imu_angles = []
         overlay_video_path = None
+        alignment_debug = {}
         
         # Check if video bytes are valid (not empty)
         if video_bytes and len(video_bytes) > 100:
              try:
-                angles, raw_angles, imu_angles, overlay_video_path, csv_path = handler.process_video(
+                # Unpack 6 values including debug_stats
+                # (angles, raw_angles, imu_angles, output_2d_video_path, csv_path, alignment_debug)
+                angles, raw_angles, imu_angles, overlay_video_path, csv_path, alignment_debug = handler.process_video(
                     video_bytes, 
                     parsed_sensor_data, 
                     joint_index=joint_index
@@ -439,21 +433,15 @@ async def process_video_to_angles(
             "imu_angles": serializable_imu_angles,
             "joint_index": joint_index,
             "overlay_video_path": overlay_video_path,
+            "debug_stats": alignment_debug, # Return debug stats
         }
 
         # Add detected actions if stream_id is provided
         detected_actions_result = []
         if stream_id:
-            print(f"Looking for actions for stream_id: {repr(stream_id)}")  # Use repr()!
-            print(f"ACTION_STORES keys: {[repr(k) for k in action_stores.keys()]}")
-            print(f"Exact match test: {stream_id in action_stores}")
-            print(f"Stripped match test: {stream_id.strip() in action_stores}")
-
-            print(action_stores[stream_id])
             store = action_stores[stream_id] if stream_id in action_stores else None
             if store:
                 actions = store.get_actions()
-                print(f"Found {len(actions)} actions for stream {stream_id}")
                 detected_actions_result = [
                     {
                         "action": a.action,
@@ -464,7 +452,6 @@ async def process_video_to_angles(
                     }
                     for a in actions
                 ]
-                print(f"[Process Video] Including {len(detected_actions_result)} detected actions in response: {detected_actions_result}")
             else:
                  logger.warning(f"No ActionStore found for stream_id: {stream_id}")
         
