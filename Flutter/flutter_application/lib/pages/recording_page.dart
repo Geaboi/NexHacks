@@ -325,6 +325,7 @@ class _RecordingPageState extends ConsumerState<RecordingPage> {
                         ),
                       ),
                       const SizedBox(width: 40),
+                      // Main Record Button
                       GestureDetector(
                         onTap: _isCameraReady ? _toggleRecording : null,
                         child: Container(
@@ -349,7 +350,21 @@ class _RecordingPageState extends ConsumerState<RecordingPage> {
                           ),
                         ),
                       ),
-                      const SizedBox(width: 80), // Balance spacing
+                      const SizedBox(width: 40),
+
+                      // Flip Camera Button
+                      IconButton(
+                        onPressed: () async {
+                          await _frameStreamingService.switchCamera();
+                          // Mirroring update might be needed if using front camera
+                          setState(() {});
+                        },
+                        icon: const Icon(
+                          Icons.flip_camera_ios,
+                          color: Colors.white,
+                          size: 32,
+                        ),
+                      ),
                     ],
                   ),
                 ],

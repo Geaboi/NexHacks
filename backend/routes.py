@@ -12,7 +12,7 @@ from fastapi import APIRouter, HTTPException, UploadFile, File, Query, Form, Web
 from fastapi.responses import FileResponse
 import cv2
 import av
-from aiortc import RTCPeerConnection, RTCSessionDescription, RTCIceCandidate
+from aiortc import RTCPeerConnection, RTCSessionDescription, RTCIceCandidate, VideoStreamTrack
 from aiortc.contrib.media import MediaRecorder
 
 # Load environment variables from .env file
@@ -668,6 +668,12 @@ async def overshoot_video_websocket(websocket: WebSocket):
         # Helper to send results back
         async def send_result(result: dict):
             try:
+                # Log inference results for debugging
+                if result.get("type") == "inference":
+                    print(f"[WebRTC] 🧠 Inference: {result.get('result')}")
+                elif result.get("type") == "error":
+                     print(f"[WebRTC] ❌ Error from Overshoot: {result.get('error')}")
+
                 await websocket.send_json(result)
                 
                 # Action Detection Logic Integration
