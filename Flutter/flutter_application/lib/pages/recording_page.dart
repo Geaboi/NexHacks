@@ -403,7 +403,11 @@ class _RecordingPageState extends ConsumerState<RecordingPage> {
                       const SizedBox(width: 40),
                       // Main Record Button
                       GestureDetector(
-                        onTap: _isCameraReady ? _toggleRecording : null,
+                        onTap:
+                            (_isCameraReady &&
+                                !(_isRecording && !_hasReceivedFirstInference))
+                            ? _toggleRecording
+                            : null,
                         child: Container(
                           width: 80,
                           height: 80,
