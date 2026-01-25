@@ -262,8 +262,21 @@ class _RecordingPageState extends ConsumerState<RecordingPage> {
         // We might wait for final results here?
         // Since WebRTC is continuous, 'pending frames' isn't synonymous with 'awaiting explicit response'
         // But FrameStreamingService.stopStreaming triggers _allResultsReceivedController.
-      });
-    }
+    });
+
+    // Timeout safety
+    Future.delayed(const Duration(seconds: 5), () {
+        if (mounted && _isWaitingForResults && !_hasCriticalError) {
+             debugPrint("[RecordingPage] Timeout waiting for session end signal.");
+             _showErrorSnackBar("Session timed out.");
+             setState(() {
+                 _isRecording = false;
+                 _isStreamingFrames = false;
+                 _isWaitingForResults = false;
+                 _hasCriticalError = true;
+             });
+        }
+    });
   }
 
   void _finishRecording() => _stopRecording();

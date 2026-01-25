@@ -61,26 +61,6 @@ from overshoot import (
 
 logger = logging.getLogger(__name__)
 
-# Suppress annoying aioice/asyncio errors on shutdown
-def custom_exception_handler(loop, context):
-    msg = context.get("message")
-    exception = context.get("exception")
-    if isinstance(exception, AttributeError) and "'NoneType' object has no attribute 'sendto'" in str(exception):
-        return
-    if isinstance(exception, AttributeError) and "'NoneType' object has no attribute 'call_exception_handler'" in str(exception):
-        return
-    # Delegate to default handler
-    loop.default_exception_handler(context)
-
-# Apply global exception handler on startup if possible, 
-# but FastAPI manages the loop. We can try to set it in a lifespan event or just globally for current loop if running.
-try:
-    loop = asyncio.get_running_loop()
-    loop.set_exception_handler(custom_exception_handler)
-except RuntimeError:
-    pass # No loop running yet
-
-
 
 # ============================================================================
 # Health Router
@@ -884,26 +864,8 @@ async def overshoot_video_websocket(websocket: WebSocket):
             if websocket.client_state == WebSocketState.CONNECTED:
                 await websocket.send_json({"type": "error", "error": str(e)})
         except: pass
-    finally:
-        # Cleanup
-        print("[WebRTC] 🧹 Cleaning up resources...")
 
-        # CHECK FOR SHORT SESSION
-        if stream_id is None:
-            msg = "Recording session ended before stream could be established (too short)."
-            print(f"[WebRTC] ⚠️ {msg}")
-            try:
-                if websocket.client_state == WebSocketState.CONNECTED:
-                    # Send info message to client with warning level
-                    await websocket.send_json({
-                        "type": "info", 
-                        "message": "Recording session too short", 
-                        "level": "warning"
-                    })
-            except Exception as e:
-                logger.warning(f"Failed to send short session warning: {e}")
-
-        # 1. Stop Recorder
+        # 1. Stop Recorder FIRST to ensure file is closed/flushed
         if recorder:
             try:
                 await recorder.stop()
@@ -912,6 +874,41 @@ async def overshoot_video_websocket(websocket: WebSocket):
                 logger.error(f"[WebRTC] ⚠️ Recorder stop failed: {e}")
             finally:
                 recorder = None
+
+        # CHECK FOR SHORT SESSION / FILE VALIDITY
+        has_error = False
+        try:
+            # Check if video file exists and has content
+            if temp_video_path and os.path.exists(temp_video_path):
+                file_size = os.path.getsize(temp_video_path)
+                # < 1KB is suspiciously small for a video, usually just headers
+                if file_size < 1000: 
+                    msg = f"Recording too short (Size: {file_size} bytes)."
+                    print(f"[WebRTC] ⚠️ {msg}")
+                    has_error = True
+                    if websocket.client_state == WebSocketState.CONNECTED:
+                        await websocket.send_json({
+                            "type": "info", 
+                            "message": "Recording too short to process.", 
+                            "level": "warning"
+                        })
+                else:
+                    # Valid session
+                    if websocket.client_state == WebSocketState.CONNECTED:
+                        await websocket.send_json({"type": "session_ended"})
+            else:
+                msg = "Recording file not found."
+                print(f"[WebRTC] ⚠️ {msg}")
+                has_error = True
+                if websocket.client_state == WebSocketState.CONNECTED:
+                     await websocket.send_json({
+                        "type": "info", 
+                        "message": "Recording failed (No video generated).",
+                        "level": "error"
+                    })
+
+        except Exception as e:
+            logger.warning(f"Failed to validate recording or send status: {e}")
 
         # 2. Stop Relay
         if relay:

@@ -317,8 +317,8 @@ class FrameStreamingService {
     if (_isConnected && _wsChannel != null) {
       _wsChannel!.sink.add(jsonEncode({'type': 'stop'}));
     }
-    // Notify completion
-    _allResultsReceivedController.add(null);
+    // DO NOT complete _allResultsReceivedController here.
+    // Wait for "session_ended" message from server.
   }
 
   void _handleMessage(dynamic message) async {
@@ -384,6 +384,11 @@ class FrameStreamingService {
           if (level == 'warning' && message != null) {
             _warningController.add(message);
           }
+          break;
+
+        case 'session_ended':
+          print('[FrameStreaming] 🏁 Session Ended (Valid Video).');
+          _allResultsReceivedController.add(null);
           break;
 
         case 'error':
