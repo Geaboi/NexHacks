@@ -1,40 +1,33 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:typed_data';
-import 'package:flutter/foundation.dart';
+import 'package:flutter_webrtc/flutter_webrtc.dart';
 import 'package:web_socket_channel/io.dart';
+import 'package:flutter/foundation.dart';
 
 /// Configuration for the frame streaming service
-/// Maps to Overshoot API's processing and inference config
 class StreamConfig {
-  // Inference config
   final String prompt;
   final String model;
   final String backend;
   final String? outputSchemaJson;
-
-  // Processing config
   final double samplingRatio;
   final int fps;
   final double clipLengthSeconds;
   final double delaySeconds;
-
-  // Frame dimensions (for RGB24 conversion)
   final int width;
   final int height;
 
   const StreamConfig({
-    this.prompt = 'Describe what you see',
+    this.prompt =
+        'Choose an exercise being performed by the user from ["Arm Flex", "Neck Flex", "Knee Raise", and "None"]. Do not return any output other than these options.',
     this.model = 'gemini-2.0-flash',
     this.backend = 'gemini',
     this.outputSchemaJson,
     this.samplingRatio = 0.3,
-    this.fps = 10, // Default to 10 fps to match camerawesome analysis config
-    // Overshoot constraint: (fps * samplingRatio * clipLength) / delay <= 30
-    // With fps=10, samplingRatio=0.3, clipLength=10.0, delay=1.0:
-    // (10 * 0.3 * 10.0) / 1.0 = 30 frames per clip (max allowed)
-    this.clipLengthSeconds = 10.0, // 10 seconds for full exercise context
-    this.delaySeconds = 1.0, // Inference every 1 second
+    this.fps = 10,
+    this.clipLengthSeconds = 10.0,
+    this.delaySeconds = 1.0,
     this.width = 640,
     this.height = 480,
   });
@@ -58,9 +51,15 @@ class StreamConfig {
   };
 }
 
-/// Service for streaming camera frames to a WebSocket server
+class InferenceResult {
+  final int timestampUtc;
+  final String result;
+  const InferenceResult({required this.timestampUtc, required this.result});
+}
+
+/// Service for streaming camera frames via WebRTC (H.264)
 class FrameStreamingService {
-  // WebSocket Configuration - Update these for your backend
+  // WebSocket Configuration
   static const String _defaultWsUrl =
       'wss://api.mateotaylortest.org/api/overshoot/ws/stream';
 
@@ -72,389 +71,302 @@ class FrameStreamingService {
   String? _streamId;
   StreamConfig _config = const StreamConfig();
 
-  // Frame processing settings
-  int _frameSkipCount = 0;
-  int _frameSkipRate = 1; // Calculated based on camera fps vs desired fps
-  bool _isProcessingFrame =
-      false; // Prevent frame pile-up during async compression
+  // WebRTC
+  RTCPeerConnection? _peerConnection;
+  MediaStream? _localStream;
+  List<RTCIceCandidate> _candidateQueue = [];
 
-  // Track pending frames by timestamp (frames sent but awaiting response)
-  final Set<int> _pendingFrameTimestamps = {};
-
-  // Callback for when a frame is captured from camera (ALL frames)
-  final StreamController<int> _frameCapturedController =
-      StreamController<int>.broadcast();
-
-  // Callback for when a frame is sent to WebSocket (subset of captured frames)
-  final StreamController<int> _frameSentController =
-      StreamController<int>.broadcast();
-
-  // Callback for receiving inference results from server (timestamp, result)
+  // Callbacks
   final StreamController<InferenceResult> _resultsController =
       StreamController<InferenceResult>.broadcast();
-
-  // Callback for connection state changes
   final StreamController<bool> _connectionController =
       StreamController<bool>.broadcast();
-
-  // Callback for when all pending results are received
   final StreamController<void> _allResultsReceivedController =
       StreamController<void>.broadcast();
 
-  Stream<int> get frameCapturedStream => _frameCapturedController.stream;
-  Stream<int> get frameSentStream => _frameSentController.stream;
   Stream<InferenceResult> get resultsStream => _resultsController.stream;
   Stream<bool> get connectionStream => _connectionController.stream;
   Stream<void> get allResultsReceivedStream =>
       _allResultsReceivedController.stream;
-  int get pendingFrameCount => _pendingFrameTimestamps.length;
+
+  // Pending frames is less relevant in WebRTC as it's continuous
+  int get pendingFrameCount => 0;
+
   bool get isConnected => _isConnected;
   bool get isStreaming => _isStreaming;
   bool get isReady => _isReady;
   String? get streamId => _streamId;
+  MediaStream? get localStream => _localStream;
 
-  /// Connect to the WebSocket server and send config
+  /// Initialize Camera and return MediaStream for preview
+  Future<MediaStream?> initializeCamera({bool isFront = false}) async {
+    // Stop existing stream if any
+    if (_localStream != null) {
+      _localStream!.getTracks().forEach((track) => track.stop());
+      _localStream!.dispose();
+      _localStream = null;
+    }
+
+    final Map<String, dynamic> mediaConstraints = {
+      'audio': false,
+      'video': {
+        'mandatory': {
+          'minWidth': '640',
+          'minHeight': '480',
+          'minFrameRate': '30',
+        },
+        'facingMode': isFront ? 'user' : 'environment',
+        'optional': [],
+      },
+    };
+
+    try {
+      _localStream = await navigator.mediaDevices.getUserMedia(
+        mediaConstraints,
+      );
+      print('[FrameStreaming] 📸 Camera initialized (front=$isFront)');
+
+      // Update peer connection if streaming
+      if (_isStreaming && _peerConnection != null) {
+        final videoTrack = _localStream!.getVideoTracks().first;
+        final senders = await _peerConnection!.getSenders();
+        // Find the video sender, assuming there's at least one sender and it's for video
+        final videoSender = senders.firstWhere(
+          (s) => s.track?.kind == 'video',
+          orElse: () => senders.first,
+        );
+        await videoSender.replaceTrack(videoTrack);
+      }
+
+      return _localStream;
+    } catch (e) {
+      print('[FrameStreaming] ❌ Camera initialization failed: $e');
+      return null;
+    }
+  }
+
+  /// Switch camera (front/back)
+  Future<MediaStream?> switchCamera() async {
+    if (_localStream == null) return null;
+    try {
+      // Helper functions in flutter_webrtc might vary by version,
+      // but typically we re-initialize user media or use Helper.switchCamera for mobile.
+      // However, Helper.switchCamera works on tracks.
+      // The most robust way is to re-initialize with opposite constraint if Helper doesn't work.
+      // Let's try re-initialization which is safer if we track state.
+
+      // Actually, Helper.switchCamera is much faster on mobile if available.
+      final videoTrack = _localStream!.getVideoTracks().first;
+      await Helper.switchCamera(videoTrack);
+      return _localStream;
+    } catch (e) {
+      print(
+        '[FrameStreaming] ⚠️ Helper.switchCamera failed: $e. Re-initializing...',
+      );
+      // Fallback logic could be added here but for now just log
+      return _localStream;
+    }
+  }
+
+  /// Connect signaling WebSocket
   Future<bool> connect({String? wsUrl, StreamConfig? config}) async {
     if (_isConnected) return true;
-
     _config = config ?? const StreamConfig();
 
     try {
       final url = wsUrl ?? _defaultWsUrl;
-      print('[FrameStreaming] 🔌 Connecting to: $url');
-
-      _wsChannel = IOWebSocketChannel.connect(
-        Uri.parse(url),
-        pingInterval: const Duration(seconds: 10),
-      );
+      print('[FrameStreaming] 🔌 Connecting signaling to: $url');
+      _wsChannel = IOWebSocketChannel.connect(Uri.parse(url));
 
       _wsSubscription = _wsChannel!.stream.listen(
-        (message) {
-          print('[FrameStreaming] 🔔 Stream.listen triggered');
-          _handleMessage(message);
+        (message) => _handleMessage(message),
+        onError: (e) {
+          print('[FrameStreaming] ❌ Signaling error: $e');
+          _handleError(e);
         },
-        onError: (error, stackTrace) {
-          print('[FrameStreaming] 🔔 Stream.listen onError: $error');
-          _handleError(error);
-        },
-        onDone: () {
-          print('[FrameStreaming] 🔔 Stream.listen onDone - connection closed');
-          _handleDone();
-        },
+        onDone: _handleDone,
       );
 
       _isConnected = true;
       _connectionController.add(true);
-
-      // Send config message
       _sendConfig();
-
-      print('[FrameStreaming] ✅ WebSocket connected successfully');
       return true;
     } catch (e) {
-      print('[FrameStreaming] ❌ WebSocket connection failed: $e');
-      _isConnected = false;
-      _connectionController.add(false);
+      print('[FrameStreaming] ❌ Connection failed: $e');
       return false;
     }
   }
 
-  /// Send the initial config message
   void _sendConfig() {
     if (!_isConnected || _wsChannel == null) return;
-
-    final configMap = _config.toJson();
-    final configJson = jsonEncode(configMap);
-    print('[FrameStreaming] 📤 Sending config:');
-    print('[FrameStreaming]   $configJson');
-    _wsChannel!.sink.add(configJson);
+    _wsChannel!.sink.add(jsonEncode(_config.toJson()));
   }
 
-  /// Update the inference prompt
-  void updatePrompt(String newPrompt) {
-    if (!_isConnected || _wsChannel == null) return;
+  /// Start WebRTC Streaming
+  Future<void> startStreaming({int cameraFps = 30}) async {
+    print(
+      '[FrameStreaming] 🚀 startStreaming called. Ready=$_isReady, LocalStream=${_localStream != null}',
+    );
 
-    final message = jsonEncode({'type': 'update_prompt', 'prompt': newPrompt});
-    _wsChannel!.sink.add(message);
-  }
-
-  /// Send stop message to server
-  void sendStop() {
-    if (!_isConnected || _wsChannel == null) return;
-
-    final message = jsonEncode({'type': 'stop'});
-    _wsChannel!.sink.add(message);
-  }
-
-  /// Disconnect from the WebSocket server
-  void disconnect() {
-    if (_isConnected) {
-      sendStop();
+    // Wait for Ready state if not yet ready (up to 5 seconds)
+    if (!_isReady) {
+      print('[FrameStreaming] ⏳ Waiting for signaling Ready state...');
+      for (var i = 0; i < 50; i++) {
+        if (_isReady) break;
+        await Future.delayed(const Duration(milliseconds: 100));
+      }
     }
 
-    _isStreaming = false;
-    _isConnected = false;
-    _isReady = false;
-    _streamId = null;
-    _wsSubscription?.cancel();
-    _wsChannel?.sink.close();
-    _wsChannel = null;
-    _connectionController.add(false);
-  }
+    if (!_isReady || _localStream == null) {
+      print(
+        '[FrameStreaming] ⚠️ Cannot start streaming: Ready=$_isReady, Stream=${_localStream != null}',
+      );
+      return;
+    }
 
-  /// Start streaming frames
-  void startStreaming({int cameraFps = 30}) {
-    if (!_isReady) {
-      print('[FrameStreaming] ⚠️ Cannot start streaming - not ready');
+    if (_isStreaming) {
+      print('[FrameStreaming] ⚠️ Already streaming, ignoring start request.');
       return;
     }
 
     _isStreaming = true;
-    _frameSkipCount = 0;
+    _streamStartTime = DateTime.now().toUtc().millisecondsSinceEpoch;
+    print(
+      '[FrameStreaming] 🎬 Starting WebRTC negotiation at $_streamStartTime...',
+    );
 
-    // Calculate frame skip rate to match desired fps
-    _frameSkipRate = (cameraFps / _config.fps).ceil();
-    if (_frameSkipRate < 1) _frameSkipRate = 1;
+    try {
+      print('[FrameStreaming] 🔧 Creating PeerConnection...');
+      _peerConnection = await createPeerConnection({
+        'iceServers': [
+          {'urls': 'stun:stun.l.google.com:19302'},
+        ],
+        'sdpSemantics': 'unified-plan',
+      });
 
-    print('[FrameStreaming] 🎬 Streaming started (skip rate: $_frameSkipRate)');
+      _peerConnection!.onIceCandidate = (candidate) {
+        final candidateStr = candidate.candidate ?? 'null';
+        print(
+          '[FrameStreaming] 🧊 OnIceCandidate: ${candidateStr.length > 20 ? candidateStr.substring(0, 20) : candidateStr}...',
+        );
+        if (_isConnected && _wsChannel != null) {
+          _wsChannel!.sink.add(
+            jsonEncode({
+              'type': 'candidate',
+              'candidate': candidate.candidate,
+              'sdpMid': candidate.sdpMid,
+              'sdpMLineIndex': candidate.sdpMLineIndex,
+            }),
+          );
+        } else {
+          print('[FrameStreaming] ⚠️ Cannot send candidate: WS not connected');
+        }
+      };
+
+      _peerConnection!.onConnectionState = (state) {
+        print('[FrameStreaming] 🔗 Connection state changed: $state');
+      };
+
+      _peerConnection!.onSignalingState = (state) {
+        print('[FrameStreaming] 🚦 Signaling state changed: $state');
+      };
+
+      _peerConnection!.onIceConnectionState = (state) {
+        print('[FrameStreaming] ❄️ ICE Connection state changed: $state');
+      };
+
+      // Add local stream tracks
+      print('[FrameStreaming] ➕ Adding local tracks...');
+      _localStream!.getTracks().forEach((track) {
+        _peerConnection!.addTrack(track, _localStream!);
+        print(
+          '[FrameStreaming] 📹 Added track: ${track.kind}, id: ${track.id}',
+        );
+      });
+
+      // Create Offer
+      print('[FrameStreaming] 📜 Creating Offer...');
+      RTCSessionDescription offer = await _peerConnection!.createOffer();
+      print('[FrameStreaming] ✅ Offer created. SDP size: ${offer.sdp?.length}');
+
+      print('[FrameStreaming] 💾 Setting Local Description...');
+      await _peerConnection!.setLocalDescription(offer);
+
+      if (_isConnected && _wsChannel != null) {
+        print('[FrameStreaming] 📤 Sending Offer to Signaling Server...');
+        _wsChannel!.sink.add(jsonEncode({'type': 'offer', 'sdp': offer.sdp}));
+      } else {
+        print('[FrameStreaming] ❌ Cannot send offer: WS not connected');
+        _isStreaming = false;
+      }
+    } catch (e) {
+      print('[FrameStreaming] ❌ WebRTC Setup failed: $e');
+      _isStreaming = false;
+    }
   }
 
-  /// Stop streaming frames
   void stopStreaming() {
     _isStreaming = false;
-    sendStop();
-
-    // If no pending frames, signal completion immediately
-    if (_pendingFrameTimestamps.isEmpty) {
-      _allResultsReceivedController.add(null);
+    if (_peerConnection != null) {
+      _peerConnection!.close();
+      _peerConnection = null;
     }
+    if (_isConnected && _wsChannel != null) {
+      _wsChannel!.sink.add(jsonEncode({'type': 'stop'}));
+    }
+    // Notify completion
+    _allResultsReceivedController.add(null);
   }
 
-  /// Check if still waiting for results
-  bool get isWaitingForResults =>
-      !_isStreaming && _pendingFrameTimestamps.isNotEmpty;
-
-  /// Send JPEG bytes to the WebSocket server
-  /// Call this method with pre-encoded JPEG data (e.g., from camerawesome's AnalysisImage.toJpeg())
-  /// Returns true if the frame was sent, false if skipped or not ready
-  bool sendJpegFrame(Uint8List jpegBytes, {int? timestampUtc}) {
-    // Get UTC timestamp for this frame
-    final frameTimestamp =
-        timestampUtc ?? DateTime.now().toUtc().millisecondsSinceEpoch;
-
-    // Notify listeners that a frame was captured
-    _frameCapturedController.add(frameTimestamp);
-
-    // Check if we should send this frame to WebSocket
-    if (!_isConnected || !_isStreaming || !_isReady || _wsChannel == null) {
-      // Debug: log why frame was skipped (only occasionally to avoid spam)
-      if (frameTimestamp % 1000 < 100) {
-        print(
-          '[FrameStreaming] ⏭️ Frame skipped - connected: $_isConnected, streaming: $_isStreaming, ready: $_isReady, channel: ${_wsChannel != null}',
-        );
-      }
-      return false;
-    }
-
-    // Prevent frame pile-up
-    if (_isProcessingFrame) return false;
-    _isProcessingFrame = true;
-
+  void _handleMessage(dynamic message) async {
     try {
-      // Create frame with timestamp header + JPEG data
-      final frameWithTimestamp = _createFrameWithTimestamp(
-        frameTimestamp,
-        jpegBytes,
-      );
-
-      // Track this frame as pending (awaiting server response)
-      _pendingFrameTimestamps.add(frameTimestamp);
-
-      // Send as binary data
-      _wsChannel!.sink.add(frameWithTimestamp);
-
-      // Debug: Print frame sent info (only every 10th frame)
-      if (_pendingFrameTimestamps.length % 10 == 0) {
-        debugPrint(
-          '[FrameStreaming] Frames pending: ${_pendingFrameTimestamps.length}',
-        );
-      }
-
-      // Notify listeners that a frame was sent to WebSocket
-      _frameSentController.add(frameTimestamp);
-
-      return true;
-    } catch (e) {
-      print('[FrameStreaming] ❌ Frame send failed: $e');
-      return false;
-    } finally {
-      _isProcessingFrame = false;
-    }
-  }
-
-  /// Legacy method for backward compatibility - now just notifies listeners
-  /// Use sendJpegFrame instead for sending pre-encoded JPEG frames
-  @Deprecated('Use sendJpegFrame with pre-encoded JPEG bytes instead')
-  void processFrameNotification() {
-    final timestampUtc = DateTime.now().toUtc().millisecondsSinceEpoch;
-    _frameCapturedController.add(timestampUtc);
-  }
-
-  /// Create a frame with timestamp header
-  /// Format: [8 bytes timestamp (little-endian float64)] + [JPEG data]
-  /// Backend expects: struct.unpack('<d', frame_bytes[:8]) - little-endian double
-  Uint8List _createFrameWithTimestamp(int timestampUtc, Uint8List imageData) {
-    final buffer = ByteData(8 + imageData.length);
-
-    // Write timestamp as 64-bit little-endian float (double)
-    // Convert milliseconds to seconds for the backend
-    final timestampSeconds = timestampUtc / 1000.0;
-    buffer.setFloat64(0, timestampSeconds, Endian.little);
-
-    // Create result buffer
-    final result = Uint8List(8 + imageData.length);
-    result.setRange(0, 8, buffer.buffer.asUint8List());
-    result.setRange(8, result.length, imageData);
-
-    return result;
-  }
-
-  /// Send raw RGB24 bytes directly with timestamp
-  void sendRawFrame(Uint8List rgb24Bytes) {
-    if (!_isConnected || !_isStreaming || !_isReady || _wsChannel == null)
-      return;
-
-    try {
-      final timestampUtc = DateTime.now().toUtc().millisecondsSinceEpoch;
-      final frameWithTimestamp = _createFrameWithTimestamp(
-        timestampUtc,
-        rgb24Bytes,
-      );
-
-      _pendingFrameTimestamps.add(timestampUtc);
-      _wsChannel!.sink.add(frameWithTimestamp);
-      _frameSentController.add(timestampUtc);
-      print(
-        '[FrameStreaming] 📤 Frame sent - timestamp: $timestampUtc, pending: ${_pendingFrameTimestamps.length}',
-      );
-    } catch (e) {
-      // Send failed silently
-    }
-  }
-
-  /// Send raw RGB24 bytes with a specific timestamp
-  /// Use this when you have a pre-determined timestamp (e.g., from frame sampling)
-  void sendRawFrameWithTimestamp(Uint8List rgb24Bytes, int timestampUtc) {
-    if (!_isConnected || !_isStreaming || !_isReady || _wsChannel == null) {
-      print(
-        '[FrameStreaming] ⚠️ Cannot send frame - not ready (connected: $_isConnected, streaming: $_isStreaming, ready: $_isReady)',
-      );
-      return;
-    }
-
-    // Skip black/empty frames - check if frame has any non-zero pixels
-    // Sample a few pixels instead of checking all for performance
-    if (rgb24Bytes.isNotEmpty) {
-      bool hasContent = false;
-      final step =
-          rgb24Bytes.length ~/ 100; // Check ~100 evenly distributed pixels
-      for (
-        int i = 0;
-        i < rgb24Bytes.length && !hasContent;
-        i += step.clamp(1, 1000)
-      ) {
-        if (rgb24Bytes[i] > 0) {
-          hasContent = true;
-        }
-      }
-      if (!hasContent) {
-        print('[FrameStreaming] ⚠️ Skipping black/empty frame');
-        return;
-      }
-    }
-
-    try {
-      final frameWithTimestamp = _createFrameWithTimestamp(
-        timestampUtc,
-        rgb24Bytes,
-      );
-
-      _pendingFrameTimestamps.add(timestampUtc);
-      _wsChannel!.sink.add(frameWithTimestamp);
-      _frameSentController.add(timestampUtc);
-
-      // Only log every 10th frame to reduce spam
-      if (_pendingFrameTimestamps.length % 10 == 0) {
-        print(
-          '[FrameStreaming] 📤 Frames sent, pending: ${_pendingFrameTimestamps.length}',
-        );
-      }
-    } catch (e) {
-      print('[FrameStreaming] ❌ Failed to send frame: $e');
-    }
-  }
-
-  /// Get the configured frame dimensions
-  int get configWidth => _config.width;
-  int get configHeight => _config.height;
-
-  /// Handle incoming WebSocket messages
-  ///
-  /// Backend Message Format (from routes.py _listen_overshoot_ws):
-  ///
-  /// 1. Ready message - sent after config received and stream created:
-  ///    {"type": "ready", "stream_id": "<string>"}
-  ///
-  /// 2. Inference result - forwarded from Overshoot with latest frame timestamp:
-  ///    {"type": "inference", "result": "<string>", "timestamp": <int|null>}
-  ///    Note: timestamp is the latest frame timestamp sent by client
-  ///
-  /// 3. Error message:
-  ///    {"type": "error", "message": "<string>"}
-  ///
-  void _handleMessage(dynamic message) {
-    // Always log raw message for debugging
-    print('[FrameStreaming] 📥 RAW MESSAGE RECEIVED:');
-    print('[FrameStreaming]   Type: ${message.runtimeType}');
-    if (message is String) {
-      final preview = message.length > 300
-          ? '${message.substring(0, 300)}...'
-          : message;
-      print('[FrameStreaming]   Content: $preview');
-    } else {
-      print('[FrameStreaming]   Content: $message');
-    }
-
-    try {
-      Map<String, dynamic>? data;
-
-      if (message is String) {
-        data = jsonDecode(message) as Map<String, dynamic>?;
-      } else if (message is Map<String, dynamic>) {
-        // Some WebSocket implementations auto-parse JSON
-        data = message;
-      } else {
-        print(
-          '[FrameStreaming] ⚠️ Unexpected message type: ${message.runtimeType}',
-        );
-        return;
-      }
-
-      if (data == null) {
-        print('[FrameStreaming] ⚠️ Parsed data is null');
-        return;
-      }
-
-      print('[FrameStreaming] 📋 Parsed JSON keys: ${data.keys.toList()}');
-
-      final type = data['type'] as String?;
-      print('[FrameStreaming] 📌 Message type: $type');
+      final data = jsonDecode(message);
+      final type = data['type'];
 
       switch (type) {
         case 'ready':
           _isReady = true;
-          _streamId = data['stream_id'] as String?;
-          print('[FrameStreaming] ✅ WebSocket READY - stream_id: $_streamId');
+          if (data['stream_id'] != null) {
+            _streamId = data['stream_id'];
+            print('[FrameStreaming] ✅ Ready. Stream ID: $_streamId');
+          } else {
+            print('[FrameStreaming] ✅ Ready (Waiting for Stream ID...)');
+            // _streamId remains null or previous value until 'stream_created' arrives
+          }
+          break;
+
+        case 'stream_created':
+          _streamId = data['stream_id'];
+          print('[FrameStreaming] ☁️ Stream Created. ID: $_streamId');
+          break;
+
+        case 'answer':
+          print('[FrameStreaming] 📩 Received Answer');
+          if (_peerConnection != null) {
+            await _peerConnection!.setRemoteDescription(
+              RTCSessionDescription(data['sdp'], 'answer'),
+            );
+            // Flush queued candidates
+            for (var c in _candidateQueue) {
+              await _peerConnection!.addCandidate(c);
+            }
+            _candidateQueue.clear();
+          }
+          break;
+
+        case 'candidate':
+          print('[FrameStreaming] 🧊 Received ICE Candidate');
+          final candidate = RTCIceCandidate(
+            data['candidate'],
+            data['sdpMid'],
+            data['sdpMLineIndex'],
+          );
+          if (_peerConnection != null &&
+              await _peerConnection!.getRemoteDescription() != null) {
+            await _peerConnection!.addCandidate(candidate);
+          } else {
+            _candidateQueue.add(candidate);
+          }
           break;
 
         case 'inference':
@@ -462,150 +374,75 @@ class FrameStreamingService {
           break;
 
         case 'error':
-          // Backend sends 'error' field, not 'message'
-          final error =
-              data['error'] as String? ??
-              data['message'] as String? ??
-              'Unknown error';
-          print('[FrameStreaming] ❌ ERROR from server: $error');
+          print('[FrameStreaming] ❌ Server Error: ${data['error']}');
           _resultsController.add(
             InferenceResult(
-              timestampUtc: DateTime.now().toUtc().millisecondsSinceEpoch,
-              result: 'Error: $error',
+              timestampUtc: DateTime.now().millisecondsSinceEpoch,
+              result: "Error: ${data['error']}",
             ),
           );
           break;
-
-        default:
-          print('[FrameStreaming] ⚠️ Unknown message type: $type');
-          // Try to handle as inference if it has a result field
-          if (data.containsKey('result')) {
-            print(
-              '[FrameStreaming] 🔄 Has result field, treating as inference',
-            );
-            _handleInferenceResult(data);
-          }
       }
-    } catch (e, stackTrace) {
-      print('[FrameStreaming] ❌ Message parsing FAILED:');
-      print('[FrameStreaming]   Error: $e');
-      print('[FrameStreaming]   Stack: $stackTrace');
+    } catch (e) {
+      print('[FrameStreaming] ❌ Msg handle error: $e');
     }
   }
 
-  /// Handle an inference result message from the backend
-  /// Expected format: {"type": "inference", "result": "<string>", "timestamp": <float|null>}
-  /// Note: timestamp from backend is in seconds (float), we store as milliseconds (int)
+  int _streamStartTime = 0;
+
   void _handleInferenceResult(Map<String, dynamic> data) {
-    final result = data['result'] as String?;
+    final resultStr = data['result'] as String?;
+    double relativeTimestampSec = 0.0;
 
-    // Timestamp from backend is in seconds (float), convert to milliseconds
-    int? timestampMs;
-    final tsValue = data['timestamp'];
-    if (tsValue is num) {
-      // Backend returns seconds as float, convert to milliseconds
-      timestampMs = (tsValue.toDouble() * 1000).round();
+    if (data['timestamp'] is num) {
+      relativeTimestampSec = (data['timestamp'] as num).toDouble();
     }
 
-    print('[FrameStreaming] ========== INFERENCE RESULT ==========');
-    print('[FrameStreaming] Timestamp (ms): $timestampMs');
-    print(
-      '[FrameStreaming] Result: ${result != null ? (result.length > 200 ? '${result.substring(0, 200)}...' : result) : 'NULL'}',
-    );
-    print(
-      '[FrameStreaming] Pending frames before: ${_pendingFrameTimestamps.length}',
-    );
-    print('[FrameStreaming] Has listeners: ${_resultsController.hasListener}');
+    if (resultStr != null) {
+      // Calculate absolute UTC timestamp: StartTime + RelativeTime
+      // This aligns with FrameAnalysisProvider which subtracts VideoStartTime from this value
+      final timestampUtc =
+          _streamStartTime + (relativeTimestampSec * 1000).toInt();
 
-    if (result == null) {
-      print('[FrameStreaming] ⚠️ Result is NULL - skipping');
-      return;
-    }
-
-    // Calculate and log end-to-end latency
-    if (timestampMs != null) {
-      final now = DateTime.now().toUtc().millisecondsSinceEpoch;
-      final latency = now - timestampMs;
-      print(
-        '[FrameStreaming] ⏱️ E2E LATENCY: ${latency}ms (Result: "${result.length > 20 ? '${result.substring(0, 20)}...' : result}")',
+      _resultsController.add(
+        InferenceResult(
+          timestampUtc: timestampUtc > 0
+              ? timestampUtc
+              : DateTime.now().millisecondsSinceEpoch,
+          result: resultStr,
+        ),
       );
-    }
-
-    // Remove from pending if timestamp provided
-    if (timestampMs != null) {
-      final removed = _pendingFrameTimestamps.remove(timestampMs);
-      print('[FrameStreaming] Removed timestamp $timestampMs: $removed');
-    } else if (_pendingFrameTimestamps.isNotEmpty) {
-      // Remove oldest pending timestamp if no timestamp in response
-      final oldest = _pendingFrameTimestamps.reduce((a, b) => a < b ? a : b);
-      _pendingFrameTimestamps.remove(oldest);
-      print('[FrameStreaming] Removed oldest timestamp: $oldest');
-    }
-
-    print(
-      '[FrameStreaming] Pending frames after: ${_pendingFrameTimestamps.length}',
-    );
-    print('[FrameStreaming] ======================================');
-
-    // Broadcast the result to listeners
-    _resultsController.add(
-      InferenceResult(
-        timestampUtc:
-            timestampMs ?? DateTime.now().toUtc().millisecondsSinceEpoch,
-        result: result,
-      ),
-    );
-    print('[FrameStreaming] ✅ Result broadcasted to listeners');
-
-    // Check if all results received after stopping
-    if (!_isStreaming && _pendingFrameTimestamps.isEmpty) {
-      print('[FrameStreaming] 🎉 All pending results received!');
-      _allResultsReceivedController.add(null);
     }
   }
 
-  /// Handle WebSocket errors
   void _handleError(dynamic error) {
-    print('[FrameStreaming] ❌ WebSocket error: $error');
     _isConnected = false;
-    _isStreaming = false;
-    _isReady = false;
     _connectionController.add(false);
   }
 
-  /// Handle WebSocket connection closed
   void _handleDone() {
-    print('[FrameStreaming] 🔌 WebSocket connection closed');
     _isConnected = false;
-    _isStreaming = false;
-    _isReady = false;
     _connectionController.add(false);
-    // Clear pending frames and notify so we don't hang waiting for results
-    if (_pendingFrameTimestamps.isNotEmpty) {
-      print(
-        '[FrameStreaming] 🧹 Clearing ${_pendingFrameTimestamps.length} pending frames',
-      );
-      _pendingFrameTimestamps.clear();
-      _allResultsReceivedController.add(null);
-    }
   }
 
-  /// Clean up resources
   void dispose() {
-    disconnect();
-    _frameCapturedController.close();
-    _frameSentController.close();
+    stopStreaming();
+    _localStream?.dispose();
     _resultsController.close();
     _connectionController.close();
     _allResultsReceivedController.close();
-    _pendingFrameTimestamps.clear();
+    _wsSubscription?.cancel();
+    _wsChannel?.sink.close();
   }
-}
 
-/// Represents an inference result from the server
-class InferenceResult {
-  final int timestampUtc;
-  final String result;
+  // Deprecated/Stub methods for compatibility with RecordingPage until updated
+  void updatePrompt(String p) {
+    if (_isConnected && _wsChannel != null) {
+      _wsChannel!.sink.add(jsonEncode({'type': 'update_prompt', 'prompt': p}));
+    }
+  }
 
-  const InferenceResult({required this.timestampUtc, required this.result});
+  bool sendJpegFrame(Uint8List bytes, {int? timestampUtc}) {
+    return false;
+  }
 }

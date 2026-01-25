@@ -81,13 +81,16 @@ class VideoHandler():
         ret, frame = self.cap.read()
         if not ret:
             self.cap.release()
-            os.unlink(self.tfile.name) # Manual cleanup to be safe
             return False, None # return False to indicate end of video
         return ret, frame
     
     def release(self):
         self.cap.release()
-        os.unlink(self.tfile.name) # Cleanup temporary file
+        if os.path.exists(self.tfile.name):
+            try:
+                os.unlink(self.tfile.name) # Cleanup temporary file
+            except PermissionError:
+                pass # access denied/file in use
 
 class RTMPose3DHandler:
 
@@ -97,31 +100,158 @@ class RTMPose3DHandler:
         self.device = device
         self.CONF_THRESHOLD = 0.3
     
-    def process_video(self, video_bytes, sensor_data=None, joint_index=0):
-        """Process video with optional IMU sensor data for Kalman-filtered joint angles.
+    def compute_visual_angular_velocity(self, angles, timestamps_ms, joint_index):
+        """
+        Compute angular velocity from visual joint angles.
         
         Args:
-            video_bytes: Raw video file bytes
-            sensor_data: Optional list of IMU samples from Flutter getSamplesForBackend():
-                [
-                    {
-                        'data': {
-                            'xA': float,  # Gyro A x-axis (°/s)
-                            'yA': float,  # Gyro A y-axis (°/s)
-                            'zA': float,  # Gyro A z-axis (°/s)
-                            'xB': float,  # Gyro B x-axis (°/s)
-                            'yB': float,  # Gyro B y-axis (°/s)
-                            'zB': float,  # Gyro B z-axis (°/s)
-                        },
-                        'timestamp_ms': int,  # Milliseconds from session start
-                    },
-                    ...
-                ]
-            joint_index: Index of the jointangle to fuse (default 0 = left_knee_flexion)
+            angles: List of angle frames (list of lists)
+            timestamps_ms: List of timestamps in ms
+            joint_index: Index of the joint to compute
+            
+        Returns:
+            np.array of angular velocities (deg/s) matches length of angles
+        """
+        if not angles or len(angles) < 2:
+            return np.zeros(len(angles))
+            
+        velocities = np.zeros(len(angles))
+        
+        # Extract single joint series
+        joint_series = np.array([frame[joint_index] if frame[joint_index] is not None else np.nan for frame in angles])
+        
+        # Fill NaNs with linear interpolation
+        nans, x = np.isnan(joint_series), lambda z: z.nonzero()[0]
+        if np.all(nans):
+            return velocities # All NaNs
+        
+        joint_series[nans] = np.interp(x(nans), x(~nans), joint_series[~nans])
+        
+        # Compute finite differences
+        # vel[i] = (angle[i] - angle[i-1]) / dt
+        for i in range(1, len(angles)):
+            dt = (timestamps_ms[i] - timestamps_ms[i-1]) / 1000.0
+            if dt > 0:
+                velocities[i] = (joint_series[i] - joint_series[i-1]) / dt
+                
+        # Smoothing (simple moving average) to reduce differentiation noise
+        window_size = 5
+        if len(velocities) >= window_size:
+            velocities = np.convolve(velocities, np.ones(window_size)/window_size, mode='same')
+            
+        return velocities
+
+    def align_signals(self, imu_data, cv_velocities, cv_timestamps_ms):
+        """
+        Align IMU gyroscope data with CV-derived angular velocity.
         
         Returns:
-            tuple: (angles_list, raw_angles_list, output_2d_video_path, csv_path)
+            offset_ms: Calculated offset (how much IMU is ahead of Video)
+            max_corr: Correlation coefficient
+            debug_info: Dictionary with traces for visualization
         """
+        if not imu_data or len(imu_data) < 10 or len(cv_velocities) < 10:
+            return 0, 0.0, {}
+
+        # 1. Extract IMU gyro series (y-axis relative velocity usually matches flexion best)
+        # Note: Depending on sensor mounting, it might be X or Z. 
+        # Assuming Y as per EKF logic: w_rel = yB - yA
+        imu_timestamps = []
+        imu_values = []
+        
+        for s in imu_data:
+            imu_timestamps.append(s['timestamp_ms'])
+            # Calculate same RELATIVE velocity as used in EKF
+            w_rel = s['data']['yB'] - s['data']['yA']
+            imu_values.append(w_rel)
+            
+        imu_timestamps = np.array(imu_timestamps)
+        imu_values = np.array(imu_values)
+        
+        # Handle gaps/NaNs in IMU
+        nans, x = np.isnan(imu_values), lambda z: z.nonzero()[0]
+        if np.any(nans):
+            imu_values[nans] = np.interp(x(nans), x(~nans), imu_values[~nans])
+
+        # 2. Resample both to common timebase (e.g. 100Hz = 10ms steps)
+        # Start from max(start_time) to min(end_time) to ensure overlap? 
+        # Actually we want to slide IMU range over CV range.
+        # CV starts at T=0 (relative to video start). IMU starts at T=0 (relative to button press).
+        # We expect IMU to extend LONGER and start EARLIER (effectively).
+        # But here imu_timestamps are just 0, 10, 20...
+        
+        # Grid definition
+        step_ms = 10
+        max_time = min(imu_timestamps[-1], cv_timestamps_ms[-1])
+        common_time = np.arange(0, max_time, step_ms)
+        
+        if len(common_time) < 10:
+            return 0, 0.0, {}
+
+        # Interpolate
+        imu_interp = np.interp(common_time, imu_timestamps, imu_values)
+        cv_interp = np.interp(common_time, cv_timestamps_ms, cv_velocities)
+        
+        # Normalize for correlation (Z-score)
+        if np.std(imu_interp) > 1e-5:
+            imu_norm = (imu_interp - np.mean(imu_interp)) / np.std(imu_interp)
+        else:
+            imu_norm = imu_interp
+            
+        if np.std(cv_interp) > 1e-5:
+            cv_norm = (cv_interp - np.mean(cv_interp)) / np.std(cv_interp)
+        else:
+            cv_norm = cv_interp
+
+        # 3. Cross-Correlation
+        # Valid / Full / Same? 
+        # We expect IMU signal to simply be shifted.
+        correlation = np.correlate(imu_norm, cv_norm, mode='full')
+        lags = np.arange(-len(imu_norm) + 1, len(cv_norm))
+        
+        # Find peak
+        peak_idx = np.argmax(correlation)
+        peak_lag_idx = lags[peak_idx]
+        offset_ms = peak_lag_idx * step_ms
+        max_corr = correlation[peak_idx] / len(common_time) # Normalize correlation value roughly
+
+        # Constrain offset: We assume Video starts AFTER IMU (network delay).
+        # So IMU data at T corresponds to Video data at T - delta.
+        # This implies we match IMU(t) with CV(t - shift).
+        # If offset_ms is POSITIVE, it means IMU leads CV?
+        # Let's say IMU has a spike at T=2000ms. CV has spike at T=1000ms (because it started 1000s late).
+        # We shift IMU to LEF by 1000ms to match.
+        # We only care about positive delay (Video starts later).
+        # So we expect IMU feature to appear at HIGHER timestamp value than CV feature? No.
+        # IMU timestamps are "Clock Time since Button".
+        # Video timestamps are "Clock Time since First Frame".
+        # Real Event happens at RealTime X.
+        # IMU records it at T_imu = X.
+        # Video records it at T_vid = X - StartTime_Vid.
+        # So T_imu > T_vid.
+        # So we expect IMU signal to look like CV signal but shifted to the RIGHT (delayed in time axis? No, advanced in time value).
+        # Signal I (IMU) is f(t). Signal C (CV) is f(t - delta).
+        # So I(t) = C(t - delta). NO.
+        # C(t) = Event(t + delta).
+        # I(t) = Event(t).
+        # So C(t) = I(t + delta).
+        # We want to find delta.
+        # So we slide I against C.
+        
+        # Debug info traces (downsampled for JSON size)
+        ds_ratio = 5
+        debug_stats = {
+            "offset_ms": int(offset_ms),
+            "max_correlation": float(max_corr),
+            "imu_trace": imu_interp[::ds_ratio].tolist(),
+            "cv_trace": cv_interp[::ds_ratio].tolist(),
+            "time_grid": common_time[::ds_ratio].tolist()
+        }
+        
+        return int(offset_ms), float(max_corr), debug_stats
+
+    def process_video(self, video_bytes, sensor_data=None, joint_index=0):
+        """Process video with optional IMU sensor data for Kalman-filtered joint angles."""
         video_handler = VideoHandler(video_bytes)
 
         total = int(video_handler.cap.get(cv2.CAP_PROP_FRAME_COUNT))
@@ -194,12 +324,54 @@ class RTMPose3DHandler:
         # Initialize IMU-only angles (same structure as angles)
         imu_angles = [a.copy() if isinstance(a, list) else list(a) for a in angles]
 
+        # Debug stats container
+        alignment_debug = {}
+
         # Sensor fusion with Kalman filtering
         # sensor_data format from Flutter getSamplesForBackend():
         # [{'data': {'xA', 'yA', 'zA', 'xB', 'yB', 'zB'}, 'timestamp_ms': int}, ...]
         if sensor_data is not None and len(sensor_data) > 1 and \
            len(angles) == len(angle_scores) == len(frame_timestamps_ms):
             
+            # 1. ALIGN SIGNALS: Compute offsets
+            try:
+                # Compute CV velocity
+                cv_vel = self.compute_visual_angular_velocity(angles, frame_timestamps_ms, joint_index)
+                
+                # Align to find offset
+                offset_ms, max_corr, alignment_stats = self.align_signals(sensor_data, cv_vel, frame_timestamps_ms)
+                print(f"[RTMPose] Signal Alignment: Offset={offset_ms}ms, Corr={max_corr:.3f}")
+                alignment_debug = alignment_stats
+                
+                # We expect offset_ms to be POSITIVE (IMU leads Video).
+                # If negative, it means Video leads IMU (unlikely unless clocks drifted wildly or logic wrong).
+                # To align: We treat IMU sample at T as if it belongs to Video frame at T - Offset.
+                # So we simply SUBTRACT offset from IMU timestamps before feeding to EKF.
+                # Or, we can just say `s_samp['timestamp_ms'] - offset_ms`.
+                
+                # Apply Offset to Sensor Data locally
+                # Filter out samples that would be negative time?
+                aligned_sensor_data = []
+                for s in sensor_data:
+                    new_ts = s['timestamp_ms'] - offset_ms
+                    if new_ts >= 0:
+                        s_copy = s.copy()
+                        s_copy['timestamp_ms'] = new_ts
+                        aligned_sensor_data.append(s_copy)
+                
+                # Use aligned data for fusion
+                if len(aligned_sensor_data) > 1:
+                    sensor_data = aligned_sensor_data
+                    print(f"[RTMPose] Applied alignment. Sensor data points: {len(sensor_data)}")
+                else:
+                    print("[RTMPose] Alignment failed (resulted in no overlap). Using original data.")
+                    # Fallback to original if alignment trimmed everything (unlikely)
+                    
+            except Exception as e:
+                print(f"[RTMPose] Alignment Error: {e}")
+                import traceback
+                traceback.print_exc()
+
             pre_sensor_angles = [a.copy() if isinstance(a, list) else list(a) for a in angles]
             out_angles = []
             out_imu_angles = [] # For storing raw accumulated IMU angles
@@ -229,12 +401,6 @@ class RTMPose3DHandler:
                 # Extract gyroscope values from new format
                 # Relative angular velocity between the two IMU sensors
                 w_rel = s_samp['data']['yB'] - s_samp['data']['yA']
-                
-                # Debug: Print first 5 samples to check all axes
-                if i < 5:
-                    d = s_samp['data']
-                    print(f"[RTMPose] Sample {i}: yA={d.get('yA')}, yB={d.get('yB')}, xA={d.get('xA')}, xB={d.get('xB')}, zA={d.get('zA')}, zB={d.get('zB')}")
-
                 
                 # Calculate dt in seconds from millisecond timestamps
                 dt = (s_samp['timestamp_ms'] - s_prev['timestamp_ms']) / 1000.0
@@ -315,7 +481,8 @@ class RTMPose3DHandler:
         # Save angles to CSV
         csv_path = self.angles_to_csv(angles, output_file_csv.name)
 
-        return angles, raw_angles, imu_angles, output_file_2D.name, csv_path
+        return angles, raw_angles, imu_angles, output_file_2D.name, csv_path, alignment_debug
+
 
     def normalize_by_torso_height(self, all_poses):
         norm_poses = []

@@ -6,11 +6,16 @@ import logging
 import struct
 import time
 from unittest import result
+from fastapi.websockets import WebSocketState
 import requests
 import dotenv
 from fastapi import APIRouter, HTTPException, UploadFile, File, Query, Form, WebSocket, WebSocketDisconnect
 from fastapi.responses import FileResponse
 import cv2
+import av
+from aiortc import RTCPeerConnection, RTCSessionDescription, RTCIceCandidate, VideoStreamTrack
+from aiortc.sdp import candidate_from_sdp
+from aiortc.contrib.media import MediaRecorder
 
 # Load environment variables from .env file
 dotenv.load_dotenv(os.path.join(os.path.dirname(__file__), ".env"), override=True)
@@ -98,7 +103,7 @@ def get_pose_handler():
 
 @pose_router.post("/process")
 async def process_video_to_angles(
-    video: UploadFile = File(...),
+    video: UploadFile = File(None),
     dataset_name: str = Query(..., description="Name for the dataset in Woodwide"),
     model_id: str = Query(..., description="Anomaly detection model ID for inference"),
     upload_to_woodwide: bool = Query(True, description="Upload angles to Woodwide"),
@@ -109,17 +114,21 @@ async def process_video_to_angles(
     joint_index: int = Form(0, description="Index of the joint to fuse (0=left_knee, 1=right_knee, etc.)"),
     stream_id: str = Form(None, description="Stream ID to retrieve detected actions from")
 ):
-    """Process video through RTMpose and run anomaly detection via Woodwide.
-
-    Flow:
-    1. Process video to extract joint angles
-    2. Upload angles CSV as a dataset
-    3. Run anomaly detection inference on the dataset
-
-    Returns the angle CSV, dataset info, and anomaly detection results.
-    """
+    print(stream_id)
+    """Process video through RTMpose and run anomaly detection via Woodwide."""
     try:
-        video_bytes = await video.read()
+        if video:
+            video_bytes = await video.read()
+        elif stream_id and stream_id in stream_videos:
+             video_path = stream_videos[stream_id]
+             if not os.path.exists(video_path):
+                 raise HTTPException(status_code=404, detail="Accumulated video file not found")
+             with open(video_path, "rb") as f:
+                 video_bytes = f.read()
+             # Cleanup later? Or keep it? keeping for now.
+        else:
+            raise HTTPException(status_code=400, detail="Either video file upload or valid stream_id is required")
+
         handler = get_pose_handler()
 
         # Parse sensor_data from file (JSON)
@@ -130,29 +139,33 @@ async def process_video_to_angles(
                 if content:
                     sensor_json_str = content.decode("utf-8")
                     parsed_sensor_data = json.loads(sensor_json_str)
-                    logger.info(f"Received sensor data with {len(parsed_sensor_data)} samples")
+                    print(f"Received sensor data with {len(parsed_sensor_data)} samples")
             except (json.JSONDecodeError, TypeError, UnicodeDecodeError) as e:
                 logger.warning(f"Failed to parse sensor data file: {e}")
                 parsed_sensor_data = None
 
-        # Parse overshoot_data from file (JSON) is not directly used in this function logic 
-        # but the signature was updated. If it were used, we would parse similarly.
-        # For now, let's just log it if needed, or ignore if not used in process_video logic locally.
-        # It seems overshoot_data is passed to Woodwide in original logic? 
-        # Wait, the original code didn't use overshoot_data in the handler.process_video call shown above.
-        # It only used parsed_sensor_data. 
-        # Let's check where overshoot_data is used. It was passed as form data but not used in the snippet I saw?
-        # Ah, I see "overshoot_data: str = Form" in args, but I don't see it used in valid lines 340-400.
-        # I will assume it might be used later or just needed for the signature.
-        # I'll stick to parsing sensor_data correctly.
-
         # Process video to get joint angles and CSV
-        # handler.process_video now returns raw_angles and imu_angles too
-        angles, raw_angles, imu_angles, overlay_video_path, csv_path = handler.process_video(
-            video_bytes, 
-            parsed_sensor_data, 
-            joint_index=joint_index
-        )
+        angles = []
+        raw_angles = []
+        imu_angles = []
+        overlay_video_path = None
+        alignment_debug = {}
+        
+        # Check if video bytes are valid (not empty)
+        if video_bytes and len(video_bytes) > 100:
+             try:
+                # Unpack 6 values including debug_stats
+                # (angles, raw_angles, imu_angles, output_2d_video_path, csv_path, alignment_debug)
+                angles, raw_angles, imu_angles, overlay_video_path, csv_path, alignment_debug = handler.process_video(
+                    video_bytes, 
+                    parsed_sensor_data, 
+                    joint_index=joint_index
+                )
+             except Exception as e:
+                logger.error(f"Failed to process video: {e}")
+                # We proceed without angles if video is bad, so we can still return actions
+        else:
+             logger.warning("Video file is empty or too small. Skipping pose estimation.")
 
         # Convert numpy values to native Python floats for JSON serialization
         import math
@@ -177,16 +190,15 @@ async def process_video_to_angles(
             "imu_angles": serializable_imu_angles,
             "joint_index": joint_index,
             "overlay_video_path": overlay_video_path,
+            "debug_stats": alignment_debug, # Return debug stats
         }
 
         # Add detected actions if stream_id is provided
         detected_actions_result = []
         if stream_id:
-            logger.info(f"Looking for actions for stream_id: {stream_id}")
-            store = ACTION_STORES.get(stream_id)
+            store = action_stores[stream_id] if stream_id in action_stores else None
             if store:
                 actions = store.get_actions()
-                logger.info(f"Found {len(actions)} actions for stream {stream_id}")
                 detected_actions_result = [
                     {
                         "action": a.action,
@@ -221,6 +233,19 @@ def download_keypoints_csv(csv_filename: str):
     return FileResponse(csv_path, media_type="text/csv", filename=csv_filename)
 
 
+@pose_router.get("/streams/{stream_id}/video")
+def get_stream_video(stream_id: str):
+    """Get the accumulated video for a stream."""
+    if stream_id not in stream_videos:
+        raise HTTPException(status_code=404, detail="Stream ID not found or video not available")
+    
+    video_path = stream_videos[stream_id]
+    if not os.path.exists(video_path):
+        raise HTTPException(status_code=404, detail="Video file not found on server")
+        
+    return FileResponse(video_path, media_type="video/mp4", filename=f"{stream_id}.mp4")
+
+
 @pose_router.get("/download-video/{video_filename}")
 def download_overlay_video(video_filename: str):
     """Download a previously generated overlay video file."""
@@ -235,7 +260,7 @@ overshoot_router = APIRouter(prefix="/api/overshoot", tags=["Overshoot"])
 _overshoot_sessions: dict[str, OvershootHttpClient] = {}
 _overshoot_sessions_lock = asyncio.Lock()
 # Global store for action detection results keyed by stream_id
-ACTION_STORES: dict[str, ActionStore] = {}
+action_stores: dict[str, ActionStore] = {}
 
 
 def _overshoot_api_url() -> str:
@@ -333,312 +358,315 @@ async def overshoot_close_stream(stream_id: str):
 # WebSocket Video Streaming to Overshoot
 # ============================================================================
 
+# Global registry for stream video paths
+stream_videos: dict[str, str] = {}
+
+class RelayProxyTrack(VideoStreamTrack):
+    """
+    Proxy track that pulls frames from an upstream track,
+    forwards them to OvershootRelay (subsampled), and yields them
+    downstream (e.g. to MediaRecorder).
+    """
+    kind = "video"
+
+    def __init__(self, track, relay, subsample=3):
+        super().__init__()
+        self.track = track
+        self.relay = relay
+        self.subsample = subsample
+        self.counter = 0
+
+    async def recv(self):
+        try:
+            frame = await self.track.recv()
+        except Exception as e:
+            # Track ended or error
+            self.stop() 
+            raise e
+        
+        # Forward to relay (subsampled)
+        if self.counter % self.subsample == 0:
+            if self.relay and self.relay.is_running:
+                try:
+                    # Convert AVFrame to numpy RGB24 for Overshoot
+                    # This might be expensive, so we do it only for sampled frames
+                    img = frame.to_ndarray(format="rgb24")
+                    
+                    # Calculate timestamp in seconds
+                    timestamp = float(frame.pts * frame.time_base) if (frame.pts is not None and frame.time_base is not None) else None
+                    
+                    # Push to relay
+                    self.relay.push_frame(img, timestamp)
+                except Exception as e:
+                    logger.error(f"RelayProxyTrack error processing frame: {e}")
+
+        self.counter += 1
+        return frame
+
 @overshoot_router.websocket("/ws/stream")
 async def overshoot_video_websocket(websocket: WebSocket):
     """
-    WebSocket endpoint for streaming video to Overshoot.
-
-    Protocol:
-    1. Client sends config: {"type": "config", "prompt": "...", "model": "gemini-2.0-flash", ...}
-    2. Server responds: {"type": "ready", "stream_id": "..."}
-    3. Client sends frames (binary: 8-byte timestamp + RGB24, or JSON with base64)
-    4. Server sends results: {"type": "inference", "result": "...", "timestamp": ...}
-    5. Control: {"type": "stop"} or {"type": "update_prompt", "prompt": "..."}
+    WebRTC Signaling WebSocket for Overshoot.
     """
     await websocket.accept()
     relay: OvershootStreamRelay = None
+    pc: RTCPeerConnection = None
+    recorder: MediaRecorder = None
+    stream_id: str = None
+    temp_video_path: str = None
 
     try:
         # Wait for config
-        config_data = await websocket.receive_json()
-        if config_data.get("type") != "config":
+        config_msg = await websocket.receive_json()
+        if config_msg.get("type") != "config":
             await websocket.send_json({"type": "error", "error": "First message must be config"})
             return
 
-        # Parse nested config from Flutter
-        inference_config = config_data.get("inference", {})
-        processing_config = config_data.get("processing", {})
+        # Parse config
+        inference_config = config_msg.get("inference", {})
+        processing_config = config_msg.get("processing", {})
 
-        prompt = inference_config.get("prompt", config_data.get("prompt", "Describe what you see"))
-        model = inference_config.get("model", config_data.get("model", "gemini-2.0-flash"))
-        backend = inference_config.get("backend", config_data.get("backend", "gemini"))
+        prompt = inference_config.get("prompt", config_msg.get("prompt", "Describe what you see"))
+        model = inference_config.get("model", config_msg.get("model", "gemini-2.0-flash"))
+        backend = inference_config.get("backend", config_msg.get("backend", "gemini"))
 
-        # Extract processing config - use Flutter's values with sensible defaults
-        # Overshoot constraint: (fps * sampling_ratio * clip_length) / delay <= 30
-        # Default: (10 * 0.3 * 10.0) / 1.0 = 30 frames per clip (10s window, max allowed)
-        fps = processing_config.get("fps", config_data.get("fps", 10))
-        sampling_ratio = processing_config.get("sampling_ratio", config_data.get("sampling_ratio", 0.3))
-        clip_length_seconds = processing_config.get("clip_length_seconds", config_data.get("clip_length_seconds", 5.0))
-        delay_seconds = processing_config.get("delay_seconds", config_data.get("delay_seconds", 1.0))
-
-        width = config_data.get("width", 640)
-        height = config_data.get("height", 480)
-
-        # Log the actual config being used
-        frames_per_clip = fps * sampling_ratio * clip_length_seconds
-        logger.info(f"[Overshoot WS] Processing config: fps={fps}, sampling={sampling_ratio}, clip={clip_length_seconds}s, delay={delay_seconds}s")
-        logger.info(f"[Overshoot WS] Frames per clip: {frames_per_clip:.1f} (constraint: must be <= 30 * delay)")
-
-        logger.debug(f"[Overshoot WS] Config: {model}/{backend} {width}x{height}@{fps}fps")
-
-        # Action Detection State
-        store = ActionStore()
-        # Track active actions: {action_name: {"start_time": float, "last_seen": float, "confidence": float}}
-        active_actions: dict[str, dict] = {}
-        # Track pending actions: {action_name: {"count": int, "first_seen": float, "confidence": float}}
-        pending_actions: dict[str, dict] = {}
+        fps = processing_config.get("fps", config_msg.get("fps", 10))
+        sampling_ratio = processing_config.get("sampling_ratio", config_msg.get("sampling_ratio", 0.3))
+        clip_length_seconds = processing_config.get("clip_length_seconds", config_msg.get("clip_length_seconds", 5.0))
+        delay_seconds = processing_config.get("delay_seconds", config_msg.get("delay_seconds", 1.0))
         
-        frame_counter = 0
-        min_confidence = 0.6
-        start_threshold = 2
+        width = config_msg.get("width", 640)
+        height = config_msg.get("height", 480)
 
-        # Create relay with callback to forward results to client
+        # Initialize Relay
+        store = ActionStore()
+        # action_stores_lock is global, but used locally here? No, declared global at module level but referenced?
+        # Actually line 687 in original file said `action_stores_lock = asyncio.Lock()`.
+        # This seems to be a local variable shadowing a global if there is one, or just a local lock?
+        # The global `action_stores` is used.
+        # Let's keep it simple.
+        
+        # Helper to send results back
         async def send_result(result: dict):
             try:
-                # Forward result to client
-                await websocket.send_json(result)
-                
-                # --- Action Detection Logic ---
+                # Log inference results for debugging
                 if result.get("type") == "inference":
-                    nonlocal frame_counter
-                    frame_counter += 1
-                    
-                    # Parse detections
+                    print(f"[WebRTC] 🧠 Inference: {result.get('result')}")
+                elif result.get("type") == "error":
+                     print(f"[WebRTC] ❌ Error from Overshoot: {result.get('error')}")
+
+                if websocket.client_state == WebSocketState.CONNECTED:
+                    await websocket.send_json(result)
+                else:
+                    # Connection closed, ignore
+                    pass
+                
+                # Action Detection Logic Integration
+                if result.get("type") == "inference":
                     inference_data = result.get("result", {})
-                    
-                    # Try to parse stringified JSON if it is a string
+                    # Parse JSON string if needed
                     if isinstance(inference_data, str):
                         try:
                             parsed = json.loads(inference_data)
-                            if isinstance(parsed, (dict, list)):
-                                inference_data = parsed
-                        except (json.JSONDecodeError, TypeError):
-                            # It's a plain string (e.g. "Waving hand."), keep as string
-                            pass
-
+                            if isinstance(parsed, (dict, list)): inference_data = parsed
+                        except: pass
+                    
                     detected_list = []
                     if isinstance(inference_data, dict):
-                        # Expecting structured JSON with "detected_actions"
                         detected_list = inference_data.get("detected_actions", [])
-                    
                     elif isinstance(inference_data, str) and inference_data.strip():
-                        # It's a generic text description like "Waving hand"
-                        # treat it as a detected action
-                        detected_list = [{
-                            "action": inference_data.strip(),
-                            "detected": True,
-                            "confidence": 0.8 # arbitrary high confidence for direct text
-                        }]
-                    current_time_stream = result.get("timestamp") or time.time()
-                    now = time.time()
-
-                    currently_detected = set()
-
-                    # 1. Identify currently detected actions
-                    for action_data in detected_list:
-                        action_name = action_data.get("action")
-                        is_detected = action_data.get("detected", False)
-                        confidence = action_data.get("confidence", 0.0)
-
-                        if action_name and is_detected and confidence >= min_confidence:
-                            currently_detected.add(action_name)
-                            
-                            # Update active if already active
-                            if action_name in active_actions:
-                                active_actions[action_name]["last_seen"] = now
-                                active_actions[action_name]["last_seen_stream_time"] = current_time_stream
-                                active_actions[action_name]["confidence"] = confidence
-                            
-                            # Check pending
-                            elif action_name in pending_actions:
-                                pending_actions[action_name]["count"] += 1
-                                pending_actions[action_name]["confidence"] = confidence
-                                pending_actions[action_name]["last_seen"] = now
-                                pending_actions[action_name]["last_seen_stream_time"] = current_time_stream
-                                
-                                # Confirm start?
-                                if pending_actions[action_name]["count"] >= start_threshold:
-                                    # ACTION STARTED
-                                    pending_info = pending_actions.pop(action_name)
-                                    start_time = pending_info["first_seen_stream_time"]
-                                    
-                                    active_actions[action_name] = {
-                                        "start_time": start_time,
-                                        "start_real_time": pending_info["first_seen_real"],
-                                        "last_seen": now,
-                                        "last_seen_stream_time": current_time_stream,
-                                        "confidence": confidence,
-                                    }
-                                    
-                                    # Store
-                                    action = DetectedAction(
-                                        action=action_name,
-                                        timestamp=start_time,
-                                        frame_number=frame_counter,
-                                        confidence=confidence,
-                                        metadata={"event_type": "started"}
-                                    )
-                                    store.add(action)
-                            
-                            else:
-                                # New pending
-                                pending_actions[action_name] = {
-                                    "count": 1,
-                                    "first_seen_stream_time": current_time_stream,
-                                    "first_seen_real": now,
-                                    "last_seen": now,
-                                    "confidence": confidence,
-                                }
+                        detected_list = [{"action": inference_data.strip(), "detected": True, "confidence": 0.8}]
                     
-                    # 2. Clear stale pending
-                    stale = [name for name in pending_actions if name not in currently_detected]
-                    for name in stale:
-                        del pending_actions[name]
-                        
-                    # 3. Check for stopped actions
-                    stopped = []
-                    for action_name in active_actions:
-                        if action_name not in currently_detected:
-                            stopped.append(action_name)
-                            
-                    for action_name in stopped:
-                        action_info = active_actions.pop(action_name)
-                        # Action stopped - record the end event
-                        end_time = current_time_stream
-                        
-                        action = DetectedAction(
-                            action=action_name,
-                            timestamp=end_time,
-                            frame_number=frame_counter,
-                            confidence=action_info.get("confidence", 0.0),
-                            metadata={
-                                "event_type": "ended",
-                                "start_timestamp": action_info.get("start_time"),
-                                "duration": end_time - action_info.get("start_time", end_time)
-                            }
-                        )
-                        store.add(action)
+                    for action_data in detected_list:
+                         if action_data.get("detected") and action_data.get("confidence", 0) > 0.6:
+                             import time
+                             ts = result.get("timestamp", time.time())
+                             # Estimate local frame number (approximate)
+                             frame_num = int(ts * fps) if isinstance(ts, (int, float)) and ts > 0 else 0
+                             
+                             store.add(DetectedAction(
+                                 action=action_data.get("action"),
+                                 timestamp=ts,
+                                 frame_number=frame_num,
+                                 confidence=action_data.get("confidence", 0.8),
+                                 metadata={"raw": str(action_data)}
+                             )) 
 
             except Exception as e:
-                logger.error(f"Failed to send result or process actions: {e}")
-                logger.exception("Error detail:")
+                # Swallow errors if we are shutting down or socket is closed
+                if "websocket.send" in str(e) or "closed" in str(e):
+                    pass
+                else:
+                    logger.error(f"Send result error: {e}")
 
-        def on_relay_error(e: Exception):
-            logger.error(f"Relay error: {e}")
-
+        # Prepare Relay (sync initialization of queues and local PC)
         relay = OvershootStreamRelay(
             api_url=_overshoot_api_url(),
             api_key=_overshoot_api_key(),
             prompt=prompt,
             on_result=lambda r: asyncio.create_task(send_result(r)),
-            on_error=on_relay_error,
             model=model,
             backend=backend,
             width=width,
             height=height,
             fps=fps,
-            sampling_ratio=sampling_ratio,
+            sampling_ratio=sampling_ratio, 
             clip_length_seconds=clip_length_seconds,
             delay_seconds=delay_seconds,
         )
-
-        stream_id = await relay.start()
         
-        # Register store
-        ACTION_STORES[stream_id] = store
+        await relay.prepare()
         
-        logger.info(f"[Overshoot WS] Stream started: {stream_id}")
-        await websocket.send_json({"type": "ready", "stream_id": stream_id})
-        await websocket.send_json({"type": "connected", "message": "Connected to Overshoot"})
+        # Prepare MediaRecorder
+        import tempfile
+        tfile = tempfile.NamedTemporaryFile(delete=False, suffix='.mp4')
+        tfile.close() # Close so recorder can open
+        temp_video_path = tfile.name
+        # Note: stream_id is not yet available, use temporary key or handle later.
+        # But we need to store it so process endpoint can find it.
+        # We will update stream_videos once we have stream_id.
+        
+        recorder = MediaRecorder(temp_video_path)
+        
+        # Initialize WebRTC (Local PC)
+        pc = RTCPeerConnection()
+        
+        @pc.on("icecandidate")
+        async def on_icecandidate(candidate):
+            # print("ICE")
+            # Send candidate to client
+            if candidate:
+                msg = {
+                    "type": "candidate", 
+                    "candidate": candidate.candidate, 
+                    "sdpMid": candidate.sdpMid, 
+                    "sdpMLineIndex": candidate.sdpMLineIndex
+                }
+                await websocket.send_json(msg)
 
-        # Main loop: receive frames and control messages
-        while relay.is_running:
-            message = await websocket.receive()
+        @pc.on("track")
+        def on_track(track):
+            print("TRACK")
+            if track.kind == "video":
+                print(f"[WebRTC] Video track received: {track.kind}")
+                # Create proxy track
+                proxy = RelayProxyTrack(track, relay, subsample=1) 
+                recorder.addTrack(proxy)
 
-            if message["type"] == "websocket.disconnect":
-                break
+        @pc.on("connectionstatechange")
+        async def on_connectionstatechange():
+            print(f"[WebRTC] Connection state: {pc.connectionState}")
+            if pc.connectionState == "failed":
+                await pc.close()
 
-            if "bytes" in message:
-                # Binary frame: 8-byte timestamp prefix + frame data (JPEG or RGB24)
-                frame_bytes = message["bytes"]
-                expected_rgb_size = height * width * 3
+        # Send Ready IMMEDIATELY to unblock client
+        # Stream ID is not yet available, client should handle null stream_id or wait for 'stream_created'
+        await websocket.send_json({"type": "ready", "stream_id": None})
 
-                # Extract timestamp if present (first 8 bytes)
-                if len(frame_bytes) > 8:
-                    timestamp = struct.unpack('<d', frame_bytes[:8])[0]
-                    frame_data = frame_bytes[8:]
-                else:
-                    timestamp = None
-                    frame_data = frame_bytes
+        # Start Relay Connect in Background
+        async def connect_relay_task():
+            nonlocal stream_id
+            try:
+                stream_id = await relay.connect()
+                # Store action store
+                action_stores[stream_id] = store
+                # Store video path mapping
+                stream_videos[stream_id] = temp_video_path
+                print(f"[WebRTC] ☁️ Stream created on Overshoot: {stream_id}")
+                
+                # Notify client
+                if websocket.client_state == WebSocketState.CONNECTED:
+                    await websocket.send_json({"type": "stream_created", "stream_id": stream_id})
+            except Exception as e:
+                logger.error(f"[WebRTC] Failed to connect relay: {e}")
+                if websocket.client_state == WebSocketState.CONNECTED:
+                    await websocket.send_json({"type": "error", "error": f"Cloud connection failed: {e}"})
 
-                try:
-                    # Check if it's JPEG (starts with FFD8) or raw RGB24
-                    if len(frame_data) >= 2 and frame_data[0] == 0xFF and frame_data[1] == 0xD8:
-                        # JPEG - decode it
-                        nparr = np.frombuffer(frame_data, np.uint8)
-                        frame = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
-                        if frame is not None:
-                            # Convert BGR to RGB
-                            frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-                            # Resize if needed
-                            if frame.shape[0] != height or frame.shape[1] != width:
-                                frame = cv2.resize(frame, (width, height))
-                            relay.push_frame(frame, timestamp)
-                    elif len(frame_data) == expected_rgb_size:
-                        # Raw RGB24
-                        frame = np.frombuffer(frame_data, dtype=np.uint8).reshape((height, width, 3))
-                        relay.push_frame(frame, timestamp)
-                except Exception as e:
-                    logger.warning(f"Frame decode error: {e}")
+        asyncio.create_task(connect_relay_task())
 
-            elif "text" in message:
-                try:
-                    data = json.loads(message["text"])
-                    msg_type = data.get("type")
-
-                    if msg_type == "stop":
-                        break
-                    elif msg_type == "update_prompt":
-                        new_prompt = data.get("prompt")
-                        if new_prompt:
-                            await relay.update_prompt(new_prompt)
-                            await websocket.send_json({"type": "prompt_updated", "prompt": new_prompt})
-                    elif msg_type == "frame":
-                        # JSON frame with base64 data
-                        timestamp = data.get("timestamp")
-                        frame_b64 = data.get("data")
-                        if frame_b64:
-                            frame_data = base64.b64decode(frame_b64)
-                            frame = np.frombuffer(frame_data, dtype=np.uint8).reshape((height, width, 3))
-                            relay.push_frame(frame, timestamp)
-                except json.JSONDecodeError:
-                    pass
+        # Main Loop
+        async for message_str in websocket.iter_text():
+            try:
+                msg = json.loads(message_str)
+                msg_type = msg.get("type")
+                
+                if msg_type == "offer":
+                    offer = RTCSessionDescription(sdp=msg["sdp"], type="offer")
+                    await pc.setRemoteDescription(offer)
+                    
+                    # Start recorder after track is set up
+                    await recorder.start()
+                    
+                    answer = await pc.createAnswer()
+                    await pc.setLocalDescription(answer)
+                    
+                    await websocket.send_json({
+                        "type": "answer",
+                        "sdp": pc.localDescription.sdp
+                    })
+                
+                elif msg_type == "candidate":
+                    cand_str = msg["candidate"]
+                    if cand_str.startswith("candidate:"):
+                        cand_str = cand_str.split(":", 1)[1].strip()
+                    
+                    candidate = candidate_from_sdp(cand_str)
+                    candidate.sdpMid = msg["sdpMid"]
+                    candidate.sdpMLineIndex = msg["sdpMLineIndex"]
+                    
+                    await pc.addIceCandidate(candidate)
+                    
+                elif msg_type == "stop":
+                    break
+                
+                elif msg_type == "update_prompt":
+                     await relay.update_prompt(msg["prompt"])
+                     
+            except Exception as e:
+                logger.error(f"Error handling message: {e}")
+                pass
 
     except WebSocketDisconnect:
-        pass
-    except ApiError as e:
-        try:
-            await websocket.send_json({"type": "error", "error": e.message})
-        except Exception:
-            pass
+        print("[WebRTC] Client disconnected")
     except Exception as e:
-        logger.exception("WebSocket error")
+        print(f"WebRTC Error: {e}")
         try:
-            await websocket.send_json({"type": "error", "error": str(e)})
-        except Exception:
-            pass
+            if websocket.client_state == WebSocketState.CONNECTED:
+                await websocket.send_json({"type": "error", "error": str(e)})
+        except: pass
     finally:
+        # Cleanup
+        print("[WebRTC] 🧹 Cleaning up resources...")
+
+        # 1. Stop Recorder
+        if recorder:
+            try:
+                await recorder.stop()
+                print("[WebRTC] ⏹️ Recorder stopped")
+            except Exception as e:
+                logger.error(f"[WebRTC] ⚠️ Recorder stop failed: {e}")
+            finally:
+                recorder = None
+
+        # 2. Stop Relay
         if relay:
-            await relay.stop()
-            
-            # Clean up store (keep it for a bit? or delete immediately?
-            # User workflow implies process_video_to_angles is called AFTER stream?
-            # If process_video_to_angles is called simultaneously or shortly after, we should keep it.
-            # But we need a cleanup policy. For now, let's NOT delete it immediately so the next call can find it.
-            # Ideally we'd have a timeout or explicit cleanup.)
-            pass
-            
-        try:
-            await websocket.close()
-        except Exception:
-            pass
+            try:
+                await relay.stop()
+                print("[WebRTC] 🛑 Relay stopped")
+            except Exception as e:
+                logger.error(f"[WebRTC] ⚠️ Relay stop error: {e}")
+
+        # 3. Stop PC
+        if pc:
+            try:
+                # Stop transceivers
+                for transceiver in pc.getTransceivers():
+                    if transceiver.sender and transceiver.sender.track: 
+                         try:
+                             transceiver.sender.track.stop()
+                         except: pass
+                
+                await pc.close()
+                print("[WebRTC] 🔌 PeerConnection closed")
+            except Exception as e:
+                logger.error(f"[WebRTC] PeerConnection close error: {e}")

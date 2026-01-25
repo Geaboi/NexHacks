@@ -29,14 +29,36 @@ class _ReviewPageState extends ConsumerState<ReviewPage> {
   }
 
   Future<void> _initializeVideo() async {
-    final file = File(widget.videoPath);
-    if (await file.exists()) {
-      _controller = VideoPlayerController.file(file);
+    VideoPlayerController controller;
+    if (widget.videoPath.startsWith('stream://')) {
+      final streamId = widget.videoPath.replaceFirst('stream://', '');
+      // Construct the URL for the backend endpoint we just added
+      // Base URL matches the one used in FrameStreamingService (converted to https)
+      final url =
+          'https://api.mateotaylortest.org/api/pose/streams/$streamId/video';
+      print('[ReviewPage] Initializing video from stream URL: $url');
+      controller = VideoPlayerController.networkUrl(Uri.parse(url));
+    } else {
+      final file = File(widget.videoPath);
+      if (!await file.exists()) {
+        print('[ReviewPage] Local file not found: ${widget.videoPath}');
+        return;
+      }
+      controller = VideoPlayerController.file(file);
+    }
+
+    try {
+      _controller = controller;
       await _controller!.initialize();
       _controller!.addListener(_videoListener);
       setState(() {
         _isInitialized = true;
       });
+    } catch (e) {
+      print('[ReviewPage] Error initializing video: $e');
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Failed to load video: $e')));
     }
   }
 
@@ -104,12 +126,16 @@ class _ReviewPageState extends ConsumerState<ReviewPage> {
     final samples = List.unmodifiable(sensorState.sampleBuffer);
     final droppedPackets = sensorState.droppedPackets;
 
-    print('[SensorDialog] Captured ${samples.length} samples, $droppedPackets dropped');
+    print(
+      '[SensorDialog] Captured ${samples.length} samples, $droppedPackets dropped',
+    );
 
     // Generate CSV content
     // Header: time_ms, gyroA_x, gyroA_y, gyroA_z, gyroB_x, gyroB_y, gyroB_z
     final csvBuffer = StringBuffer();
-    csvBuffer.writeln('time_ms,gyroA_x,gyroA_y,gyroA_z,gyroB_x,gyroB_y,gyroB_z');
+    csvBuffer.writeln(
+      'time_ms,gyroA_x,gyroA_y,gyroA_z,gyroB_x,gyroB_y,gyroB_z',
+    );
 
     for (final sample in samples) {
       csvBuffer.writeln(
@@ -133,122 +159,138 @@ class _ReviewPageState extends ConsumerState<ReviewPage> {
     final navigatorState = Navigator.of(context, rootNavigator: true);
 
     showDialog<void>(
-      barrierDismissible: false,  // Disable for debugging - prevents accidental dismiss
+      barrierDismissible:
+          false, // Disable for debugging - prevents accidental dismiss
       context: context,
       useRootNavigator: true,
       builder: (dialogContext) {
-        print('[SensorDialog] Dialog builder called, dialogContext.mounted: ${dialogContext.mounted}');
-        print('[SensorDialog] Navigator canPop: ${Navigator.of(dialogContext).canPop()}');
+        print(
+          '[SensorDialog] Dialog builder called, dialogContext.mounted: ${dialogContext.mounted}',
+        );
+        print(
+          '[SensorDialog] Navigator canPop: ${Navigator.of(dialogContext).canPop()}',
+        );
         return PopScope(
           canPop: true,
           onPopInvokedWithResult: (didPop, result) {
-            print('[SensorDialog] PopScope onPopInvoked: didPop=$didPop, result=$result');
+            print(
+              '[SensorDialog] PopScope onPopInvoked: didPop=$didPop, result=$result',
+            );
           },
           child: AlertDialog(
-          backgroundColor: AppColors.primary,
-          title: Row(
-            children: [
-              const Icon(Icons.sensors, color: Colors.white),
-              const SizedBox(width: 8),
-              Text(
-                'Sensor Data ($sampleCount samples)',
-                style: const TextStyle(color: Colors.white),
-              ),
-            ],
-          ),
-          content: SizedBox(
-            width: double.maxFinite,
-            height: 400,
-            child: sampleCount == 0
-                ? const Center(
-                    child: Text(
-                      'No sensor data recorded.\nConnect IMU device before recording.',
-                      textAlign: TextAlign.center,
-                      style: TextStyle(color: Colors.white70),
-                    ),
-                  )
-                : Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      // Stats row
-                      Container(
-                        padding: const EdgeInsets.all(8),
-                        decoration: BoxDecoration(
-                          color: AppColors.primaryDark,
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                        child: Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceAround,
-                          children: [
-                            _StatChip(label: 'Samples', value: '$sampleCount'),
-                            const _StatChip(label: 'Rate', value: '100Hz'),
-                            _StatChip(
-                              label: 'Duration',
-                              value: '${duration.toStringAsFixed(1)}s',
-                            ),
-                            _StatChip(
-                              label: 'Dropped',
-                              value: '$droppedPackets',
-                            ),
-                          ],
-                        ),
+            backgroundColor: AppColors.primary,
+            title: Row(
+              children: [
+                const Icon(Icons.sensors, color: Colors.white),
+                const SizedBox(width: 8),
+                Text(
+                  'Sensor Data ($sampleCount samples)',
+                  style: const TextStyle(color: Colors.white),
+                ),
+              ],
+            ),
+            content: SizedBox(
+              width: double.maxFinite,
+              height: 400,
+              child: sampleCount == 0
+                  ? const Center(
+                      child: Text(
+                        'No sensor data recorded.\nConnect IMU device before recording.',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(color: Colors.white70),
                       ),
-                      const SizedBox(height: 12),
-                      // CSV header
-                      const Text(
-                        'CSV Preview (gyro values in °/s):',
-                        style: TextStyle(color: Colors.white70, fontSize: 12),
-                      ),
-                      const SizedBox(height: 4),
-                      // CSV content in scrollable container
-                      Expanded(
-                        child: Container(
+                    )
+                  : Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        // Stats row
+                        Container(
                           padding: const EdgeInsets.all(8),
                           decoration: BoxDecoration(
-                            color: Colors.black87,
+                            color: AppColors.primaryDark,
                             borderRadius: BorderRadius.circular(8),
                           ),
-                          child: SingleChildScrollView(
-                            child: SelectableText(
-                              csvContent,
-                              style: const TextStyle(
-                                fontFamily: 'monospace',
-                                fontSize: 10,
-                                color: Colors.greenAccent,
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceAround,
+                            children: [
+                              _StatChip(
+                                label: 'Samples',
+                                value: '$sampleCount',
+                              ),
+                              const _StatChip(label: 'Rate', value: '100Hz'),
+                              _StatChip(
+                                label: 'Duration',
+                                value: '${duration.toStringAsFixed(1)}s',
+                              ),
+                              _StatChip(
+                                label: 'Dropped',
+                                value: '$droppedPackets',
+                              ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+                        // CSV header
+                        const Text(
+                          'CSV Preview (gyro values in °/s):',
+                          style: TextStyle(color: Colors.white70, fontSize: 12),
+                        ),
+                        const SizedBox(height: 4),
+                        // CSV content in scrollable container
+                        Expanded(
+                          child: Container(
+                            padding: const EdgeInsets.all(8),
+                            decoration: BoxDecoration(
+                              color: Colors.black87,
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: SingleChildScrollView(
+                              child: SelectableText(
+                                csvContent,
+                                style: const TextStyle(
+                                  fontFamily: 'monospace',
+                                  fontSize: 10,
+                                  color: Colors.greenAccent,
+                                ),
                               ),
                             ),
                           ),
                         ),
-                      ),
-                    ],
-                  ),
-          ),
-          actions: [
-            if (sampleCount > 0)
-              TextButton.icon(
-                onPressed: () {
-                  print('[SensorDialog] Copy button pressed');
-                  Clipboard.setData(ClipboardData(text: csvContent));
-                  ScaffoldMessenger.of(dialogContext).showSnackBar(
-                    const SnackBar(
-                      content: Text('CSV copied to clipboard'),
-                      duration: Duration(seconds: 2),
+                      ],
                     ),
-                  );
-                },
-                icon: const Icon(Icons.copy, color: Colors.white70),
-                label: const Text('Copy CSV', style: TextStyle(color: Colors.white70)),
-              ),
-            TextButton(
-              onPressed: () {
-                print('[SensorDialog] Close button pressed');
-                Navigator.of(dialogContext).pop();
-              },
-              child: const Text('Close', style: TextStyle(color: Colors.white)),
             ),
-          ],
-        ),
-        );  // closes PopScope
+            actions: [
+              if (sampleCount > 0)
+                TextButton.icon(
+                  onPressed: () {
+                    print('[SensorDialog] Copy button pressed');
+                    Clipboard.setData(ClipboardData(text: csvContent));
+                    ScaffoldMessenger.of(dialogContext).showSnackBar(
+                      const SnackBar(
+                        content: Text('CSV copied to clipboard'),
+                        duration: Duration(seconds: 2),
+                      ),
+                    );
+                  },
+                  icon: const Icon(Icons.copy, color: Colors.white70),
+                  label: const Text(
+                    'Copy CSV',
+                    style: TextStyle(color: Colors.white70),
+                  ),
+                ),
+              TextButton(
+                onPressed: () {
+                  print('[SensorDialog] Close button pressed');
+                  Navigator.of(dialogContext).pop();
+                },
+                child: const Text(
+                  'Close',
+                  style: TextStyle(color: Colors.white),
+                ),
+              ),
+            ],
+          ),
+        ); // closes PopScope
       },
     ).then((_) {
       print('[SensorDialog] Dialog closed (then callback)');
@@ -287,7 +329,10 @@ class _ReviewPageState extends ConsumerState<ReviewPage> {
                       alignment: Alignment.center,
                       children: [
                         // Video Player
-                        AspectRatio(aspectRatio: _controller!.value.aspectRatio, child: VideoPlayer(_controller!)),
+                        AspectRatio(
+                          aspectRatio: _controller!.value.aspectRatio,
+                          child: VideoPlayer(_controller!),
+                        ),
 
                         // Play/Pause Overlay
                         GestureDetector(
@@ -301,10 +346,16 @@ class _ReviewPageState extends ConsumerState<ReviewPage> {
                                 child: Container(
                                   padding: const EdgeInsets.all(16),
                                   decoration: BoxDecoration(
-                                    color: AppColors.primaryDark.withOpacity(0.7),
+                                    color: AppColors.primaryDark.withOpacity(
+                                      0.7,
+                                    ),
                                     shape: BoxShape.circle,
                                   ),
-                                  child: const Icon(Icons.play_arrow, color: Colors.white, size: 48),
+                                  child: const Icon(
+                                    Icons.play_arrow,
+                                    color: Colors.white,
+                                    size: 48,
+                                  ),
                                 ),
                               ),
                             ),
@@ -321,8 +372,11 @@ class _ReviewPageState extends ConsumerState<ReviewPage> {
                             allowScrubbing: true,
                             colors: VideoProgressColors(
                               playedColor: AppColors.accent,
-                              bufferedColor: AppColors.primaryLight.withOpacity(0.4),
-                              backgroundColor: AppColors.primaryLight.withOpacity(0.2),
+                              bufferedColor: AppColors.primaryLight.withOpacity(
+                                0.4,
+                              ),
+                              backgroundColor: AppColors.primaryLight
+                                  .withOpacity(0.2),
                             ),
                           ),
                         ),
@@ -399,7 +453,9 @@ class _ReviewPageState extends ConsumerState<ReviewPage> {
                         foregroundColor: Colors.white,
                         side: BorderSide(color: Colors.white.withOpacity(0.4)),
                         padding: const EdgeInsets.symmetric(vertical: 16),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
                       ),
                       icon: const Icon(Icons.refresh),
                       label: const Text('Retake'),
@@ -415,7 +471,9 @@ class _ReviewPageState extends ConsumerState<ReviewPage> {
                         backgroundColor: AppColors.accent,
                         foregroundColor: Colors.white,
                         padding: const EdgeInsets.symmetric(vertical: 16),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
                       ),
                       icon: const Icon(Icons.analytics),
                       label: const Text('Analyze'),
@@ -436,11 +494,27 @@ class _ReviewPageState extends ConsumerState<ReviewPage> {
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Icon(Icons.videocam_outlined, size: 80, color: AppColors.primaryLight.withOpacity(0.6)),
+          Icon(
+            Icons.videocam_outlined,
+            size: 80,
+            color: AppColors.primaryLight.withOpacity(0.6),
+          ),
           const SizedBox(height: 16),
-          Text('Video Preview', style: TextStyle(color: AppColors.primaryLight.withOpacity(0.8), fontSize: 18)),
+          Text(
+            'Video Preview',
+            style: TextStyle(
+              color: AppColors.primaryLight.withOpacity(0.8),
+              fontSize: 18,
+            ),
+          ),
           const SizedBox(height: 8),
-          Text('(Placeholder - no video recorded yet)', style: TextStyle(color: AppColors.primaryLight.withOpacity(0.6), fontSize: 14)),
+          Text(
+            '(Placeholder - no video recorded yet)',
+            style: TextStyle(
+              color: AppColors.primaryLight.withOpacity(0.6),
+              fontSize: 14,
+            ),
+          ),
         ],
       ),
     );
@@ -468,10 +542,7 @@ class _StatChip extends StatelessWidget {
         ),
         Text(
           label,
-          style: const TextStyle(
-            color: Colors.white70,
-            fontSize: 10,
-          ),
+          style: const TextStyle(color: Colors.white70, fontSize: 10),
         ),
       ],
     );
