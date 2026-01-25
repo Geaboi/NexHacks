@@ -98,6 +98,9 @@ class FrameStreamingService {
   String? get streamId => _streamId;
   MediaStream? get localStream => _localStream;
 
+  Timer? _stopTimeoutTimer;
+  bool _stopConfirmed = false;
+
   /// Initialize Camera and return MediaStream for preview
   Future<MediaStream?> initializeCamera({bool isFront = false}) async {
     // Stop existing stream if any
@@ -230,6 +233,8 @@ class FrameStreamingService {
     }
 
     _isStreaming = true;
+    _stopConfirmed = false;
+    _stopTimeoutTimer?.cancel();
     _streamStartTime = DateTime.now().toUtc().millisecondsSinceEpoch;
     print(
       '[FrameStreaming] 🎬 Starting WebRTC negotiation at $_streamStartTime...',
@@ -315,17 +320,13 @@ class FrameStreamingService {
       _wsChannel!.sink.add(jsonEncode({'type': 'stop'}));
     }
 
+    // Cancel any existing timeout
+    _stopTimeoutTimer?.cancel();
+
     // Wait for server 'stopped' message, but add fallback timeout
-    Future.delayed(const Duration(seconds: 5), () {
+    _stopTimeoutTimer = Timer(const Duration(seconds: 5), () {
       // If we haven't received confirmation (and controller not closed), force completion
-      if (!_allResultsReceivedController.isClosed) {
-        // We can check if it already has a listener or just add event
-        // But better to just send it. If already sent, it's fine.
-        // Actually best way if we simply want to ensure it happens:
-        // But we don't track "are we done yet" state here easily without new var.
-        // Relying on the fact that adding null multiple times is usually harmless for this logic
-        // OR we can trust the server.
-        // Let's print a warning if we have to force it.
+      if (!_stopConfirmed && !_allResultsReceivedController.isClosed) {
         print('[FrameStreaming] ⚠️ Stop timeout: forcing completion signal');
         _allResultsReceivedController.add(null);
       }
@@ -389,6 +390,8 @@ class FrameStreamingService {
 
         case 'stopped':
           print('[FrameStreaming] 🛑 Server confirmed recording stopped');
+          _stopConfirmed = true;
+          _stopTimeoutTimer?.cancel();
           _allResultsReceivedController.add(null);
           break;
 
