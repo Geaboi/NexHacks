@@ -577,8 +577,7 @@ async def overshoot_video_websocket(websocket: WebSocket):
                 stream_id = await relay.connect()
                 # Store action store
                 action_stores[stream_id] = store
-                # Store video path mapping
-                stream_videos[stream_id] = temp_video_path
+                # Video path mapping is now done in finally block
                 print(f"[WebRTC] ☁️ Stream created on Overshoot: {stream_id}")
                 
                 # Notify client
@@ -650,6 +649,18 @@ async def overshoot_video_websocket(websocket: WebSocket):
             try:
                 await recorder.stop()
                 print("[WebRTC] ⏹️ Recorder stopped")
+                
+                # Register video path ONLY after recorder is fully stopped
+                if stream_id:
+                     stream_videos[stream_id] = temp_video_path
+                     print(f"[WebRTC] 💾 Video ready for stream {stream_id}")
+                     
+                     # Notify client that recording is finished and video is ready
+                     if websocket.client_state == WebSocketState.CONNECTED:
+                        await websocket.send_json({
+                            "type": "stopped", 
+                            "stream_id": stream_id
+                        })
             except Exception as e:
                 logger.error(f"[WebRTC] ⚠️ Recorder stop failed: {e}")
             finally:
