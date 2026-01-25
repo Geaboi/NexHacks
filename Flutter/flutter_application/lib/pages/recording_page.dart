@@ -32,6 +32,7 @@ class _RecordingPageState extends ConsumerState<RecordingPage> {
   Timer? _recordingTimer;
   String? _latestInferenceResult;
   bool _isWaitingForResults = false;
+  bool _hasReceivedFirstInference = false;
   int _framesSent =
       0; // Keeping track for UI feedback, though handled internally by WebRTC mostly
 
@@ -73,6 +74,7 @@ class _RecordingPageState extends ConsumerState<RecordingPage> {
           .read(frameAnalysisProvider.notifier)
           .addFrameWithResult(result.timestampUtc, result.result);
       setState(() {
+        _hasReceivedFirstInference = true;
         _latestInferenceResult = result.result;
       });
     });
@@ -154,6 +156,7 @@ class _RecordingPageState extends ConsumerState<RecordingPage> {
       setState(() {
         _isRecording = true;
         _isStreamingFrames = true;
+        _hasReceivedFirstInference = false;
         _recordingSeconds = 0;
       });
 
@@ -178,6 +181,18 @@ class _RecordingPageState extends ConsumerState<RecordingPage> {
 
     // Stop Streaming
     _frameStreamingService.stopStreaming();
+
+    // Check if we received any inference
+    if (!_hasReceivedFirstInference) {
+      if (mounted) {
+        setState(() {
+          _isRecording = false;
+          _isStreamingFrames = false;
+        });
+        _showErrorSnackBar("Recording cancelled: No inference received yet.");
+      }
+      return;
+    }
 
     // Wait for Stream ID if not yet available (Parallel connection optimization)
     if (_frameStreamingService.streamId == null) {
@@ -397,17 +412,21 @@ class _RecordingPageState extends ConsumerState<RecordingPage> {
                             border: Border.all(color: Colors.white, width: 4),
                           ),
                           child: Center(
-                            child: AnimatedContainer(
-                              duration: const Duration(milliseconds: 200),
-                              width: _isRecording ? 32 : 64,
-                              height: _isRecording ? 32 : 64,
-                              decoration: BoxDecoration(
-                                color: Colors.red,
-                                borderRadius: BorderRadius.circular(
-                                  _isRecording ? 8 : 32,
-                                ),
-                              ),
-                            ),
+                            child: _isRecording && !_hasReceivedFirstInference
+                                ? const CircularProgressIndicator(
+                                    color: Colors.white,
+                                  )
+                                : AnimatedContainer(
+                                    duration: const Duration(milliseconds: 200),
+                                    width: _isRecording ? 32 : 64,
+                                    height: _isRecording ? 32 : 64,
+                                    decoration: BoxDecoration(
+                                      color: Colors.red,
+                                      borderRadius: BorderRadius.circular(
+                                        _isRecording ? 8 : 32,
+                                      ),
+                                    ),
+                                  ),
                           ),
                         ),
                       ),
