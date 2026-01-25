@@ -274,11 +274,11 @@ class _AnalyticsPageState extends ConsumerState<AnalyticsPage> {
       final correctedDetectedActions = response.detectedActions.map((
         actionMap,
       ) {
-        final timestamp = (actionMap['timestamp'] as num?)?.toDouble() ?? 0.0;
-        final correctedFrame = (timestamp * widget.fps).round();
+        // final timestamp = (actionMap['timestamp'] as num?)?.toDouble() ?? 0.0;
+        // final correctedFrame = (timestamp * widget.fps).round();
 
         final newMap = Map<String, dynamic>.from(actionMap);
-        newMap['frame_number'] = correctedFrame;
+        newMap['frame_number'] = actionMap['frame_number'] * 3;
         return newMap;
       }).toList();
 
