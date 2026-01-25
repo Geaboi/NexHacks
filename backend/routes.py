@@ -453,8 +453,14 @@ async def overshoot_video_websocket(websocket: WebSocket):
         # The global `action_stores` is used.
         # Let's keep it simple.
         
+        # Initialize filtering state
+        last_logged_action: str | None = None
+        pending_action: str | None = None
+        consecutive_count: int = 0
+
         # Helper to send results back
         async def send_result(result: dict):
+            nonlocal last_logged_action, pending_action, consecutive_count
             try:
                 # Log inference results for debugging
                 if result.get("type") == "inference":
@@ -484,20 +490,52 @@ async def overshoot_video_websocket(websocket: WebSocket):
                     elif isinstance(inference_data, str) and inference_data.strip():
                         detected_list = [{"action": inference_data.strip(), "detected": True, "confidence": 0.8}]
                     
-                    for action_data in detected_list:
-                         if action_data.get("detected") and action_data.get("confidence", 0) > 0.6:
-                             import time
-                             ts = result.get("timestamp", time.time())
-                             # Estimate local frame number (approximate)
-                             frame_num = int(ts * fps) if isinstance(ts, (int, float)) and ts > 0 else 0
+                    # Find the best action (highest confidence > 0.6)
+                    candidates = []
+                    for act in detected_list:
+                         if act.get("detected") and act.get("confidence", 0) > 0.6:
+                             candidates.append(act)
+                    
+                    current_best_action = None
+                    current_best_data = None
+                    
+                    if candidates:
+                        # Pick best by confidence
+                        candidates.sort(key=lambda x: x.get("confidence", 0), reverse=True)
+                        current_best_data = candidates[0]
+                        current_best_action = current_best_data.get("action")
+                    
+                    # Smoothing Logic (Debounce)
+                    # We require the SAME action to be detected for 3 consecutive frames
+                    if current_best_action == pending_action:
+                        consecutive_count += 1
+                    else:
+                        pending_action = current_best_action
+                        consecutive_count = 1
+                    
+                    # Threshold Check
+                    if consecutive_count >= 2:
+                         # The pending action is now CONFIRMED
+                         confirmed_action = pending_action
+                         
+                         # Deduplication: Only log if this confirmed action is DIFFERENT from the last logged one
+                         if confirmed_action != last_logged_action:
+                             last_logged_action = confirmed_action
+                             print(f"[ActionLog] Action confirmed & changed to: {last_logged_action}")
                              
-                             store.add(DetectedAction(
-                                 action=action_data.get("action"),
-                                 timestamp=ts,
-                                 frame_number=frame_num,
-                                 confidence=action_data.get("confidence", 0.8),
-                                 metadata={"raw": str(action_data)}
-                             )) 
+                             if confirmed_action is not None and current_best_data:
+                                   import time
+                                   ts = result.get("timestamp", time.time())
+                                   # Estimate local frame number (approximate)
+                                   frame_num = int(ts * fps) if isinstance(ts, (int, float)) and ts > 0 else 0
+                                   
+                                   store.add(DetectedAction(
+                                       action=confirmed_action,
+                                       timestamp=ts,
+                                       frame_number=frame_num,
+                                       confidence=current_best_data.get("confidence", 0.8),
+                                       metadata={"raw": str(current_best_data)}
+                                   )) 
 
             except Exception as e:
                 # Swallow errors if we are shutting down or socket is closed
