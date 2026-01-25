@@ -269,6 +269,19 @@ class _AnalyticsPageState extends ConsumerState<AnalyticsPage> {
       // Convert to List<List<dynamic>> for the provider
       final anglesList = angles.map((e) => e as List<dynamic>).toList();
 
+      // Recalculate frame numbers based on timestamp and actual video FPS
+      // Backend calculates using inference FPS (e.g. 10), but we need video FPS (e.g. 30)
+      final correctedDetectedActions = response.detectedActions.map((
+        actionMap,
+      ) {
+        final timestamp = (actionMap['timestamp'] as num?)?.toDouble() ?? 0.0;
+        final correctedFrame = (timestamp * widget.fps).round();
+
+        final newMap = Map<String, dynamic>.from(actionMap);
+        newMap['frame_number'] = correctedFrame;
+        return newMap;
+      }).toList();
+
       // Save session using the provider (includes detected actions)
       final sessionId = await ref
           .read(sessionHistoryProvider.notifier)
@@ -279,7 +292,7 @@ class _AnalyticsPageState extends ConsumerState<AnalyticsPage> {
             processedVideoPath: response.processedVideoPath,
             durationMs: widget.videoDurationMs,
             fps: widget.fps,
-            detectedActions: response.detectedActions,
+            detectedActions: correctedDetectedActions,
           );
 
       if (sessionId != null) {

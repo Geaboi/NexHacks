@@ -375,6 +375,7 @@ class RelayProxyTrack(VideoStreamTrack):
         self.relay = relay
         self.subsample = subsample
         self.counter = 0
+        self.start_timestamp = None
 
     async def recv(self):
         try:
@@ -394,6 +395,12 @@ class RelayProxyTrack(VideoStreamTrack):
                     
                     # Calculate timestamp in seconds
                     timestamp = float(frame.pts * frame.time_base) if (frame.pts is not None and frame.time_base is not None) else None
+                    
+                    # Normalize timestamp relative to first frame
+                    if timestamp is not None:
+                        if self.start_timestamp is None:
+                            self.start_timestamp = timestamp
+                        timestamp = timestamp - self.start_timestamp
                     
                     # Push to relay
                     self.relay.push_frame(img, timestamp)
