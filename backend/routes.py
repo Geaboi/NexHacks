@@ -476,6 +476,19 @@ def download_keypoints_csv(csv_filename: str):
     return FileResponse(csv_path, media_type="text/csv", filename=csv_filename)
 
 
+@pose_router.get("/streams/{stream_id}/video")
+def get_stream_video(stream_id: str):
+    """Get the accumulated video for a stream."""
+    if stream_id not in stream_videos:
+        raise HTTPException(status_code=404, detail="Stream ID not found or video not available")
+    
+    video_path = stream_videos[stream_id]
+    if not os.path.exists(video_path):
+        raise HTTPException(status_code=404, detail="Video file not found on server")
+        
+    return FileResponse(video_path, media_type="video/mp4", filename=f"{stream_id}.mp4")
+
+
 @pose_router.get("/download-video/{video_filename}")
 def download_overlay_video(video_filename: str):
     """Download a previously generated overlay video file."""

@@ -250,24 +250,6 @@ class _RecordingPageState extends ConsumerState<RecordingPage> {
   void _finishRecording() => _stopRecording();
 
   void _navigateToReview() {
-    // We don't have a local video path anymore.
-    // ReviewPage needs to handle "remote/stream" review or just analysis results.
-    // If ReviewPage expects videoPath, we might need to adjust it or pass null/dummy.
-    // Assuming ReviewPage can handle null videoPath or we update it later.
-    // For now, let's pass a placeholder or null if the constructor allows.
-    // ReviewPage probably assumes a file path. CHECK ReviewPage!
-    // If ReviewPage requires a path, we are in trouble.
-    // But implementation plan said "Update process endpoint... to use accumulated file".
-    // Does ReviewPage analyze immediately?
-
-    // Let's assume for now we pass 'STREAM_ID:...' as a fake path if needed,
-    // but ideally we should update ReviewPage.
-    // User requested "Update backend/routes.py... identification of frames...".
-
-    // I'll check ReviewPage signature in a sec, but for now passing a stream ID marker might work if we hack it,
-    // or passing null if allowed.
-    // Let's pass the streamId as "stream://<id>" or similar if we can.
-
     final sId = _frameStreamingService.streamId;
     if (sId != null) {
       Navigator.push(
