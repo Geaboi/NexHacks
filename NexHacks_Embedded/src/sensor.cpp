@@ -8,7 +8,7 @@
 #include "esp_log.h"
 #include "BLE.hpp"
 
-#define DUAL_SENSOR 0
+#define DUAL_SENSOR 1
 
 static const char* TAG = "IMU_SYSTEM";
 uint64_t session_start;

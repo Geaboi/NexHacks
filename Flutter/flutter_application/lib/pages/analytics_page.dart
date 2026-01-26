@@ -1096,6 +1096,7 @@ class _AnalyticsPageState extends ConsumerState<AnalyticsPage> {
   void _showDeveloperInfoDialog(BuildContext context) {
     showDialog(
       context: context,
+      barrierDismissible: false,
       builder: (context) => AlertDialog(
         title: const Text('Developer Info'),
         content: SizedBox(

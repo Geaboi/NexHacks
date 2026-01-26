@@ -47,7 +47,6 @@ class InstructionsPage extends ConsumerWidget {
                 title: 'Position Your Camera',
                 description:
                     'Place your phone at a stable position where your full body movement is visible.',
-                imagePlaceholder: true,
               ),
               const SizedBox(height: 16),
 
@@ -57,7 +56,6 @@ class InstructionsPage extends ConsumerWidget {
                 title: 'Ensure Good Lighting',
                 description:
                     'Make sure the area is well-lit so the camera can clearly capture your movements.',
-                imagePlaceholder: true,
               ),
               const SizedBox(height: 16),
 
@@ -71,7 +69,6 @@ class InstructionsPage extends ConsumerWidget {
                 title: 'Start Recording',
                 description:
                     'Press the record button and perform your exercise as instructed by your therapist.',
-                imagePlaceholder: false,
               ),
               const SizedBox(height: 32),
 
@@ -140,19 +137,17 @@ class _InstructionStep extends StatelessWidget {
   final int stepNumber;
   final String title;
   final String description;
-  final bool imagePlaceholder;
 
   const _InstructionStep({
     required this.stepNumber,
     required this.title,
     required this.description,
-    required this.imagePlaceholder,
   });
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    
+
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
@@ -205,31 +200,6 @@ class _InstructionStep extends StatelessWidget {
               height: 1.5,
             ),
           ),
-
-          // Image Placeholder
-          if (imagePlaceholder) ...[
-            const SizedBox(height: 16),
-            Container(
-              height: 120,
-              width: double.infinity,
-              decoration: BoxDecoration(
-                color: AppColors.background,
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: AppColors.textLight.withOpacity(0.3)),
-              ),
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Icon(Icons.image_outlined, size: 40, color: AppColors.textLight),
-                  const SizedBox(height: 8),
-                  Text(
-                    'Image Placeholder',
-                    style: theme.textTheme.bodySmall,
-                  ),
-                ],
-              ),
-            ),
-          ],
         ],
       ),
     );
