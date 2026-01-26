@@ -103,12 +103,13 @@ class FrameStreamingService {
 
   /// Initialize Camera and return MediaStream for preview
   Future<MediaStream?> initializeCamera({bool isFront = false}) async {
-    // Stop existing stream if any
-    if (_localStream != null) {
-      _localStream!.getTracks().forEach((track) => track.stop());
-      _localStream!.dispose();
-      _localStream = null;
-    }
+    // Stop existing stream if any - BUT keep reference until new one is ready
+    MediaStream? oldStream = _localStream;
+    // We don't nullify _localStream yet to prevent UI flicker or gap if we wanted to be perfect,
+    // but here we just want to ensure we don't dispose strictly before trying new one.
+    // Actually, usually you nullify so UI knows it's loading.
+    // Let's keep _localStream valid for now? No, let's follow the standard pattern but delay disposal.
+    _localStream = null;
 
     final Map<String, dynamic> mediaConstraints = {
       'audio': false,
@@ -129,21 +130,42 @@ class FrameStreamingService {
       );
       print('[FrameStreaming] 📸 Camera initialized (front=$isFront)');
 
+      // Monitor new track
+      final newVideoTrack = _localStream!.getVideoTracks().first;
+      newVideoTrack.onEnded = () {
+        print('[FrameStreaming] ⚠️ Camera track ended unexpectedly!');
+        // Ideally we might want to signal error or try to restart
+        if (_isStreaming) {
+          _handleError("Camera track ended unexpectedly");
+        }
+      };
+
       // Update peer connection if streaming
       if (_isStreaming && _peerConnection != null) {
-        final videoTrack = _localStream!.getVideoTracks().first;
         final senders = await _peerConnection!.getSenders();
-        // Find the video sender, assuming there's at least one sender and it's for video
         final videoSender = senders.firstWhere(
           (s) => s.track?.kind == 'video',
           orElse: () => senders.first,
         );
-        await videoSender.replaceTrack(videoTrack);
+        await videoSender.replaceTrack(newVideoTrack);
+      }
+
+      // Dispose old stream only AFTER new one is ready
+      if (oldStream != null) {
+        oldStream.getTracks().forEach((track) => track.stop());
+        oldStream.dispose();
       }
 
       return _localStream;
     } catch (e) {
       print('[FrameStreaming] ❌ Camera initialization failed: $e');
+      // If new init failed, revert to old stream if available?
+      // For now just keep old stream if we have it?
+      if (_localStream == null && oldStream != null) {
+        _localStream = oldStream;
+        print('[FrameStreaming] ↩️ Reverted to previous camera stream');
+        return _localStream;
+      }
       return null;
     }
   }

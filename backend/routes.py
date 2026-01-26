@@ -379,9 +379,14 @@ class RelayProxyTrack(VideoStreamTrack):
 
     async def recv(self):
         try:
+            start_time = time.time()
             frame = await self.track.recv()
+            duration = time.time() - start_time
+            if duration > 1.0:
+                 logger.warning(f"RelayProxyTrack ({self.track.kind}) slow recv: {duration:.3f}s")
         except Exception as e:
             # Track ended or error
+            logger.info(f"RelayProxyTrack stopped: {e}")
             self.stop() 
             raise e
         
@@ -406,6 +411,9 @@ class RelayProxyTrack(VideoStreamTrack):
                     self.relay.push_frame(img, timestamp)
                 except Exception as e:
                     logger.error(f"RelayProxyTrack error processing frame: {e}")
+
+        if self.counter % 60 == 0:
+             logger.info(f"RelayProxyTrack processed {self.counter} frames")
 
         self.counter += 1
         return frame
