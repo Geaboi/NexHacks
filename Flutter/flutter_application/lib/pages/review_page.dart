@@ -301,7 +301,21 @@ class _ReviewPageState extends ConsumerState<ReviewPage> {
   Widget build(BuildContext context) {
     final navState = ref.watch(navigationProvider);
     final projectName = navState.selectedProject?.name ?? 'Exercise';
-    final theme = Theme.of(context);
+    // Page is always landscape-locked, so screenHeight is the short side.
+    // Scale UI relative to screen height to stay compact on phones.
+    final h = MediaQuery.sizeOf(context).height;
+
+    final sectionPad = (h * 0.02).clamp(6.0, 16.0);
+    final titleSize = (h * 0.032).clamp(13.0, 22.0);
+    final bodySize = (h * 0.022).clamp(10.0, 16.0);
+    final controlPad = (h * 0.018).clamp(4.0, 16.0);
+    final playIconSize = (h * 0.07).clamp(24.0, 48.0);
+    final replayIconSize = (h * 0.05).clamp(18.0, 32.0);
+    final overlayIconSize = (h * 0.07).clamp(24.0, 48.0);
+    final overlayPad = (h * 0.025).clamp(6.0, 16.0);
+    final btnPadV = (h * 0.018).clamp(6.0, 16.0);
+    final btnGap = (h * 0.02).clamp(6.0, 16.0);
+    final infoGap = (h * 0.01).clamp(2.0, 8.0);
 
     return Scaffold(
       backgroundColor: AppColors.primaryDark,
@@ -344,17 +358,17 @@ class _ReviewPageState extends ConsumerState<ReviewPage> {
                                 opacity: _isPlaying ? 0.0 : 1.0,
                                 duration: const Duration(milliseconds: 200),
                                 child: Container(
-                                  padding: const EdgeInsets.all(16),
+                                  padding: EdgeInsets.all(overlayPad),
                                   decoration: BoxDecoration(
                                     color: AppColors.primaryDark.withOpacity(
                                       0.7,
                                     ),
                                     shape: BoxShape.circle,
                                   ),
-                                  child: const Icon(
+                                  child: Icon(
                                     Icons.play_arrow,
                                     color: Colors.white,
-                                    size: 48,
+                                    size: overlayIconSize,
                                   ),
                                 ),
                               ),
@@ -387,23 +401,25 @@ class _ReviewPageState extends ConsumerState<ReviewPage> {
 
             // Info Section
             Container(
-              padding: const EdgeInsets.all(16),
+              padding: EdgeInsets.all(sectionPad),
               color: AppColors.primary,
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
                     projectName,
-                    style: theme.textTheme.titleLarge?.copyWith(
+                    style: TextStyle(
                       color: Colors.white,
                       fontWeight: FontWeight.bold,
+                      fontSize: titleSize,
                     ),
                   ),
-                  const SizedBox(height: 8),
+                  SizedBox(height: infoGap),
                   Text(
                     'Review your recording before submitting for analysis.',
-                    style: theme.textTheme.bodyMedium?.copyWith(
+                    style: TextStyle(
                       color: Colors.white70,
+                      fontSize: bodySize,
                     ),
                   ),
                 ],
@@ -412,7 +428,7 @@ class _ReviewPageState extends ConsumerState<ReviewPage> {
 
             // Playback Controls
             Container(
-              padding: const EdgeInsets.symmetric(vertical: 16),
+              padding: EdgeInsets.symmetric(vertical: controlPad),
               color: AppColors.primary,
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.spaceEvenly,
@@ -422,7 +438,7 @@ class _ReviewPageState extends ConsumerState<ReviewPage> {
                     onPressed: _isInitialized ? _replayVideo : null,
                     icon: const Icon(Icons.replay),
                     color: Colors.white,
-                    iconSize: 32,
+                    iconSize: replayIconSize,
                   ),
 
                   // Play/Pause Button
@@ -430,18 +446,18 @@ class _ReviewPageState extends ConsumerState<ReviewPage> {
                     onPressed: _isInitialized ? _togglePlayPause : null,
                     icon: Icon(_isPlaying ? Icons.pause : Icons.play_arrow),
                     color: Colors.white,
-                    iconSize: 48,
+                    iconSize: playIconSize,
                   ),
 
                   // Placeholder for symmetry
-                  const SizedBox(width: 48),
+                  SizedBox(width: playIconSize),
                 ],
               ),
             ),
 
             // Action Buttons
             Container(
-              padding: const EdgeInsets.all(16),
+              padding: EdgeInsets.all(sectionPad),
               color: AppColors.primary,
               child: Row(
                 children: [
@@ -452,16 +468,16 @@ class _ReviewPageState extends ConsumerState<ReviewPage> {
                       style: OutlinedButton.styleFrom(
                         foregroundColor: Colors.white,
                         side: BorderSide(color: Colors.white.withOpacity(0.4)),
-                        padding: const EdgeInsets.symmetric(vertical: 16),
+                        padding: EdgeInsets.symmetric(vertical: btnPadV),
                         shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12),
+                          borderRadius: BorderRadius.circular(btnGap * 0.75),
                         ),
                       ),
                       icon: const Icon(Icons.refresh),
-                      label: const Text('Retake'),
+                      label: Text('Retake', style: TextStyle(fontSize: bodySize)),
                     ),
                   ),
-                  const SizedBox(width: 16),
+                  SizedBox(width: btnGap),
 
                   // Continue Button
                   Expanded(
@@ -470,13 +486,13 @@ class _ReviewPageState extends ConsumerState<ReviewPage> {
                       style: ElevatedButton.styleFrom(
                         backgroundColor: AppColors.accent,
                         foregroundColor: Colors.white,
-                        padding: const EdgeInsets.symmetric(vertical: 16),
+                        padding: EdgeInsets.symmetric(vertical: btnPadV),
                         shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12),
+                          borderRadius: BorderRadius.circular(btnGap * 0.75),
                         ),
                       ),
                       icon: const Icon(Icons.analytics),
-                      label: const Text('Analyze'),
+                      label: Text('Analyze', style: TextStyle(fontSize: bodySize)),
                     ),
                   ),
                 ],
@@ -489,6 +505,12 @@ class _ReviewPageState extends ConsumerState<ReviewPage> {
   }
 
   Widget _buildPlaceholder() {
+    final h = MediaQuery.sizeOf(context).height;
+    final iconSize = (h * 0.12).clamp(40.0, 80.0);
+    final headingSize = (h * 0.028).clamp(12.0, 18.0);
+    final subSize = (h * 0.02).clamp(10.0, 14.0);
+    final gap = (h * 0.02).clamp(6.0, 16.0);
+
     return Container(
       color: AppColors.primary,
       child: Column(
@@ -496,23 +518,23 @@ class _ReviewPageState extends ConsumerState<ReviewPage> {
         children: [
           Icon(
             Icons.videocam_outlined,
-            size: 80,
+            size: iconSize,
             color: AppColors.primaryLight.withOpacity(0.6),
           ),
-          const SizedBox(height: 16),
+          SizedBox(height: gap),
           Text(
             'Video Preview',
             style: TextStyle(
               color: AppColors.primaryLight.withOpacity(0.8),
-              fontSize: 18,
+              fontSize: headingSize,
             ),
           ),
-          const SizedBox(height: 8),
+          SizedBox(height: gap * 0.5),
           Text(
             '(Placeholder - no video recorded yet)',
             style: TextStyle(
               color: AppColors.primaryLight.withOpacity(0.6),
-              fontSize: 14,
+              fontSize: subSize,
             ),
           ),
         ],
