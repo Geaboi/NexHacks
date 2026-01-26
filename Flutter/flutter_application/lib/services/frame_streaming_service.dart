@@ -100,6 +100,7 @@ class FrameStreamingService {
 
   Timer? _stopTimeoutTimer;
   bool _stopConfirmed = false;
+  Timer? _statsTimer;
 
   /// Initialize Camera and return MediaStream for preview
   Future<MediaStream?> initializeCamera({bool isFront = false}) async {
@@ -262,6 +263,27 @@ class FrameStreamingService {
       '[FrameStreaming] 🎬 Starting WebRTC negotiation at $_streamStartTime...',
     );
 
+    // Start Stats Logging
+    _statsTimer?.cancel();
+    _statsTimer = Timer.periodic(const Duration(seconds: 2), (timer) async {
+      if (_peerConnection == null) return;
+      try {
+        final stats = await _peerConnection!.getStats();
+        for (var report in stats) {
+          if (report.type == 'outbound-rtp' &&
+              report.values['kind'] == 'video') {
+            final bytes = report.values['bytesSent'];
+            final frames = report.values['framesEncoded'];
+            print(
+              '[FrameStreaming] 📊 Stats: bytesSent=$bytes, framesEncoded=$frames',
+            );
+          }
+        }
+      } catch (e) {
+        print('[FrameStreaming] ⚠️ Stats error: $e');
+      }
+    });
+
     try {
       print('[FrameStreaming] 🔧 Creating PeerConnection...');
       _peerConnection = await createPeerConnection({
@@ -344,6 +366,7 @@ class FrameStreamingService {
 
     // Cancel any existing timeout
     _stopTimeoutTimer?.cancel();
+    _statsTimer?.cancel();
 
     // Wait for server 'stopped' message, but add fallback timeout
     _stopTimeoutTimer = Timer(const Duration(seconds: 5), () {
