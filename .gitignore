@@ -5,10 +5,9 @@ rtm/
 venv/
 
 *.DS_Store
-backend/__pycache__/
-backend/.env
-.env
 backend/.env
 .env
 **/__pycache__/
 recording_page.dart
+
+.trae/
