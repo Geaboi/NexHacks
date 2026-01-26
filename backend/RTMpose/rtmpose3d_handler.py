@@ -400,7 +400,7 @@ class RTMPose3DHandler:
 
                 # Extract gyroscope values from new format
                 # Relative angular velocity between the two IMU sensors
-                w_rel = s_samp['data']['yB'] - s_samp['data']['yA']
+                w_rel = -s_samp['data']['yB'] - s_samp['data']['yA']
                 
                 # Calculate dt in seconds from millisecond timestamps
                 dt = (s_samp['timestamp_ms'] - s_prev['timestamp_ms']) / 1000.0
