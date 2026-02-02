@@ -7,6 +7,9 @@
     <!-- Camera Permission -->
     <key>NSCameraUsageDescription</key>
     <string>This app needs camera access to record videos for physical therapy analysis.</string>
+    <!-- Microphone Permission (required by WebRTC framework, not actively used) -->
+    <key>NSMicrophoneUsageDescription</key>
+    <string>Required by video streaming components. This app does not record audio.</string>
     <!-- Photo Library Permissions -->
     <key>NSPhotoLibraryUsageDescription</key>
     <string>This app needs access to save and retrieve recorded videos.</string>
